@@ -1,6 +1,7 @@
 import { defineFieldCopy } from '@/app/settings/field-copy'
 
 import { defineLocale, type TranslationOverrides } from './define-locale'
+import { ruAccountAuth } from './ru_account_auth'
 import { ruAuxTasks } from './ru_aux_tasks'
 import { ruClarify } from './ru_clarify'
 import { ruConnectors } from './ru_connectors'
@@ -36,6 +37,7 @@ const RU_NOUN = (count: number | string, one: string, few: string, many: string)
 }
 
 export const ruOverrides = {
+  accountAuth: ruAccountAuth,
   connectors: ruConnectors.connectors,
   sharedMetrics: ruSharedMetrics,
   firstRun: ruFirstRun,

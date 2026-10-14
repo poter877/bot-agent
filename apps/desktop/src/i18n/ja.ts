@@ -2,6 +2,7 @@ import { defineFieldCopy } from '@/app/settings/field-copy'
 
 import { defineLocale, type TranslationOverrides } from './define-locale'
 import { introJa } from './intro-ja'
+import { jaAccountAuth } from './ja_account_auth'
 import { jaAuxTasks } from './ja_aux_tasks'
 import { jaClarify } from './ja_clarify'
 import { jaConnectors } from './ja_connectors'
@@ -17,6 +18,7 @@ import { jaThemePicker } from './ja_theme_picker'
 import { jaUpdateChannel } from './ja_update_channel'
 
 export const jaOverrides = {
+  accountAuth: jaAccountAuth,
   connectors: jaConnectors.connectors,
   externalOpenFailed: {
     title: 'このリンクを開けませんでした',

@@ -7,6 +7,78 @@
   },
   "methods": [
     {
+      "name": "accountAuth.signIn",
+      "summary": "Email+password sign-in relayed to the account backend; establishes the subprocess-held session.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/AccountAuthSignInParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/AccountAuthStatusResult"
+        }
+      }
+    },
+    {
+      "name": "accountAuth.signOut",
+      "summary": "Revoke the subprocess-held Better Auth session.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/Params"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/AccountAuthSignOutResult"
+        }
+      }
+    },
+    {
+      "name": "accountAuth.signUp",
+      "summary": "Email+password sign-up relayed to the account backend; establishes the subprocess-held session.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/AccountAuthSignUpParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/AccountAuthStatusResult"
+        }
+      }
+    },
+    {
+      "name": "accountAuth.status",
+      "summary": "Current Better Auth session as seen by the agent subprocess's authoritative check.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/Params"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/AccountAuthStatusResult"
+        }
+      }
+    },
+    {
       "name": "agents.list",
       "summary": "Registry-wide background process summary for ``/agents``.",
       "params": [
@@ -4635,6 +4707,120 @@
   ],
   "components": {
     "schemas": {
+      "AccountAuthSignInParams": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "AccountAuthSignInParams",
+        "type": "object"
+      },
+      "AccountAuthSignOutResult": {
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "default": true,
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "title": "AccountAuthSignOutResult",
+        "type": "object"
+      },
+      "AccountAuthSignUpParams": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "email",
+          "password"
+        ],
+        "title": "AccountAuthSignUpParams",
+        "type": "object"
+      },
+      "AccountAuthStatusResult": {
+        "additionalProperties": false,
+        "properties": {
+          "authenticated": {
+            "default": false,
+            "title": "Authenticated",
+            "type": "boolean"
+          },
+          "user": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccountAuthUser"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Error"
+          }
+        },
+        "title": "AccountAuthStatusResult",
+        "type": "object"
+      },
+      "AccountAuthUser": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "name"
+        ],
+        "title": "AccountAuthUser",
+        "type": "object"
+      },
       "AccountOwner": {
         "additionalProperties": false,
         "properties": {

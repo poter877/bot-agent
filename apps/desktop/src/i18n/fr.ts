@@ -1,6 +1,7 @@
 import { defineFieldCopy } from '@/app/settings/field-copy'
 
 import { defineLocale, type TranslationOverrides } from './define-locale'
+import { frAccountAuth } from './fr_account_auth'
 import { frAuxTasks } from './fr_aux_tasks'
 import { frBoot } from './fr_boot'
 import { frClarify } from './fr_clarify'
@@ -18,6 +19,7 @@ import { frUpdateChannel } from './fr_update_channel'
 import { introFr } from './intro-fr'
 
 export const frOverrides = {
+  accountAuth: frAccountAuth,
   sharedMetrics: frSharedMetrics,
   firstRun: frFirstRun,
   intro: introFr,

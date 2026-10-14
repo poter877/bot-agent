@@ -1,5 +1,6 @@
 import { defineFieldCopy } from '@/app/settings/field-copy'
 
+import { deAccountAuth } from './de_account_auth'
 import { deAuxTasks } from './de_aux_tasks'
 import { deBoot } from './de_boot'
 import { deClarify } from './de_clarify'
@@ -18,6 +19,7 @@ import { defineLocale, type TranslationOverrides } from './define-locale'
 import { introDe } from './intro-de'
 
 export const deOverrides = {
+  accountAuth: deAccountAuth,
   sharedMetrics: deSharedMetrics,
   firstRun: deFirstRun,
   intro: introDe,

@@ -1,5 +1,6 @@
 import { FIELD_DESCRIPTIONS, FIELD_LABELS } from '@/app/settings/constants'
 
+import { enAccountAuth } from './en_account_auth'
 import { enAppTour } from './en_app_tour'
 import { enAuxTasks } from './en_aux_tasks'
 import { enBilling } from './en_billing'
@@ -381,6 +382,7 @@ export const en: Translations = {
     revealUnavailable: 'That path is not on this computer — it lives on the backend machine. Use “Reveal in filetree”.'
   },
 
+  accountAuth: enAccountAuth,
   boot: enBoot.boot,
 
   notifications: {

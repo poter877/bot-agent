@@ -418,6 +418,26 @@ export interface Translations extends NoticeTranslations {
 
   boot: BootTranslations
 
+  accountAuth: {
+    checking: string
+    unavailableTitle: string
+    unavailableBody: string
+    retry: string
+    signInTitle: string
+    signUpTitle: string
+    email: string
+    password: string
+    displayName: string
+    confirmPassword: string
+    signInAction: string
+    signUpAction: string
+    switchToSignUp: string
+    switchToSignIn: string
+    confirmPasswordMismatch: string
+    signInFailed: string
+    signUpFailed: string
+  }
+
   notifications: {
     sharedProfileWarning: string
     region: string

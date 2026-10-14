@@ -12,8 +12,10 @@ import { zhHantConnectors } from './zh-hant_connectors'
 import { zhHantDiagnostics } from './zh-hant_diagnostics'
 import { zhHantFirstRun } from './zh-hant_first_run'
 import { zhHantSettings } from './zh-hant_settings'
+import { zh_hantAccountAuth } from './zh_hant_account_auth'
 
 export const zhHantOverrides = {
+  accountAuth: zh_hantAccountAuth,
   connectors: {
     directory: {
       suggested: '推薦',

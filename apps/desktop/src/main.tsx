@@ -18,11 +18,11 @@ import './store/chat-text-scale'
 import '@/debug/dev-only'
 
 import { QueryClientProvider } from '@tanstack/react-query'
-import { StrictMode } from 'react'
+import { lazy, StrictMode, Suspense } from 'react'
 import { createRoot } from 'react-dom/client'
 import { HashRouter } from 'react-router'
 
-import App from './app'
+import { AuthGate } from './app/auth-gate/auth-gate-root'
 import { RootErrorBoundary } from './components/error-boundary'
 import { HapticsProvider } from './components/haptics-provider'
 import { RootTooltipProvider } from './components/ui/tooltip'
@@ -32,6 +32,11 @@ import { queryClient } from './lib/query-client'
 import { installRendererAnimationPauseState } from './lib/renderer-loop-pause'
 import { installSelectionCopyColorGuard } from './lib/selection-copy-colors'
 import { ThemeProvider } from './themes/context'
+
+// Lazy: the contribution shell (and its gateway boot) must not even load
+// before the account gate confirms a server-side session (doc《用户认证》§4:
+// 延后加载带有业务副作用的模块).
+const App = lazy(() => import('./app'))
 
 installClipboardShim()
 // Chromium serializes selection copies (Cmd+C, right-click Copy) with the
@@ -109,7 +114,15 @@ if (winParam === 'overlay') {
                     both freeze for seconds despite the main thread being free.
                     Disabling transitions makes navigate() commit at default priority. */}
                   <HashRouter useTransitions={false}>
-                    <App />
+                    {/* The gate renders the auth window until the agent
+                      subprocess confirms the server-side session; only then
+                      does the lazy app shell (and its business providers'
+                      effects) load at all. */}
+                    <AuthGate>
+                      <Suspense fallback={null}>
+                        <App />
+                      </Suspense>
+                    </AuthGate>
                   </HashRouter>
                 </RootTooltipProvider>
               </HapticsProvider>

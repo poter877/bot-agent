@@ -3,6 +3,30 @@
 // tests/tui_gateway/contracts/test_generated.py fails when this file is stale.
 /* eslint-disable */
 // ── Types ──
+/** Client→server method params / server→client request params. Unknown keys are rejected. */
+export type Params = Record<string, never>
+export interface AccountAuthStatusResult {
+  authenticated?: boolean
+  user?: AccountAuthUser | null
+  error?: string | null
+}
+export interface AccountAuthUser {
+  id: string
+  email: string
+  name: string
+}
+export interface AccountAuthSignInParams {
+  email: string
+  password: string
+}
+export interface AccountAuthSignUpParams {
+  name: string
+  email: string
+  password: string
+}
+export interface AccountAuthSignOutResult {
+  ok?: boolean
+}
 /** Any method the desktop may route to a named profile (``requestGatewayForProfile`` adds ``profile``). */
 export interface ProfileParams {
   profile?: string | null
@@ -1918,8 +1942,6 @@ export interface ClientCapabilitiesResult {
   server_requests: string[]
   declines_not_shown?: boolean
 }
-/** Client→server method params / server→client request params. Unknown keys are rejected. */
-export type Params = Record<string, never>
 /** ``machine_kind`` is ``Spark``, ``Mac``, ``PC`` or ``computer``. ``nvidia_platform`` is ``products.nvidia_platform()``: ``rtx_spark``, ``dgx_spark``, ``discrete`` or null. ``locale`` is the OS account's first UI language, null when the OS has none. */
 export interface MachineFactsResult {
   machine: MachineInfo
@@ -5119,6 +5141,14 @@ export type ConnectorErrorReason = 'INVALID_PARAMS' | 'NOT_OWNER' | 'UNSUPPORTED
 
 // ── Client→server methods ──
 export interface RpcMethods {
+  /** Email+password sign-in relayed to the account backend; establishes the subprocess-held session. */
+  'accountAuth.signIn': { params: AccountAuthSignInParams; result: AccountAuthStatusResult }
+  /** Revoke the subprocess-held Better Auth session. */
+  'accountAuth.signOut': { params: Params; result: AccountAuthSignOutResult }
+  /** Email+password sign-up relayed to the account backend; establishes the subprocess-held session. */
+  'accountAuth.signUp': { params: AccountAuthSignUpParams; result: AccountAuthStatusResult }
+  /** Current Better Auth session as seen by the agent subprocess's authoritative check. */
+  'accountAuth.status': { params: Params; result: AccountAuthStatusResult }
   /** Registry-wide background process summary for ``/agents``. */
   'agents.list': { params: AgentsListParams; result: AgentsListResult }
   /** Replay the approvals still waiting on this session (reconnect / polling). */
@@ -5636,6 +5666,10 @@ export interface RpcMethods {
 }
 export type RpcMethod = keyof RpcMethods
 export const RPC_METHODS = [
+  'accountAuth.signIn',
+  'accountAuth.signOut',
+  'accountAuth.signUp',
+  'accountAuth.status',
   'agents.list',
   'approval.pending',
   'approval.received',

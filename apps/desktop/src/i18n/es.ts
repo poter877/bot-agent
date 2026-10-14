@@ -1,6 +1,7 @@
 import { defineFieldCopy } from '@/app/settings/field-copy'
 
 import { defineLocale, type TranslationOverrides } from './define-locale'
+import { esAccountAuth } from './es_account_auth'
 import { esAuxTasks } from './es_aux_tasks'
 import { esBoot } from './es_boot'
 import { esClarify } from './es_clarify'
@@ -18,6 +19,7 @@ import { esUpdateChannel } from './es_update_channel'
 import { introEs } from './intro-es'
 
 export const esOverrides = {
+  accountAuth: esAccountAuth,
   sharedMetrics: esSharedMetrics,
   firstRun: esFirstRun,
   intro: introEs,

@@ -2,6 +2,7 @@ import { defineFieldCopy } from '@/app/settings/field-copy'
 
 import { defineLocale, type TranslationOverrides } from './define-locale'
 import { introZh } from './intro-zh'
+import { zhAccountAuth } from './zh_account_auth'
 import { zhAuxTasks } from './zh_aux_tasks'
 import { zhClarify } from './zh_clarify'
 import { zhConnectorCard } from './zh_connector_card'
@@ -16,6 +17,7 @@ import { zhThemePicker } from './zh_theme_picker'
 import { zhUpdateChannel } from './zh_update_channel'
 
 export const zhOverrides = {
+  accountAuth: zhAccountAuth,
   externalOpenFailed: {
     title: '无法打开此链接',
     message: '没有注册用于打开此地址的浏览器。请复制链接并手动打开。',

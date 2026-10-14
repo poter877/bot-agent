@@ -1,3 +1,4 @@
+import { arAccountAuth } from './ar_account_auth'
 import { arArtifacts } from './ar_artifacts'
 import { arAssistant } from './ar_assistant'
 import { arBoot } from './ar_boot'
@@ -13,6 +14,7 @@ import { arSettings } from './ar_settings'
 import { defineLocale, type TranslationOverrides } from './define-locale'
 
 export const arOverrides = {
+  accountAuth: arAccountAuth,
   connectors: {
     directory: {
       suggested: 'مقترحة',
