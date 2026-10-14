@@ -1,0 +1,32 @@
+# Reverse-proxy entry example (§9 of the backend architecture doc): only the
+# business entry faces the internet; PostgreSQL and Redis ports stay internal.
+# Terminate TLS here, forward to one or more API replicas, and set the
+# forwarded chain the app trusts (match TRUSTED_PROXIES to this proxy's IP).
+#
+#   server {
+#     listen 443 ssl;
+#     server_name api.example.com;
+#     ssl_certificate     /etc/letsencrypt/live/api.example.com/fullchain.pem;
+#     ssl_certificate_key /etc/letsencrypt/live/api.example.com/privkey.pem;
+#
+#     # Modern TLS only.
+#     ssl_protocols TLSv1.2 TLSv1.3;
+#
+#     location / {
+#       proxy_pass http://bot_backend;
+#       proxy_http_version 1.1;
+#       proxy_set_header Host $host;
+#       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+#       proxy_set_header X-Forwarded-Proto $scheme;
+#       # Security boundary: proxy overwrites, never appends blindly — the app
+#       # resolves the real client IP only because this host is trusted.
+#       proxy_set_header X-Request-Id "";  # server mints its own request id
+#       proxy_read_timeout 15s;
+#       client_max_body_size 16k;          # match API_BODY_LIMIT_BYTES
+#     }
+#   }
+#
+#   upstream bot_backend {
+#     server 127.0.0.1:3000;  # add one line per API replica
+#     keepalive 32;
+#   }

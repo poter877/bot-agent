@@ -1,0 +1,33 @@
+# Local development dependencies (PostgreSQL + Redis). The API itself runs on
+# the host with `npm run dev` for fast iteration. Production deployments use
+# managed/hardened instances of these two services, not this file.
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: bot_backend
+    ports:
+      - "5432:5432"
+    volumes:
+      - bot-backend-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  bot-backend-pgdata:
