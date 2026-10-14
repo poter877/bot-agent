@@ -19,7 +19,8 @@ export function testInfra(): InfraInfo {
   return JSON.parse(readFileSync(INFO_FILE, 'utf8')) as InfraInfo
 }
 
-export const TEST_JWT_SECRET = 'unit-test-secret-0123456789abcdef0123456789abcdef'
+export const TEST_AUTH_SECRET = 'unit-test-secret-0123456789abcdef0123456789abcdef'
+export const TEST_BASE_URL = 'http://127.0.0.1:3100'
 
 export interface TestApp {
   config: Config
@@ -37,10 +38,8 @@ export async function createTestApp(overrides: Record<string, string> = {}): Pro
     LOG_LEVEL: 'error',
     DATABASE_URL: infra.databaseUrl,
     REDIS_URL: infra.redisUrl,
-    AUTH_JWT_SECRET: TEST_JWT_SECRET,
-    MAIL_TRANSPORT: 'log',
-    MAIL_FROM: 'test@bot-backend.invalid',
-    APP_BASE_URL: 'https://accounts.test.local',
+    BETTER_AUTH_SECRET: TEST_AUTH_SECRET,
+    BETTER_AUTH_URL: TEST_BASE_URL,
     ...overrides,
   })
   const database = createDatabase({
@@ -64,9 +63,7 @@ export async function createTestApp(overrides: Record<string, string> = {}): Pro
 }
 
 export async function truncateAll(database: Database): Promise<void> {
-  await database.pool.query(
-    'TRUNCATE users, login_sessions, verification_tokens, auth_audit, mail_outbox CASCADE',
-  )
+  await database.pool.query('TRUNCATE "user", session, account, verification CASCADE')
 }
 
 export function flushRateLimits(redis: RedisConnections): Promise<void> {
@@ -87,63 +84,66 @@ export function jsonRequest(
   })
 }
 
-export function extractTokenFromMailBody(bodyText: string): string {
-  const match = /token=([A-Za-z0-9_-]+)/.exec(bodyText)
-  if (match === null) {
-    throw new Error(`no token found in mail body: ${bodyText}`)
+export function uniqueEmail(): string {
+  return `user-${crypto.randomUUID()}@test.local`
+}
+
+/** Join every Set-Cookie into one Cookie header value for the next request. */
+export function cookieFrom(response: Response): string {
+  const cookies = response.headers.getSetCookie()
+  if (cookies.length === 0) {
+    throw new Error(`no set-cookie in response (status ${response.status})`)
   }
-  return match[1]!
+  return cookies.map((cookie) => cookie.split(';')[0]).join('; ')
 }
 
 export interface RegisteredUser {
   userId: string
   email: string
   password: string
+  cookie: string
 }
 
-/** Runs the full ToC onboarding: register -> read mail outbox -> verify. */
-export async function registerAndVerify(
+/** Better Auth email+password onboarding: sign-up returns the live session. */
+export async function registerUser(
   app: Hono<AppEnv>,
   database: Database,
   email: string,
   password: string,
 ): Promise<RegisteredUser> {
-  const registered = await jsonRequest(app, 'POST', '/v1/auth/register', { email, password })
-  if (registered.status !== 202) {
-    throw new Error(`register failed: ${registered.status} ${await registered.text()}`)
+  const response = await jsonRequest(app, 'POST', '/api/auth/sign-up/email', {
+    name: email.split('@')[0],
+    email,
+    password,
+  })
+  if (response.status !== 200) {
+    throw new Error(`sign-up failed: ${response.status} ${await response.text()}`)
   }
-  const outbox = await database.pool.query(
-    "SELECT body_text FROM mail_outbox WHERE purpose = 'verify_email' ORDER BY created_at DESC LIMIT 1",
-  )
-  const token = extractTokenFromMailBody(outbox.rows[0]!.body_text as string)
-  const verified = await jsonRequest(app, 'POST', '/v1/auth/verify', { token })
-  if (verified.status !== 200) {
-    throw new Error(`verify failed: ${verified.status} ${await verified.text()}`)
-  }
-  const userRow = await database.pool.query('SELECT id FROM users WHERE email = $1', [email])
-  return { userId: userRow.rows[0]!.id as string, email, password }
+  const cookie = cookieFrom(response)
+  const rows = await database.pool.query('SELECT id FROM "user" WHERE email = $1', [email])
+  return { userId: rows.rows[0]!.id as string, email, password, cookie }
 }
 
-export interface LoginResult {
-  accessToken: string
-  refreshToken: string
-  expiresInSeconds: number
-  user: { id: string; email: string; displayName: string; status: string }
-}
-
-export async function login(
+export async function signIn(
   app: Hono<AppEnv>,
   email: string,
   password: string,
-): Promise<LoginResult> {
-  const response = await jsonRequest(app, 'POST', '/v1/auth/login', { email, password })
-  if (response.status !== 200) {
-    throw new Error(`login failed: ${response.status} ${await response.text()}`)
-  }
-  const body = (await response.json()) as { data: LoginResult }
-  return body.data
+): Promise<Response> {
+  return jsonRequest(app, 'POST', '/api/auth/sign-in/email', { email, password })
 }
 
-export function uniqueEmail(): string {
-  return `user-${crypto.randomUUID()}@test.local`
+export async function getSession(
+  app: Hono<AppEnv>,
+  cookie: string,
+): Promise<{ session: { id: string; userId: string }; user: { id: string; email: string; name: string } } | null> {
+  const response = await jsonRequest(app, 'GET', '/api/auth/get-session', undefined, { cookie })
+  const body = (await response.json()) as { session: { id: string; userId: string }; user: { id: string; email: string; name: string } } | null
+  return body
+}
+
+export async function me(
+  app: Hono<AppEnv>,
+  cookie: string,
+): Promise<Response> {
+  return jsonRequest(app, 'GET', '/v1/users/me', undefined, { cookie })
 }

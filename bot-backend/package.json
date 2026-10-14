@@ -19,11 +19,9 @@
   },
   "dependencies": {
     "@hono/node-server": "^2.1.5",
-    "@hono/zod-validator": "^0.9.1",
-    "@node-rs/argon2": "^2.2.2",
+    "better-auth": "^1.7.7",
     "drizzle-orm": "^0.45.4",
     "hono": "^4.13.13",
-    "nodemailer": "^10.1.1",
     "pg": "^8.23.1",
     "pino": "^10.4.0",
     "redis": "^6.3.0",
@@ -31,7 +29,6 @@
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
-    "@types/nodemailer": "^8.0.2",
     "@types/pg": "^8.23.1",
     "drizzle-kit": "^0.31.11",
     "redis-memory-server": "^0.17.1",

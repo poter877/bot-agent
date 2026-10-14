@@ -5,18 +5,17 @@ import type { RedisConnections } from './redis/client.js'
 import type { Config } from './config/env.js'
 import type { Logger } from './shared/logger.js'
 import type { AppEnv } from './shared/context.js'
+import { HttpApiError } from './shared/http.js'
 import { serverRequestId } from './middleware/requestId.js'
 import { accessLogMiddleware } from './middleware/accessLog.js'
 import { securityMiddleware } from './middleware/security.js'
 import { realIpMiddleware } from './middleware/realIp.js'
 import { processingTimeout } from './middleware/timeout.js'
 import { bodyPolicyMiddleware } from './middleware/bodyPolicy.js'
-import { byAuthUserId, rateLimitMiddleware } from './middleware/rateLimit.js'
+import { byAuthUserId, accountBucketKey, rateLimitMiddleware, enforceBucket } from './middleware/rateLimit.js'
 import { authenticate } from './middleware/auth.js'
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js'
-import { AuthService } from './modules/auth/auth.service.js'
-import { createAuthPublicRoutes, registerLogoutRoute } from './modules/auth/auth.routes.js'
-import { PasswordHasher } from './modules/auth/password.js'
+import { createAuth, type Auth } from './modules/auth/auth.js'
 import { createUsersRoutes } from './modules/users/users.routes.js'
 import { createHealthRoutes } from './modules/health/health.routes.js'
 
@@ -29,26 +28,28 @@ export interface AppDeps {
 
 export interface App {
   hono: Hono<AppEnv>
-  authService: AuthService
+  auth: Auth
 }
 
 /**
- * Explicit assembly with the doc's fixed pipeline order:
+ * Explicit assembly. Authentication is delegated to Better Auth: its
+ * /api/auth/* handler mounts PUBLIC (register/login must never sit behind a
+ * login gate, doc §4), and every other /v1 route runs behind the getSession
+ * check. The doc's common request boundary still applies to both trees:
  *
  *   request id -> security headers -> CORS -> real IP -> processing budget
- *   -> body policy -> entry rate limit -> public auth allowlist
- *   -> authenticate (JWT + server-side session) -> per-user rate limit
- *   -> protected routes (default-authenticated)
+ *   -> body policy -> entry rate limit -> (per-account buckets on
+ *   sign-in/sign-up) -> Better Auth handler -> authenticate (getSession,
+ *   authoritative store) -> per-user rate limit -> protected routes
  *
- * /healthz and /readyz stay outside /v1: liveness needs no dependencies, and
- * readiness reports only ok/unavailable.
+ * The full 16-middleware production chain (§5) stays the blueprint for the
+ * future full backend; this assembly keeps the auth-necessary subset.
  */
 export async function createApp(deps: AppDeps): Promise<App> {
   const { config, database, redis, logger } = deps
   const db = database.db
 
-  const hasher = await PasswordHasher.create(config)
-  const authService = new AuthService({ db, config, hasher, redis: redis.commands, logger })
+  const auth = createAuth(config, database)
 
   const app = new Hono<AppEnv>()
 
@@ -61,36 +62,86 @@ export async function createApp(deps: AppDeps): Promise<App> {
     app.use(middleware)
   }
   if (config.CORS_ALLOWED_ORIGINS.length > 0) {
+    // Better Auth authenticates with cookies, so credentialed CORS is
+    // required the day a browser client joins; origins stay an exact list.
     app.use(
-      '/v1/*',
+      '*',
       cors({
         origin: config.CORS_ALLOWED_ORIGINS,
         allowMethods: ['GET', 'POST', 'OPTIONS'],
         allowHeaders: ['Content-Type', 'Authorization'],
         maxAge: 600,
-        credentials: false,
+        credentials: true,
       }),
     )
   }
   app.use(realIpMiddleware(config.TRUSTED_PROXIES))
   app.use(processingTimeout(config.REQUEST_TIMEOUT_MS))
-  app.use('/v1/*', bodyPolicyMiddleware(config.API_BODY_LIMIT_BYTES))
-  app.use(
-    '/v1/*',
-    rateLimitMiddleware({
-      redis: redis.commands,
-      scope: 'entry-ip',
-      limit: config.RATE_LIMIT_ENTRY_MAX,
-      windowSeconds: config.RATE_LIMIT_ENTRY_WINDOW_SECONDS,
-      subject: (c) => c.get('realIp'),
-    }),
-  )
 
-  // Public allowlist, precise to method+path.
-  app.route('/v1/auth', createAuthPublicRoutes({ db, redis: redis.commands, config, service: authService }))
+  for (const tree of ['/api/auth/*', '/v1/*']) {
+    app.use(tree, bodyPolicyMiddleware(config.API_BODY_LIMIT_BYTES))
+    app.use(
+      tree,
+      rateLimitMiddleware({
+        redis: redis.commands,
+        scope: 'entry-ip',
+        limit: config.RATE_LIMIT_ENTRY_MAX,
+        windowSeconds: config.RATE_LIMIT_ENTRY_WINDOW_SECONDS,
+        subject: (c) => c.get('realIp'),
+      }),
+    )
+  }
 
-  // Everything below requires a verified token AND live server-side session.
-  app.use('/v1/*', authenticate(config, db))
+  // Per-account buckets on the credential endpoints, then hand off to the
+  // library. Better Auth clones the Request internally and a consumed body
+  // cannot be cloned, so for JSON credential posts we parse once, enforce the
+  // bucket, and rebuild a fresh unread Request from the parsed body; every
+  // other request passes through untouched.
+  const accountBuckets = [
+    {
+      path: '/api/auth/sign-in/email',
+      scope: 'login-account',
+      limit: config.RATE_LIMIT_LOGIN_ACCOUNT_MAX,
+      windowSeconds: config.RATE_LIMIT_LOGIN_ACCOUNT_WINDOW_SECONDS,
+    },
+    {
+      path: '/api/auth/sign-up/email',
+      scope: 'register-account',
+      limit: config.RATE_LIMIT_REGISTER_IP_MAX,
+      windowSeconds: config.RATE_LIMIT_REGISTER_IP_WINDOW_SECONDS,
+    },
+  ] as const
+
+  app.all('/api/auth/*', async (c) => {
+    const contentType = c.req.header('content-type') ?? ''
+    const bucket =
+      c.req.method === 'POST' && contentType.includes('application/json')
+        ? accountBuckets.find((spec) => c.req.path === spec.path)
+        : undefined
+    if (bucket === undefined) {
+      return auth.handler(c.req.raw)
+    }
+    const parsed = await c.req.json().catch(() => null)
+    if (parsed === null) {
+      // Malformed JSON on a credential endpoint keeps the service-wide 400
+      // contract instead of a library-shaped error.
+      throw new HttpApiError(400, 'invalid_json', 'Request body is not valid JSON.')
+    }
+    const email = (parsed as Record<string, unknown>)['email']
+    if (typeof email === 'string' && email.trim() !== '') {
+      await enforceBucket(redis.commands, bucket.scope, accountBucketKey(email), bucket.limit, bucket.windowSeconds)
+    }
+    const fresh = new Request(c.req.raw.url, {
+      method: 'POST',
+      headers: c.req.raw.headers,
+      body: JSON.stringify(parsed),
+      duplex: 'half',
+    })
+    return auth.handler(fresh)
+  })
+
+  // Everything below requires a verified Better Auth session.
+  app.use('/v1/*', authenticate(auth))
   app.use(
     '/v1/*',
     rateLimitMiddleware({
@@ -101,10 +152,9 @@ export async function createApp(deps: AppDeps): Promise<App> {
       subject: byAuthUserId,
     }),
   )
-  registerLogoutRoute(app, authService)
   app.route('/v1/users', createUsersRoutes(db))
 
   app.route('/', createHealthRoutes(database, redis.commands))
 
-  return { hono: app, authService }
+  return { hono: app, auth }
 }

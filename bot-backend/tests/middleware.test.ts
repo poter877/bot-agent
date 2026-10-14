@@ -1,19 +1,16 @@
 import { Hono } from 'hono'
-import { sign } from 'hono/jwt'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { processingTimeout } from '../src/middleware/timeout.js'
 import {
   createTestApp,
   flushRateLimits,
   jsonRequest,
-  login,
-  registerAndVerify,
+  registerUser,
+  signIn,
   truncateAll,
   uniqueEmail,
   type TestApp,
 } from './helpers.js'
-
-const PASSWORD = 'correct-horse-battery'
 
 describe('production request boundary', () => {
   let testApp: TestApp
@@ -61,21 +58,25 @@ describe('production request boundary', () => {
   })
 
   it('maps malformed JSON to 400 and non-JSON media types to 415', async () => {
-    const malformed = await appRawRequest(testApp, 'POST', '/v1/auth/login', '{"email": "a@b.c",,', {
-      'content-type': 'application/json',
+    const malformed = await testApp.app.request('/api/auth/sign-in/email', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{"email": "a@b.c",,',
     })
     expect(malformed.status).toBe(400)
     expect(((await malformed.json()) as { error: { code: string } }).error.code).toBe('invalid_json')
 
-    const wrongType = await appRawRequest(testApp, 'POST', '/v1/auth/login', 'a=1', {
-      'content-type': 'application/x-www-form-urlencoded',
+    const wrongType = await testApp.app.request('/api/auth/sign-in/email', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: 'a=1',
     })
     expect(wrongType.status).toBe(415)
     expect(((await wrongType.json()) as { error: { code: string } }).error.code).toBe('unsupported_media_type')
   })
 
   it('enforces the 16 KiB body budget with 413', async () => {
-    const oversized = await jsonRequest(testApp.app, 'POST', '/v1/auth/login', {
+    const oversized = await jsonRequest(testApp.app, 'POST', '/api/auth/sign-in/email', {
       email: uniqueEmail(),
       password: 'x'.repeat(17 * 1024),
     })
@@ -83,76 +84,25 @@ describe('production request boundary', () => {
     expect(((await oversized.json()) as { error: { code: string } }).error.code).toBe('payload_too_large')
   })
 
-  it('rejects protected routes without, with forged, or with garbage credentials', async () => {
+  it('rejects /v1 without a valid session cookie', async () => {
     const none = await jsonRequest(testApp.app, 'GET', '/v1/users/me')
     expect(none.status).toBe(401)
-
-    const garbage = await jsonRequest(testApp.app, 'GET', '/v1/users/me', undefined, {
-      authorization: 'Bearer not-a-jwt',
-    })
-    expect(garbage.status).toBe(401)
-
-    // Valid shape, wrong signing key.
-    const forged = await jsonRequest(testApp.app, 'GET', '/v1/users/me', undefined, {
-      authorization: `Bearer ${await signForgedToken()}`,
-    })
-    expect(forged.status).toBe(401)
-    expect(((await forged.json()) as { error: { code: string } }).error.code).toBe('unauthorized')
+    expect(((await none.json()) as { error: { code: string } }).error.code).toBe('unauthorized')
   })
 
-  it('binds the token subject to the session owner (no cross-user tokens)', async () => {
-    const emailA = uniqueEmail()
-    const emailB = uniqueEmail()
-    await registerAndVerify(testApp.app, testApp.database, emailA, PASSWORD)
-    await registerAndVerify(testApp.app, testApp.database, emailB, PASSWORD)
-    const userA = await login(testApp.app, emailA, PASSWORD)
-    const userB = await login(testApp.app, emailB, PASSWORD)
-
-    const sessionB = await testApp.database.pool.query(
-      'SELECT id FROM login_sessions WHERE user_id = $1 LIMIT 1',
-      [userB.user.id],
-    )
-    const sessionIdB = sessionB.rows[0]!.id as string
-
-    // Correctly signed by this very service, but sub=A paired with sid=B.
-    const now = Math.floor(Date.now() / 1000)
-    const crossToken = await sign(
-      {
-        sub: userA.user.id,
-        sid: sessionIdB,
-        did: 'device-x',
-        iss: testApp.config.JWT_ISSUER,
-        aud: testApp.config.JWT_AUDIENCE,
-        iat: now,
-        exp: now + 600,
-      },
-      testApp.config.AUTH_JWT_SECRET,
-      'HS256',
-    )
-    const cross = await jsonRequest(testApp.app, 'GET', '/v1/users/me', undefined, {
-      authorization: `Bearer ${crossToken}`,
-    })
-    expect(cross.status).toBe(401)
-    expect(userA.accessToken).not.toBe(userB.accessToken)
-  })
-
-  it('applies the shared entry budget across every /v1 request', async () => {
+  it('applies the shared entry budget across every guarded tree', async () => {
     const limited = await createTestApp({ RATE_LIMIT_ENTRY_MAX: '3' })
     try {
       await flushRateLimits(limited.redis)
       const statuses: number[] = []
       for (let i = 0; i < 5; i += 1) {
-        const response = await jsonRequest(limited.app, 'GET', '/healthz') // outside /v1
-        expect(response.status).toBe(200)
-        const limitedResponse = await jsonRequest(limited.app, 'POST', '/v1/auth/login', {
-          email: uniqueEmail(),
-          password: 'whatever-pass',
-        })
-        statuses.push(limitedResponse.status)
+        const health = await jsonRequest(limited.app, 'GET', '/healthz') // outside both trees
+        expect(health.status).toBe(200)
+        const guarded = await jsonRequest(limited.app, 'GET', '/api/auth/get-session')
+        statuses.push(guarded.status)
       }
-      expect(statuses.slice(0, 3)).toEqual([401, 401, 401])
+      expect(statuses.slice(0, 3)).toEqual([200, 200, 200])
       expect(statuses.slice(3)).toEqual([429, 429])
-      expect(statuses).not.toContain(503)
     } finally {
       await limited.close()
     }
@@ -161,10 +111,7 @@ describe('production request boundary', () => {
   it('fails closed with 503 when Redis cannot answer', async () => {
     const brokenRedis = await createTestApp({ REDIS_URL: 'redis://127.0.0.1:1' })
     try {
-      const response = await jsonRequest(brokenRedis.app, 'POST', '/v1/auth/login', {
-        email: uniqueEmail(),
-        password: 'whatever-pass',
-      })
+      const response = await signIn(brokenRedis.app, uniqueEmail(), 'whatever-pass')
       expect(response.status).toBe(503)
       expect(((await response.json()) as { error: { code: string } }).error.code).toBe('dependency_unavailable')
     } finally {
@@ -184,31 +131,26 @@ describe('production request boundary', () => {
     const body = (await response.json()) as { error: { code: string } }
     expect(body.error.code).toBe('request_timeout')
   })
+
+  it('exposes register/login only through the library handler', async () => {
+    // The service must not grow its own account endpoints beside Better Auth;
+    // unknown /v1 paths answer 401 like the rest of the guarded tree.
+    const ownRegister = await jsonRequest(testApp.app, 'POST', '/v1/auth/register', {
+      email: uniqueEmail(),
+      password: 'whatever-pass',
+    })
+    expect(ownRegister.status).toBe(401)
+    const ownLogin = await jsonRequest(testApp.app, 'POST', '/v1/auth/login', {
+      email: uniqueEmail(),
+      password: 'whatever-pass',
+    })
+    expect(ownLogin.status).toBe(401)
+  })
+
+  it('keeps a working end-to-end account round trip through the library', async () => {
+    const email = uniqueEmail()
+    await registerUser(testApp.app, testApp.database, email, 'correct-horse-battery')
+    const relogin = await signIn(testApp.app, email, 'correct-horse-battery')
+    expect(relogin.status).toBe(200)
+  })
 })
-
-async function appRawRequest(
-  testApp: TestApp,
-  method: string,
-  urlPath: string,
-  body: string,
-  headers: Record<string, string>,
-): Promise<Response> {
-  return testApp.app.request(urlPath, { method: method as 'POST', headers, body })
-}
-
-async function signForgedToken(): Promise<string> {
-  const now = Math.floor(Date.now() / 1000)
-  return sign(
-    {
-      sub: crypto.randomUUID(),
-      sid: crypto.randomUUID(),
-      did: 'forged',
-      iss: 'bot-backend',
-      aud: 'bot-desktop',
-      iat: now,
-      exp: now + 600,
-    },
-    'a-completely-different-secret-value-0123456789abcdef',
-    'HS256',
-  )
-}

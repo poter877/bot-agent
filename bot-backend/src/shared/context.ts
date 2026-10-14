@@ -1,22 +1,22 @@
 import type { MiddlewareHandler } from 'hono'
 
 /**
- * Trusted identity written ONLY by the auth middleware chain after a token and
- * the backing server-side session have been verified. Handlers and services
- * must read identity from here — never from the request body, query string, or
- * client-supplied headers.
+ * Trusted identity written ONLY by the auth middleware after Better Auth has
+ * verified the session server-side. Handlers and services must read identity
+ * from here — never from the request body, query string, or client-supplied
+ * headers. device_id joins when the message-phase device connection lands
+ * (doc §5: 后续 device_id 由设备连接绑定).
  */
 export interface AuthContext {
   userId: string
   sessionId: string
-  deviceId: string
 }
 
 export type AppBindings = {
   Variables: {
     requestId: string
     realIp: string
-    /** Undefined until the full auth chain (JWT + DB session) has passed. */
+    /** Undefined until the Better Auth session check has passed. */
     auth: AuthContext | undefined
   }
 }
@@ -26,7 +26,7 @@ export type AppEnv = AppBindings
 export function requireAuthContext(context: { get(key: 'auth'): AuthContext | undefined }): AuthContext {
   const auth = context.get('auth')
   if (!auth) {
-    throw new Error('auth context missing: requireAuth/requireSession must run before handlers')
+    throw new Error('auth context missing: authenticate must run before handlers')
   }
   return auth
 }

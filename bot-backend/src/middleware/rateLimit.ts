@@ -24,41 +24,48 @@ export function rateLimitMiddleware(options: BucketOptions): MiddlewareHandler<A
   return async (c, next) => {
     const subject = await options.subject(c)
     if (subject !== null) {
-      try {
-        const result = await consumeRateLimitBucket(
-          options.redis,
-          `rl:${options.scope}:${subject}`,
-          options.limit,
-          options.windowSeconds,
-        )
-        if (!result.allowed) {
-          throw rateLimitExceeded(result.retryAfterSeconds)
-        }
-      } catch (error) {
-        if (error instanceof HttpApiError) throw error
-        if (error instanceof RedisUnavailableError) throw redisUnavailable()
-        throw error
-      }
+      await enforceBucket(options.redis, options.scope, subject, options.limit, options.windowSeconds)
     }
     await next()
   }
 }
 
+export async function enforceBucket(
+  redis: RedisClientType,
+  scope: string,
+  subject: string,
+  limit: number,
+  windowSeconds: number,
+): Promise<void> {
+  try {
+    const result = await consumeRateLimitBucket(redis, `rl:${scope}:${subject}`, limit, windowSeconds)
+    if (!result.allowed) {
+      throw rateLimitExceeded(result.retryAfterSeconds)
+    }
+  } catch (error) {
+    if (error instanceof HttpApiError) throw error
+    if (error instanceof RedisUnavailableError) throw redisUnavailable()
+    throw error
+  }
+}
+
 export const byRealIp = (c: Context<AppEnv>): string => c.get('realIp')
 
+/** Normalized, non-reversible account subject (never the raw email). */
+export function accountBucketKey(email: string): string {
+  return `sha256:${createHash('sha256').update(email.trim().toLowerCase()).digest('hex')}`
+}
+
 /**
- * Normalized account subject from the request body. Uses Hono's cached JSON
- * parse (the stream is read once even though validation parses later);
- * unparseable bodies fall through to the 400 path without consuming a bucket.
+ * Account subject from the request body. Uses Hono's cached JSON parse; an
+ * unparseable body falls through to the 400 path without consuming a bucket.
  */
 export function byBodyEmail(): (c: Context<AppEnv>) => Promise<string | null> {
   return async (c) => {
     const body = await c.req.json().catch(() => null) as unknown
     if (body === null || typeof body !== 'object') return null
     const email = (body as Record<string, unknown>)['email']
-    return typeof email === 'string' && email.trim() !== ''
-      ? `sha256:${createHash('sha256').update(email.trim().toLowerCase()).digest('hex')}`
-      : null
+    return typeof email === 'string' && email.trim() !== '' ? accountBucketKey(email) : null
   }
 }
 
