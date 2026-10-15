@@ -18,12 +18,15 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler.js'
 import { createAuth, type Auth } from './modules/auth/auth.js'
 import { createUsersRoutes } from './modules/users/users.routes.js'
 import { createHealthRoutes } from './modules/health/health.routes.js'
+import { createLlmRoutes } from './modules/llm/llm.routes.js'
 
 export interface AppDeps {
   config: Config
   database: Database
   redis: RedisConnections
   logger: Logger
+  /** Test seams for the model stream route (defaults: env catalog + env keys). */
+  llm?: { modelResolver?: Parameters<typeof createLlmRoutes>[0]['modelResolver']; catalog?: Parameters<typeof createLlmRoutes>[0]['catalog'] }
 }
 
 export interface App {
@@ -91,6 +94,19 @@ export async function createApp(deps: AppDeps): Promise<App> {
       }),
     )
   }
+  // The model stream carries whole conversations plus tool schemas — a
+  // dedicated, larger body budget than the account JSON API (doc §4.1).
+  app.use('/api/llm/*', bodyPolicyMiddleware(config.LLM_STREAM_BODY_LIMIT_BYTES))
+  app.use(
+    '/api/llm/*',
+    rateLimitMiddleware({
+      redis: redis.commands,
+      scope: 'entry-ip',
+      limit: config.RATE_LIMIT_ENTRY_MAX,
+      windowSeconds: config.RATE_LIMIT_ENTRY_WINDOW_SECONDS,
+      subject: (c) => c.get('realIp'),
+    }),
+  )
 
   // Per-account buckets on the credential endpoints, then hand off to the
   // library. Better Auth clones the Request internally and a consumed body
@@ -153,6 +169,21 @@ export async function createApp(deps: AppDeps): Promise<App> {
     }),
   )
   app.route('/v1/users', createUsersRoutes(db))
+
+  // Model streams ride the same Better Auth session (doc《流式服务端重构》§4.1:
+  // 凭证传递方式沿用账号后端的实现约定) with their own per-user request budget.
+  app.use('/api/llm/*', authenticate(auth))
+  app.use(
+    '/api/llm/*',
+    rateLimitMiddleware({
+      redis: redis.commands,
+      scope: 'llm-stream',
+      limit: config.RATE_LIMIT_LLM_STREAM_MAX,
+      windowSeconds: config.RATE_LIMIT_LLM_STREAM_WINDOW_SECONDS,
+      subject: byAuthUserId,
+    }),
+  )
+  app.route('/api/llm', createLlmRoutes({ config, redis: redis.commands, logger, ...deps.llm }))
 
   app.route('/', createHealthRoutes(database, redis.commands))
 

@@ -1,0 +1,5 @@
+name: hono-backend
+kind: model-provider
+version: 1.0.0
+description: Company Hono backend — model streams via POST /api/llm/stream (Better Auth session)
+author: Hermes

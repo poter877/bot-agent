@@ -12,11 +12,10 @@ onto server.py's globals (method_ctx.bind_module) and reference them bare.
 from __future__ import annotations
 
 import json
-import os
 import urllib.error
 import urllib.request
-from http.cookiejar import MozillaCookieJar
 
+from account_backend_session import bot_backend_base, load_account_auth_jar
 from .method_ctx import HandlerRegistry
 
 _registry = HandlerRegistry()
@@ -24,7 +23,6 @@ method = _registry.method
 _profile_scoped = _registry.profile_scoped
 
 _REQUEST_TIMEOUT_SECONDS = 10.0
-_COOKIE_FILE_NAME = "account-auth-cookies.txt"
 
 
 class _AuthRejected(Exception):
@@ -32,21 +30,11 @@ class _AuthRejected(Exception):
 
 
 def _backend_base() -> str:
-    base = os.environ.get("HERMES_BOT_BACKEND_URL", "").strip().rstrip("/")
-    if not base:
-        raise RuntimeError("account backend is not configured (HERMES_BOT_BACKEND_URL)")
-    return base
+    return bot_backend_base()
 
 
-def _load_jar() -> MozillaCookieJar:
-    # Profile-scoped call: get_hermes_home() resolves the live profile here.
-    import hermes_constants
-    from pathlib import Path
-
-    jar = MozillaCookieJar(str(Path(hermes_constants.get_hermes_home()) / _COOKIE_FILE_NAME))
-    if Path(jar.filename).exists():
-        jar.load(ignore_discard=True, ignore_expires=True)
-    return jar
+def _load_jar():
+    return load_account_auth_jar()
 
 
 def _backend_request(path: str, *, payload: dict | None = None) -> dict | None:

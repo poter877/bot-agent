@@ -47,6 +47,22 @@ const envSchema = z.object({
   RATE_LIMIT_LOGIN_ACCOUNT_WINDOW_SECONDS: z.coerce.number().int().min(1).default(900),
   RATE_LIMIT_USER_MAX: z.coerce.number().int().min(1).default(120),
   RATE_LIMIT_USER_WINDOW_SECONDS: z.coerce.number().int().min(1).default(60),
+  RATE_LIMIT_LLM_STREAM_MAX: z.coerce.number().int().min(1).default(60),
+  RATE_LIMIT_LLM_STREAM_WINDOW_SECONDS: z.coerce.number().int().min(1).default(60),
+
+  // Model stream (doc《流式服务端重构》§4/§7). The catalog is server-owned:
+  // clients may only name a catalog id; vendor addresses, keys and the real
+  // model strings never leave this process. Vendor keys are optional at boot
+  // and required only when a catalog entry references their provider.
+  LLM_MODEL_CATALOG: z.string().default('[]'),
+  LLM_STREAM_BODY_LIMIT_BYTES: z.coerce.number().int().min(1024).max(16 * 1024 * 1024).default(4 * 1024 * 1024), // 4 MiB
+  LLM_STREAM_MAX_CONCURRENT_PER_USER: z.coerce.number().int().min(1).default(2),
+  LLM_STREAM_FIRST_EVENT_TIMEOUT_MS: z.coerce.number().int().min(1000).default(120_000),
+  LLM_STREAM_IDLE_TIMEOUT_MS: z.coerce.number().int().min(1000).default(90_000),
+  LLM_STREAM_MAX_DURATION_MS: z.coerce.number().int().min(1000).default(600_000),
+  LLM_STREAM_HEARTBEAT_MS: z.coerce.number().int().min(1000).default(15_000),
+  OPENAI_API_KEY: z.string().optional(),
+  ANTHROPIC_API_KEY: z.string().optional(),
 })
 
 export type AppConfig = z.infer<typeof envSchema>

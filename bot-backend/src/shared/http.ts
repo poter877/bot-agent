@@ -16,12 +16,16 @@ export const ERROR_CODES = [
   'forbidden',
   // 404/409
   'not_found',
+  'model_not_found',
+  'model_disabled',
+  'provider_key_missing',
   'conflict',
   // 413/415
   'payload_too_large',
   'unsupported_media_type',
   // 429/503/500
   'rate_limited',
+  'concurrency_limit',
   'request_timeout',
   'dependency_unavailable',
   'internal_error',

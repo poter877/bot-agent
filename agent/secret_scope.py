@@ -198,6 +198,10 @@ _GLOBAL_ENV_EXACT = frozenset({
     "GATEWAY_RELAY_PLATFORMS", "GATEWAY_RELAY_BOT_IDS",
     "GATEWAY_RELAY_ROUTE_KEYS", "GATEWAY_RELAY_INSTANCE_ID",
     "GATEWAY_RELAY_WAKE_URL", "GATEWAY_RELAY_DISPLAY_NAME",
+    # Company bot-backend endpoint (doc《后端服务》§6): a deployment routing
+    # stamp, not a profile secret — one backend serves every profile; the
+    # per-profile state is the Better Auth session cookie in the profile home.
+    "HERMES_BOT_BACKEND_URL",
 })
 _GLOBAL_ENV_PREFIXES = (
     "HERMES_KANBAN_",

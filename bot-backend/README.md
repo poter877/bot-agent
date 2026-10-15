@@ -34,6 +34,75 @@ npm run dev                   # tsx watch 启动
 回源权威会话存储）校验；身份只来自服务端验证结果，Body 里的 user_id/role/owner_id 一律
 不采信。`GET /healthz`、`GET /readyz`（探测 PG + Redis，不披露秘密）。
 
+## 模型流：POST /api/llm/stream（文档《流式服务端重构》§4）
+
+模型请求统一收口到本服务：厂商地址、厂商密钥与真实模型字符串只在服务端，客户端只能
+点名目录里的模型 id。认证复用 Better Auth 会话 Cookie（Agent 子进程携带；Cookie 鉴权的
+变更请求强制 `Origin: <BETTER_AUTH_URL>`，缺失/不匹配 403）。**响应头建立前**完成认证、
+目录、参数与并发校验：未登录 401、未知模型 404、模型停用 403、厂商密钥未配置 503、
+参数非法 400、超限 429（`rate_limited` / `concurrency_limit`）——不发起任何上游调用；
+流建立后的失败经 SSE `error` 部件与终止 `end` 事件报告，绝不改写 HTTP 状态。
+
+请求体 = AI SDK 输入格式（Python 客户端负责内部 OpenAI 格式到此格式的映射）：
+
+```jsonc
+{
+  "model": "目录 id",                       // 服务端 LLM_MODEL_CATALOG 条目
+  "system": "可选系统提示",                  // 系统提示专用字段；messages 里禁止 system 角色
+  "messages": [                             // AI SDK ModelMessage：user / assistant / tool
+    {"role": "user", "content": "你好"},
+    {"role": "assistant", "content": [
+      {"type": "reasoning", "text": "…", "providerMetadata": {"hono": {"details": "…回放状态"}}},
+      {"type": "text", "text": "…"},
+      {"type": "tool-call", "toolCallId": "c1", "toolName": "get_weather", "input": {"city": "北京"}}
+    ]},
+    {"role": "tool", "content": [
+      {"type": "tool-result", "toolCallId": "c1", "toolName": "get_weather", "output": {"type": "text", "value": "晴"}}
+    ]}
+  ],
+  "tools": [{"name": "get_weather", "description": "…", "inputSchema": {"type": "object"}}],
+  "toolChoice": "auto",                     // auto | none | required | {"tool": "name"}
+  "temperature": 0.7, "topP": 0.9, "maxOutputTokens": 4096,
+  "stopSequences": ["END"], "seed": 7
+}
+```
+
+未知字段一律 400（参数白名单，静默丢弃会改变模型行为）。`maxOutputTokens` 受目录
+上限钳制。工具只传 JSON Schema、无 execute，服务端绝不执行工具——tool-call 事件之后
+由本地 Python Agent 执行并把结果作为下一条请求再次发来。
+
+响应为 SSE（`text/event-stream`、`cache-control: no-cache`、`X-Model-Stream-Version: 1`、
+`X-Request-Id`），AI SDK **Core 完整事件流**逐帧转发（不是纯文本流，不是 UI Message Stream）：
+
+```
+event: ai-sdk
+id: <request_id>:<序号>            // 顺序校验与去重；不代表断线后续传
+data: {"type":"start"}
+event: ai-sdk
+id: <request_id>:4
+data: {"type":"text-delta","id":"text_1","text":"你好"}
+event: ai-sdk
+id: <request_id>:8
+data: {"type":"finish","finishReason":"stop","totalUsage":{…}}
+event: end
+id: <request_id>:9
+data: {"request_id":"…","status":"complete"}     // 或 status:"failed" + error
+```
+
+规则：完整流必须含生命周期（start/start-step/finish-step/finish）、用量与错误；`text-delta`
+字段是 `text`、`tool-input-delta` 是 `delta`（固定 ai@7.0.140，升级不得静默改变字段）。
+心跳是 SSE 注释行（`: …`），不代表模型进展。服务端独立超时：首事件 / 流空闲 / 最长请求，
+超时即取消上游并发 `end{failed}`。`file`/`raw`/审批等 v1 未开放类型转成显式
+`{"type":"unsupported","originalType":…}`——不丢弃、不伪装。`error` 部件脱敏为
+`{"message","status?"}`。取消贯通：客户端断开 → 请求 signal → `streamText` AbortSignal →
+上游终止。用量以服务端上游回报为准记录（按用户/日，Redis + 结构化日志），缺失标 unknown，
+绝不算 0，也不以客户端提交数为结算依据。
+
+模型目录 `LLM_MODEL_CATALOG`（JSON 数组：`id/provider/model/enabled/maxOutputTokens`），
+厂商密钥 `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` 只在目录引用其 provider 时必需。
+Python 侧接入：`agent/hono_stream_client.py` + `plugins/model-providers/hono/`
+（`providers.hono.base_url` + `HERMES_BOT_BACKEND_URL`，会话 Cookie 与 accountAuth 共享）。
+
 ## 请求边界（共同安全配置，两棵树都生效）
 
 请求 ID（服务端生成，不采信外部 X-Request-Id）→ 安全响应头 + no-store → CORS
@@ -79,5 +148,5 @@ Redis 故障 fail-closed 503、413/415/400 边界、安全头与请求 ID、配�
 
 ## 明确不在本期范围
 
-消息/agent-bridge 模块、WebSocket/SSE、邮箱验证、找回密码、社交登录、完整 16 项中间件、
+消息/agent-bridge 模块、WebSocket、邮箱验证、找回密码、社交登录、完整 16 项中间件、
 桌面强制登录接入。代码中无占位实现。

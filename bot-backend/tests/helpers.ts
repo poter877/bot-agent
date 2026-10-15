@@ -31,7 +31,10 @@ export interface TestApp {
   close(): Promise<void>
 }
 
-export async function createTestApp(overrides: Record<string, string> = {}): Promise<TestApp> {
+export async function createTestApp(
+  overrides: Record<string, string> = {},
+  llm?: Parameters<typeof createApp>[0]['llm'],
+): Promise<TestApp> {
   const infra = testInfra()
   const config = loadConfig({
     NODE_ENV: 'test',
@@ -48,7 +51,7 @@ export async function createTestApp(overrides: Record<string, string> = {}): Pro
   })
   const redis = await createRedisConnections(config.REDIS_URL)
   const logger = createLogger(config)
-  const { hono } = await createApp({ config, database, redis, logger })
+  const { hono } = await createApp({ config, database, redis, logger, llm })
   return {
     config,
     database,
