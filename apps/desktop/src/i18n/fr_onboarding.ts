@@ -72,6 +72,7 @@ export const frOnboarding: TranslationOverrides['onboarding'] = {
     "La connexion a expiré dans l'attente de l'autorisation. Cela signifie généralement que la page de connexion s'est figée dans l'onglet ouvert (problème côté serveur) — terminez la connexion dans cet onglet, puis réessayez. Si le problème persiste, utilisez plutôt une clé API ou la solution de secours en ligne de commande.",
   signInDidNotFinish: provider =>
     `La connexion avec ${provider} ne s'est pas terminée. Vérifiez votre connexion Internet et réessayez, ou choisissez un autre fournisseur.`,
+  companyUnavailable: 'Le service de l’entreprise est temporairement indisponible. Veuillez réessayer.',
   tryAgain: 'Réessayer',
   useApiKeyInstead: 'Utiliser une clé API',
   errorDetails: 'Détails',

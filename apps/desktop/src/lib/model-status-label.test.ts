@@ -128,6 +128,23 @@ describe('model-status-label', () => {
   })
 
   describe('currentPickerSelection', () => {
+    it('uses the company selection when the stored direct model is outside the directory', () => {
+      const options = {
+        managed: true,
+        model: 'daily',
+        provider: 'hono',
+        providers: [{ slug: 'hono', name: 'Company models', models: ['daily', 'deep'] }]
+      }
+      expect(currentPickerSelection({ model: 'old-model', provider: 'openai' }, options)).toEqual({
+        model: 'daily',
+        provider: 'hono'
+      })
+      expect(currentPickerSelection({ model: 'deep', provider: 'hono' }, options)).toEqual({
+        model: 'deep',
+        provider: 'hono'
+      })
+    })
+
     const store = { model: 'opus', provider: 'anthropic' }
     const options = { model: 'hermes-4', provider: 'nous' }
 

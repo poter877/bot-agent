@@ -1,4 +1,6 @@
 import { z } from 'zod'
+import { filePartSchema, providerOptionsSchema } from './media.js'
+import { replayFields, withReplayOptions } from './replay.js'
 
 /**
  * POST /api/llm/stream request contract (doc《流式服务端重构》§4.1): the body
@@ -11,23 +13,24 @@ import { z } from 'zod'
  */
 
 const textContent = z.string().max(2_000_000)
+const textPart = z.object({ type: z.literal('text'), text: textContent, providerOptions: providerOptionsSchema.optional() }).strict()
+const assistantTextPart = z.object({ type: z.literal('text'), text: textContent, ...replayFields }).strict().transform(withReplayOptions)
 
 const toolCallPart = z.object({
   type: z.literal('tool-call'),
   toolCallId: z.string().min(1).max(500),
   toolName: z.string().min(1).max(200),
   input: z.unknown(),
-})
+  ...replayFields,
+}).transform(withReplayOptions)
 
 const reasoningPart = z.object({
   type: z.literal('reasoning'),
   text: z.string().max(2_000_000),
-  /** Opaque replay state travels under the hono namespace; provider-specific
-   * translation (e.g. anthropic thinking signatures) stays server-side. */
-  providerMetadata: z.record(z.string(), z.record(z.string(), z.unknown())).optional(),
-})
+  ...replayFields,
+}).strict().transform(withReplayOptions)
 
-const assistantContent = z.union([textContent, z.array(z.union([textContent.transform((t) => ({ type: 'text' as const, text: t })), toolCallPart, reasoningPart]))])
+const assistantContent = z.union([textContent, z.array(z.union([textContent.transform((t) => ({ type: 'text' as const, text: t })), assistantTextPart, filePartSchema, toolCallPart, reasoningPart]))])
 
 const toolResultPart = z.object({
   type: z.literal('tool-result'),
@@ -36,13 +39,14 @@ const toolResultPart = z.object({
   output: z.union([
     z.object({ type: z.literal('text'), value: z.string().max(4_000_000) }),
     z.object({ type: z.literal('json'), value: z.unknown() }),
+    z.object({ type: z.literal('content'), value: z.array(z.union([textPart, filePartSchema])).min(1).max(1_000) }).strict(),
   ]),
 })
 
 // The system prompt rides the dedicated top-level `system` field (doc §4.1),
 // never a system-role message inside the conversation.
 const messageSchema = z.discriminatedUnion('role', [
-  z.object({ role: z.literal('user'), content: textContent }),
+  z.object({ role: z.literal('user'), content: z.union([textContent, z.array(z.union([textPart, filePartSchema])).min(1).max(1_000)]) }),
   z.object({ role: z.literal('assistant'), content: assistantContent }),
   z.object({ role: z.literal('tool'), content: z.array(toolResultPart).min(1).max(200) }),
 ])

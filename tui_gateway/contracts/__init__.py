@@ -4,6 +4,7 @@ module is listed here so the generator and the runtime see the same catalog."""
 from . import (
     account_auth,
     billing_delegation_pets,
+    cloud_computer,
     common,
     config_free_tier_control,
     connectors,

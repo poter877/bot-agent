@@ -28,6 +28,9 @@ const envSchema = z.object({
   BETTER_AUTH_SECRET: z.string().min(32, 'BETTER_AUTH_SECRET must be at least 32 characters'),
   BETTER_AUTH_URL: z.string().url(),
   BETTER_AUTH_TRUSTED_ORIGINS: csvList(),
+  // Operations console bootstrap: an account registered under one of these
+  // emails becomes admin (role='admin'). The console manages roles after that.
+  BOT_BACKEND_ADMIN_EMAILS: csvList(),
 
   // Request boundary
   CORS_ALLOWED_ORIGINS: csvList(),
@@ -55,7 +58,7 @@ const envSchema = z.object({
   // model strings never leave this process. Vendor keys are optional at boot
   // and required only when a catalog entry references their provider.
   LLM_MODEL_CATALOG: z.string().default('[]'),
-  LLM_STREAM_BODY_LIMIT_BYTES: z.coerce.number().int().min(1024).max(16 * 1024 * 1024).default(4 * 1024 * 1024), // 4 MiB
+  LLM_STREAM_BODY_LIMIT_BYTES: z.coerce.number().int().min(1024).max(256 * 1024 * 1024).default(64 * 1024 * 1024), // 64 MiB; includes base64 expansion
   LLM_STREAM_MAX_CONCURRENT_PER_USER: z.coerce.number().int().min(1).default(2),
   LLM_STREAM_FIRST_EVENT_TIMEOUT_MS: z.coerce.number().int().min(1000).default(120_000),
   LLM_STREAM_IDLE_TIMEOUT_MS: z.coerce.number().int().min(1000).default(90_000),
@@ -63,6 +66,14 @@ const envSchema = z.object({
   LLM_STREAM_HEARTBEAT_MS: z.coerce.number().int().min(1000).default(15_000),
   OPENAI_API_KEY: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
+  GOOGLE_GENERATIVE_AI_API_KEY: z.string().optional(),
+
+  // A private worker owns Docker. The public API never mounts its socket.
+  CLOUD_COMPUTER_ENABLED: z.enum(['true', 'false']).default('false').transform((value) => value === 'true'),
+  CLOUD_COMPUTER_WORKER_URL: z.string().url().optional(),
+  CLOUD_COMPUTER_WORKER_TOKEN: z.string().min(32).optional(),
+  CLOUD_COMPUTER_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(600),
+  CLOUD_COMPUTER_IP_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(1200),
 })
 
 export type AppConfig = z.infer<typeof envSchema>
@@ -83,6 +94,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const parsed = envSchema.safeParse(env)
   if (!parsed.success) {
     failBoot(parsed.error.issues.map((issue) => ({ path: issue.path, message: issue.message })))
+  }
+  if (parsed.data.CLOUD_COMPUTER_ENABLED && (!parsed.data.CLOUD_COMPUTER_WORKER_URL || !parsed.data.CLOUD_COMPUTER_WORKER_TOKEN)) {
+    failBoot([{ message: 'Cloud computers require CLOUD_COMPUTER_WORKER_URL and CLOUD_COMPUTER_WORKER_TOKEN.' }])
+  }
+  if (parsed.data.CLOUD_COMPUTER_WORKER_URL) {
+    const url = new URL(parsed.data.CLOUD_COMPUTER_WORKER_URL)
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash || url.pathname !== '/') {
+      failBoot([{ path: ['CLOUD_COMPUTER_WORKER_URL'], message: 'Use an HTTP(S) origin without credentials, path, query or fragment.' }])
+    }
   }
   return Object.freeze(parsed.data)
 }

@@ -248,6 +248,7 @@ export const arBoot = {
     reloadRetry: 'إعادة التحميل وإعادة المحاولة'
   },
   onboarding: {
+    companyUnavailable: 'خدمة الشركة غير متاحة مؤقتًا. يُرجى المحاولة مرة أخرى.',
     headerTitle: 'لنُعِدّ لك Hermes Agent',
     headerDesc: 'اربط مزوّد نماذج لبدء المحادثة. معظم الخيارات تتطلب نقرة واحدة.',
     preparingInstall: 'يُكمل Hermes التثبيت. عادة ما يستغرق ذلك أقل من دقيقة في أول تشغيل.',

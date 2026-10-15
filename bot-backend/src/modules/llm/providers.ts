@@ -1,5 +1,6 @@
 import { createOpenAI } from '@ai-sdk/openai'
 import { createAnthropic } from '@ai-sdk/anthropic'
+import { createGoogle } from '@ai-sdk/google'
 import type { LanguageModel } from 'ai'
 import type { CatalogEntry } from './catalog.js'
 
@@ -10,18 +11,19 @@ import type { CatalogEntry } from './catalog.js'
  * provider (checked by resolveCatalogEntry before any vendor call).
  */
 
-export type ProviderKey = 'openai' | 'anthropic'
+export type ProviderKey = 'openai' | 'anthropic' | 'google'
 
 export type ModelResolver = (entry: CatalogEntry) => LanguageModel
 
 export function createModelResolver(providerApiKeys: Readonly<Record<string, string | undefined>>): ModelResolver {
-  const cache = new Map<ProviderKey, ReturnType<typeof createOpenAI> | ReturnType<typeof createAnthropic>>()
+  const factories = { openai: createOpenAI, anthropic: createAnthropic, google: createGoogle }
+  const cache = new Map<ProviderKey, ReturnType<(typeof factories)[ProviderKey]>>()
   const providerFor = (key: ProviderKey) => {
     const cached = cache.get(key)
     if (cached !== undefined) return cached
     const apiKey = providerApiKeys[key]
     if (!apiKey) throw new Error(`provider "${key}" has no API key configured`)
-    const instance = key === 'openai' ? createOpenAI({ apiKey }) : createAnthropic({ apiKey })
+    const instance = factories[key]({ apiKey })
     cache.set(key, instance)
     return instance
   }

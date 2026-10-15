@@ -18,6 +18,12 @@ vi.mock('@/hermes', () => ({
 }))
 
 describe('requestModelOptions', () => {
+  it('keeps an empty authoritative company directory instead of recovering vendor choices', async () => {
+    const payload = { managed: true, provider: 'hono', model: '', providers: [] }
+    const gateway = { request: vi.fn().mockResolvedValue(payload) }
+    await expect(requestModelOptions({ gateway: gateway as never })).resolves.toBe(payload)
+    expect(getGlobalModelOptions).not.toHaveBeenCalled()
+  })
   afterEach(() => {
     vi.clearAllMocks()
   })

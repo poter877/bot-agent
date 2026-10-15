@@ -184,7 +184,7 @@ class TestRequestMapping:
         assert messages[0] == {"role": "user", "content": "天气？"}
         assistant = messages[1]
         assert assistant["role"] == "assistant"
-        assert {"type": "reasoning", "text": "需要工具", "providerMetadata": {"hono": {"details": [{"type": "reasoning.text", "text": "需要工具", "signature": "s"}]}}} in assistant["content"]
+        assert {"type": "reasoning", "text": "需要工具", "providerOptions": {"anthropic": {"signature": "s"}}} in assistant["content"]
         assert {"type": "tool-call", "toolCallId": "c1", "toolName": "get_weather", "input": {"city": "北京"}} in assistant["content"]
         assert messages[2] == {
             "role": "tool",
@@ -195,9 +195,9 @@ class TestRequestMapping:
         with pytest.raises(HonoRequestError, match="no matching assistant tool call"):
             _map_messages([{"role": "user", "content": "hi"}, {"role": "tool", "tool_call_id": "ghost", "content": "x"}])
 
-    def test_image_content_is_rejected_not_downgraded(self):
-        with pytest.raises(HonoRequestError, match="protocol v1"):
-            _map_messages([{"role": "user", "content": [{"type": "text", "text": "看"}]}])
+    def test_text_content_parts_are_preserved(self):
+        history = [{"role": "user", "content": [{"type": "text", "text": "看"}]}]
+        assert _map_messages(history) == ("", history)
 
     def test_payload_whitelists_params_and_maps_tools(self):
         payload = _build_payload(
@@ -271,7 +271,7 @@ class TestClientEndToEnd:
         assert normalized.finish_reason == "tool_calls"
         assert normalized.reasoning == "想想"
         # The streamed reasoning detail (no signature here) is preserved for replay.
-        assert (normalized.provider_data or {}).get("reasoning_details") == [{"type": "reasoning.text", "text": "想想"}]
+        assert {"type": "reasoning.text", "text": "想想"} in (normalized.provider_data or {}).get("reasoning_details", [])
         (tool_call,) = normalized.tool_calls
         assert json.loads(tool_call.arguments) == {"city": "北京"}
         assert tool_call.name == "get_weather"

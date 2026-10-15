@@ -11,11 +11,6 @@ onto server.py's globals (method_ctx.bind_module) and reference them bare.
 
 from __future__ import annotations
 
-import json
-import urllib.error
-import urllib.request
-
-from account_backend_session import bot_backend_base, load_account_auth_jar
 from .method_ctx import HandlerRegistry
 
 _registry = HandlerRegistry()
@@ -28,44 +23,20 @@ _REQUEST_TIMEOUT_SECONDS = 10.0
 class _AuthRejected(Exception):
     """The backend answered and rejected the credentials/operation."""
 
-
-def _backend_base() -> str:
-    return bot_backend_base()
-
-
-def _load_jar():
-    return load_account_auth_jar()
+    def __init__(self, message: str, status_code: int = 401):
+        super().__init__(message)
+        self.status_code = status_code
 
 
 def _backend_request(path: str, *, payload: dict | None = None) -> dict | None:
-    """One Better Auth exchange with the profile cookie jar; cookies persist on success.
+    from account_backend_session import AccountBackendError, request_account_backend
 
-    ``Origin`` is the backend's own URL: the library's CSRF check rejects cookie-authed
-    mutations from a client that sends no origin (this is a first-party server-side client).
-    """
-    base = _backend_base()
-    jar = _load_jar()
-    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
-    body = json.dumps(payload).encode() if payload is not None else None
-    req = urllib.request.Request(
-        base + path,
-        data=body,
-        method="POST" if payload is not None else "GET",
-        headers={"Content-Type": "application/json", "Accept": "application/json", "Origin": base},
-    )
     try:
-        with opener.open(req, timeout=_REQUEST_TIMEOUT_SECONDS) as resp:
-            result = json.loads(resp.read() or b"null")
-    except urllib.error.HTTPError as e:
-        detail = ""
-        try:
-            body = json.loads(e.read() or b"{}")
-            detail = str((body or {}).get("message") or "")
-        except Exception:
-            detail = ""
-        raise _AuthRejected(detail or f"HTTP {e.code}") from None
-    jar.save(ignore_discard=True, ignore_expires=True)
-    return result
+        return request_account_backend(path, payload=payload, timeout=_REQUEST_TIMEOUT_SECONDS)
+    except AccountBackendError as error:
+        if error.status_code is not None and 400 <= error.status_code < 500:
+            raise _AuthRejected(str(error), error.status_code) from error
+        raise
 
 
 def _user_payload(user: dict | None) -> dict | None:
@@ -79,10 +50,35 @@ def _user_payload(user: dict | None) -> dict | None:
 
 
 def _status() -> dict:
-    session = _backend_request("/api/auth/get-session")
-    user = session.get("user") if isinstance(session, dict) else None
-    payload = _user_payload(user)
-    return {"authenticated": payload is not None, "user": payload, "error": None}
+    from account_backend_session import account_session_lock
+    from tui_gateway.account_auth_lifecycle import invalidate_account_session, remember_account_transport
+
+    remember_account_transport()
+    with account_session_lock():
+        try:
+            session = _backend_request("/api/auth/get-session")
+        except _AuthRejected as error:
+            rejected = error.status_code in {401, 403}
+            invalidate_account_session("expired" if rejected else "unavailable", clear_cookie=rejected)
+            raise
+        except Exception:
+            invalidate_account_session("unavailable", clear_cookie=False)
+            raise
+        user = session.get("user") if isinstance(session, dict) else None
+        payload = _user_payload(user)
+        if payload is None:
+            invalidate_account_session("expired")
+        return {"authenticated": payload is not None, "user": payload, "error": None}
+
+
+def _authenticate_account(path: str, payload: dict) -> dict:
+    from account_backend_session import account_session_lock
+    from tui_gateway.account_auth_lifecycle import prepare_account_sign_in
+
+    with account_session_lock():
+        prepare_account_sign_in()
+        _backend_request(path, payload=payload)
+        return _status()
 
 
 @method("accountAuth.status")
@@ -100,11 +96,8 @@ def _(rid, params: dict) -> dict:
 @_profile_scoped
 def _(rid, params: dict) -> dict:
     try:
-        _backend_request("/api/auth/sign-in/email",
-                         payload={"email": params["email"], "password": params["password"]})
-        # Doc《用户认证》§2: re-confirm the established session authoritatively
-        # before reporting success.
-        return _ok(rid, _status())
+        return _ok(rid, _authenticate_account("/api/auth/sign-in/email",
+                   {"email": params["email"], "password": params["password"]}))
     except _AuthRejected as e:
         return _ok(rid, {"authenticated": False, "user": None, "error": str(e)})
     except Exception as e:
@@ -115,10 +108,8 @@ def _(rid, params: dict) -> dict:
 @_profile_scoped
 def _(rid, params: dict) -> dict:
     try:
-        _backend_request("/api/auth/sign-up/email",
-                         payload={"name": params["name"], "email": params["email"],
-                                  "password": params["password"]})
-        return _ok(rid, _status())
+        return _ok(rid, _authenticate_account("/api/auth/sign-up/email",
+                   {"name": params["name"], "email": params["email"], "password": params["password"]}))
     except _AuthRejected as e:
         return _ok(rid, {"authenticated": False, "user": None, "error": str(e)})
     except Exception as e:
@@ -128,11 +119,21 @@ def _(rid, params: dict) -> dict:
 @method("accountAuth.signOut")
 @_profile_scoped
 def _(rid, params: dict) -> dict:
-    try:
-        _backend_request("/api/auth/sign-out", payload={})
-        return _ok(rid, {"ok": True})
-    except Exception as e:
-        return _err(rid, 5061, str(e))
+    from account_backend_session import account_auth_cookie_path, account_session_lock
+    from tui_gateway.account_auth_lifecycle import invalidate_account_session
+
+    with account_session_lock():
+        # Stop local work before waiting on the remote revocation request. Keep the
+        # cookie only for that request; the lock excludes concurrent login/status.
+        invalidate_account_session("signed_out", clear_cookie=False)
+        try:
+            _backend_request("/api/auth/sign-out", payload={})
+        except Exception:
+            # Offline revocation cannot retain local access or the local session secret.
+            logger.debug("Remote account sign-out unavailable; clearing local authority", exc_info=True)
+        finally:
+            account_auth_cookie_path().unlink(missing_ok=True)
+    return _ok(rid, {"ok": True})
 
 
 def register(server) -> None:

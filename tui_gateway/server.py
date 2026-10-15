@@ -2544,10 +2544,12 @@ def _resolve_runtime_with_fallback(resolve_kwargs: dict | None = None) -> _Runti
 
 
 def _resolve_agent_model_runtime(model_override, provider_override) -> tuple[str, dict]:
-    """(model, runtime) for a new agent; a per-session override (/model switch or a resumed row's persisted
-    runtime) wins over global config/env. Older rows stored the resolved provider "custom" (no named entry
-    matches) — recover the identity from the persisted base_url or the rebuild fails "No LLM provider
-    configured". Persisted base_url/api_key/api_mode are honored only for the original runtime, never a fallback."""
+    """Resolve a new agent's model and runtime, with company policy taking precedence.
+    Direct-provider sessions retain their overrides; old custom rows recover identity from
+    base_url. Persisted credentials and wire settings never override a fallback runtime."""
+    from tui_gateway.company_models import resolve_company_agent_runtime
+    if company := resolve_company_agent_runtime(model_override, provider_override):
+        return company
     if isinstance(model_override, dict) and model_override.get("model"):
         model = str(model_override.get("model") or "")
         requested_provider = model_override.get("provider") or provider_override or None
@@ -2574,11 +2576,9 @@ def _resolve_agent_model_runtime(model_override, provider_override) -> tuple[str
     if resolution.used_fallback:
         if not resolution.selected_model:
             raise RuntimeError("Auth fallback resolved without a model")
-        # Same pre-agent switch the messaging gateway surfaces (#74349); _make_agent pops it onto the
-        # agent's one-shot notice so the TUI/Desktop user sees which provider actually answered.
+        # _make_agent surfaces the fallback provider notice (#74349).
         from hermes_cli.fallback_config import pre_agent_fallback_notice
-        # requested_provider=None means resolve_runtime_provider read the persisted config provider;
-        # ``model: <id>`` (string shorthand) names no provider.
+        # String model shorthand leaves the provider in config.
         cfg_model = _load_cfg().get("model")
         primary_provider = requested_provider or (cfg_model.get("provider") if isinstance(cfg_model, dict) else None)
         resolution.runtime["_fallback_notice"] = pre_agent_fallback_notice(
@@ -3672,7 +3672,7 @@ from . import (
     methods_display as _methods_display, methods_display_watch as _methods_display_watch,
     methods_onboarding as _methods_onboarding, methods_i18n as _methods_i18n, methods_machine as _methods_machine,
     methods_shared_metrics as _methods_shared_metrics, methods_plugin_catalog as _methods_plugin_catalog,
-    methods_account_auth as _methods_account_auth)
+    methods_account_auth as _methods_account_auth, methods_cloud_computer as _methods_cloud_computer)
 
 for _m in (
     _session_transports, _session_reaper, _session_lifecycle, _session_workdir, _compute_host_bridge, _model_switch,
@@ -3685,6 +3685,6 @@ for _m in (
     _methods_session_control, _methods_subagents, _methods_vault, _methods_free_tier, _methods_connectors,
     _methods_connectors_account, _methods_display, _methods_display_watch, _methods_onboarding,
     _methods_i18n, _methods_machine, _methods_shared_metrics, _methods_plugin_catalog,
-    _methods_account_auth):
+    _methods_account_auth, _methods_cloud_computer):
     _m.register(sys.modules[__name__])
 del _m

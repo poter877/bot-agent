@@ -19,7 +19,8 @@ export class ConcurrencyGuard {
     private readonly maxPerUser: number,
   ) {}
 
-  async acquire(userId: string): Promise<void> {
+  /** `overrideLimit` is the console-set per-user cap; null = service default. */
+  async acquire(userId: string, overrideLimit: number | null = null): Promise<void> {
     const key = `llm:conc:${userId}`
     let count: number
     try {
@@ -30,7 +31,7 @@ export class ConcurrencyGuard {
     } catch (error) {
       throw new HttpApiError(503, 'dependency_unavailable', 'Service temporarily unavailable.')
     }
-    if (count > this.maxPerUser) {
+    if (count > (overrideLimit ?? this.maxPerUser)) {
       try {
         await this.redis.decr(key)
       } catch {

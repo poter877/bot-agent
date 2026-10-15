@@ -54,7 +54,8 @@ def test_process_provider_reaches_every_shared_picker(picker_env, monkeypatch):
     home, profile = picker_env
     from hermes_cli.config import save_config
     from hermes_cli.main_provider_setup import _build_provider_picker_rows
-    from hermes_cli.models import _PROVIDER_LABELS, list_available_providers, provider_model_ids
+    from hermes_cli.models import _PROVIDER_LABELS, provider_model_ids
+    from hermes_cli.models_inventory import list_available_providers
     from tui_gateway import server
 
     assert any(row["id"] == profile.name for row in list_available_providers())

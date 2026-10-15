@@ -14,6 +14,7 @@ import {
   useState
 } from 'react'
 
+import { DirectModelOptions } from '@/components/direct-model-options'
 import { ProviderStatusChip } from '@/components/provider-status-chip'
 import { Badge } from '@/components/ui/badge'
 import { Codicon } from '@/components/ui/codicon'
@@ -36,7 +37,13 @@ import type { HermesGateway } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
 import { isSubmitEnter } from '@/lib/ime'
-import { catalogProviderMatches, modelOptionsQueryKey, requestModelOptions } from '@/lib/model-options'
+import {
+  catalogModelLabel,
+  catalogProviderMatches,
+  localModelOptionsAllowed,
+  modelOptionsQueryKey,
+  requestModelOptions
+} from '@/lib/model-options'
 import { displayModelName, modelDisplayParts } from '@/lib/model-status-label'
 import { accountResetMs, formatReset, modelResetMs } from '@/lib/provider-limit'
 import { reasoningEffortLabel } from '@/lib/reasoning-effort'
@@ -279,7 +286,7 @@ export function ModelCatalogMenu({
   // Every local-models read in this menu sits behind the --local launch
   // flag: no status polling, no download rows, and the llamacpp provider
   // group hides even when models are staged (the flag is strict).
-  const localModelsEnabled = $localModelsEnabled.get()
+  const localModelsEnabled = localModelOptionsAllowed(modelOptions.data, $localModelsEnabled.get())
 
   // Live load state for the managed local server: which model is loading
   // into memory right now, with a REAL percent (per-tensor callback relayed
@@ -680,7 +687,7 @@ export function ModelCatalogMenu({
 
   return (
     <>
-      {header}
+      <DirectModelOptions options={modelOptions.data}>{header}</DirectModelOptions>
       <DropdownMenuSearch
         aria-label={copy.search}
         onKeyDown={event => {
@@ -895,20 +902,22 @@ export function ModelCatalogMenu({
           trailing block it has always rendered. */}
       <DropdownMenuSeparator className="mx-0" />
       {footer}
-      <DropdownMenuItem
-        className={cn(dropdownMenuRow, 'text-(--ui-text-tertiary)', slugEntry && 'text-foreground')}
-        onSelect={event => {
-          event.preventDefault()
-          setSearch('')
-          setKbOverride(null)
-          setSlugEntry(true)
-          // Radix hands focus back to the row after onSelect; refocus after.
-          window.setTimeout(() => searchRef.current?.focus(), 0)
-        }}
-      >
-        <Codicon name="add" size="0.75rem" />
-        {copyPicker.addCustomModelAction}
-      </DropdownMenuItem>
+      <DirectModelOptions options={modelOptions.data}>
+        <DropdownMenuItem
+          className={cn(dropdownMenuRow, 'text-(--ui-text-tertiary)', slugEntry && 'text-foreground')}
+          onSelect={event => {
+            event.preventDefault()
+            setSearch('')
+            setKbOverride(null)
+            setSlugEntry(true)
+            // Radix hands focus back to the row after onSelect; refocus after.
+            window.setTimeout(() => searchRef.current?.focus(), 0)
+          }}
+        >
+          <Codicon name="add" size="0.75rem" />
+          {copyPicker.addCustomModelAction}
+        </DropdownMenuItem>
+      </DirectModelOptions>
       <DropdownMenuItem
         className={cn(dropdownMenuRow, 'text-(--ui-text-tertiary)')}
         onSelect={() => setModelVisibilityOpen(true)}
@@ -1016,7 +1025,8 @@ function ModelFamilyRow({
       : null
 
   const isCurrent = activeId !== null
-  const { name, tag } = modelDisplayParts(family.id)
+  const { name: inferredName, tag } = modelDisplayParts(family.id)
+  const name = catalogModelLabel(provider, family.id, inferredName)
   const decoration = useModelMenuRowDecoration({ label: name, model: family.id, provider: provider.slug })
   const caps = provider.capabilities?.[family.id]
   const limit = familyLimit(provider, family, isCurrent)
@@ -1335,6 +1345,7 @@ function groupModels(
     // injects current_model into the row when it can, but the renderer cannot
     // rely on that — the row may arrive from a cache that predates the switch.
     if (
+      !provider.managed &&
       catalogProviderMatches(provider, current.provider) &&
       current.model &&
       !allFamilies.some(family => family.id === current.model || family.fastId === current.model)
@@ -1348,7 +1359,7 @@ function groupModels(
 
     const matches = (family: ModelFamily) =>
       foldIncludes(
-        `${family.id} ${family.fastId ?? ''} ${provider.name} ${provider.slug} ${displayModelName(family.id)}`,
+        `${family.id} ${family.fastId ?? ''} ${provider.name} ${provider.slug} ${catalogModelLabel(provider, family.id, displayModelName(family.id))}`,
         q
       )
 

@@ -1,5 +1,6 @@
 // ru overrides for the login gate's copy (accountAuth).
 export const ruAccountAuth = {
+  signOutAction: 'Выйти',
   checking: 'Проверяем вход…',
   unavailableTitle: 'Сервис аутентификации недоступен',
   unavailableBody: 'Не удаётся связаться со службой аккаунтов. Проверьте соединение и повторите попытку.',

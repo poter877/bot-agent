@@ -95,9 +95,9 @@ def configured_backend_name() -> str:
     return raw.strip() if isinstance(raw, str) and raw.strip() else DEFAULT_BACKEND
 
 
-def get_active_provider() -> ComputerUseProvider:
+def get_active_provider(name: Optional[str] = None) -> ComputerUseProvider:
     """The one provider ``computer_use.backend`` selects; ``LookupError`` naming the available ones otherwise."""
-    name = configured_backend_name()
+    name = name or configured_backend_name()
     provider = load_computer_use_provider(name)
     if provider is None:
         available = ", ".join(found for found, _ in discover_computer_use_providers())

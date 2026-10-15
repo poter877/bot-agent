@@ -2077,13 +2077,21 @@ Rules:
 - **One provider is active at a time.** Only the selected one is imported and instantiated. Installed
   providers that aren't selected stay on disk and are only listed (from `plugin.yaml`) as options. A
   provider never activates itself.
-- **Selection is per profile and read when a session starts its driver.** If the configured name
+- **Selection is per profile and frozen with the Agent's tool snapshot.** Driver construction remains
+  lazy; changing the setting affects new sessions. Direct tool callers freeze it on first use. If the configured name
   doesn't resolve, the call fails with an error naming it and the installed providers. Hermes never
   falls back to another driver.
 - **The model-facing schema is the same for every provider**, so the prompt cache survives a driver
   swap. Report gaps per action with `ActionResult(ok=False, code="unsupported_action", ...)`.
-- Approval gating, the Bot Desktop lease, screenshot dedup, element caps and vision routing all run
-  in the tool, above the backend. The backend only drives the screen.
+- Approval gating, screenshot dedup, element caps and vision routing run above the backend.
+  `ComputerUseProvider.action_scope()` yields a lease fence, checked before input and before screenshots
+  reach history. Its default enforces the local Bot Desktop lease and startup policy. Remote providers
+  override it with their authoritative control lease; `desktop_identity()` supplies a cheap driver-cache
+  target identity without reading the local display. Existing providers inherit the local behavior.
+- The bundled `company-cloud` provider drives only the signed-in account's company cloud computer through
+  Hono. Infrastructure credentials stay on the company server. A human takeover blocks Agent input and
+  screenshots; account changes invalidate existing handles. Closing a tool session only closes its handle,
+  while the explicit cloud computer Stop operation stops the remote computer and preserves its files.
 - `hermes computer-use status`/`doctor`/`permissions` run cua-driver checks only when `cua` is
   selected. For any other provider they report its `is_available()` and run its `doctor()` if it has one.
 - Providers return live driver sessions, so they load in-process only. Under

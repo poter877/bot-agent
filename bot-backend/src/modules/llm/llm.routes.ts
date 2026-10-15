@@ -2,47 +2,44 @@ import { Hono } from 'hono'
 import { jsonSchema, streamText, tool as defineTool, type LanguageModel, type ModelMessage, type TextStreamPart } from 'ai'
 import type { RedisClientType } from 'redis'
 import type { AppConfig } from '../../config/env.js'
+import type { Db } from '../../db/client.js'
 import type { AppEnv } from '../../shared/context.js'
 import { requireAuthContext, type AuthContext } from '../../shared/context.js'
-import { HttpApiError } from '../../shared/http.js'
+import { HttpApiError, assertSameOrigin } from '../../shared/http.js'
 import type { Logger } from '../../shared/logger.js'
-import type { CatalogEntry } from './catalog.js'
-import { CatalogError, parseModelCatalog, resolveCatalogEntry } from './catalog.js'
+import type { CatalogEntry, CatalogStore } from './catalog.js'
+import { CatalogError, parseModelCatalog, publicModelCatalog, resolveCatalogEntry } from './catalog.js'
 import { llmStreamRequestSchema, type LlmStreamRequest } from './request.js'
 import { createModelResolver, type ModelResolver } from './providers.js'
+import { enforceQuota } from './quota.js'
+import { recordRequestLog } from './requestLog.js'
+import { directMediaOnly, validateMedia } from './media.js'
 import { MODEL_STREAM_VERSION, renderFrame, sseComment, sseFrame, toSerializablePart } from './sse.js'
+import { waitForStreamEvent } from './stream-wait.js'
 import { ConcurrencyGuard, recordStreamUsage, type UpstreamUsage } from './usage.js'
 
 /**
  * POST /api/llm/stream — single model request over the AI SDK, streamed back
  * as the full Core event feed (doc《流式服务端重构》§4). Authentication,
- * catalog, parameters and concurrency are all settled BEFORE the response
- * headers; once SSE is running, failures travel as error parts and a terminal
- * `end` event — the HTTP status is never rewritten mid-stream. Tools arrive
- * as JSON Schema without execute and never run server-side; the local Python
- * agent owns execution (§2: Hono does not run Hermes Agent).
+ * catalog, quota and concurrency are all settled BEFORE the response headers;
+ * once SSE is running, failures travel as error parts and a terminal `end`
+ * event — the HTTP status is never rewritten mid-stream. Tools arrive as JSON
+ * Schema without execute and never run server-side; the local Python agent
+ * owns execution (§2: Hono does not run Hermes Agent). Every attributed
+ * request lands in llm_request_log (complete / failed / rejected).
  */
 
 export interface LlmRoutesDeps {
   config: AppConfig
+  db: Db
   redis: RedisClientType
   logger: Logger
-  /** Test seam: defaults to the env-keyed openai/anthropic registry. */
+  /** Test seam: defaults to the env-keyed provider registry. */
   modelResolver?: ModelResolver
-  /** Test seam: defaults to LLM_MODEL_CATALOG. */
+  /** Test seam: static catalog; production reads the console-owned table. */
   catalog?: CatalogEntry[]
-}
-
-function requireSameOrigin(c: { req: { header(name: string): string | undefined } }, baseOrigin: string): void {
-  // Cookie-authenticated mutation: mirror the library's CSRF stance on
-  // /api/auth/* — a first-party server-side client sends Origin = base.
-  const origin = c.req.header('origin')
-  if (origin === undefined || origin.trim() === '') {
-    throw new HttpApiError(403, 'forbidden', 'Origin header is required.')
-  }
-  if (origin.trim().replace(/\/+$/, '') !== baseOrigin.replace(/\/+$/, '')) {
-    throw new HttpApiError(403, 'forbidden', 'Origin does not match the backend.')
-  }
+  /** Production catalog source (llm_models table, console CRUD). */
+  catalogStore?: CatalogStore
 }
 
 function parseBody(raw: unknown): LlmStreamRequest {
@@ -103,7 +100,7 @@ async function* pumpStream(
   ctx: { requestId: string; auth: AuthContext; modelId: string; timings: StreamTimings; startedAt: number },
   hooks: {
     onDeadline: () => void
-    onFinish: (usage: UpstreamUsage | undefined, finishReason: string | undefined) => Promise<void>
+    onFinish: (outcome: { status: 'complete' | 'failed'; failureMessage?: string; finishReason?: string; usage?: UpstreamUsage }) => Promise<void>
     onError: (stage: string, error: unknown) => void
   },
 ): AsyncGenerator<string, void, undefined> {
@@ -121,17 +118,12 @@ async function* pumpStream(
 
   try {
     const iterator = stream[Symbol.asyncIterator]()
+    let pending: Promise<IteratorResult<TextStreamPart<never>>> | undefined
+    let nextHeartbeatAt = lastEventAt + timings.heartbeatMs
     while (true) {
       const hardDeadline = Math.min(lastEventAt + (sequence === 0 ? timings.firstEventTimeoutMs : timings.idleTimeoutMs), deadlineAt)
-      const nextHeartbeatAt = lastEventAt + timings.heartbeatMs
       const wakeAt = Math.min(hardDeadline, nextHeartbeatAt)
-      const outcome = await Promise.race([
-        iterator.next().then((result) => ({ kind: 'event' as const, result })),
-        new Promise<{ kind: 'wake' }>((resolveWake) => {
-          const timer = setTimeout(() => resolveWake({ kind: 'wake' }), Math.max(0, wakeAt - Date.now()))
-          if (typeof timer.unref === 'function') timer.unref()
-        }),
-      ])
+      const outcome = await waitForStreamEvent(pending ??= iterator.next(), wakeAt)
       if (outcome.kind === 'wake') {
         if (Date.now() >= hardDeadline) {
           hooks.onDeadline()
@@ -141,15 +133,19 @@ async function* pumpStream(
               : sequence === 0
                 ? 'The model did not produce its first event in time.'
                 : 'The model stream stalled.'
+          failureMessage = reason
           yield endFrame({ request_id: requestId, status: 'failed', error: { message: reason } })
           return
         }
+        nextHeartbeatAt = Date.now() + timings.heartbeatMs
         yield sseComment('heartbeat')
         continue
       }
+      pending = undefined
       const { value: part, done } = outcome.result
       if (done) break
       lastEventAt = Date.now()
+      nextHeartbeatAt = lastEventAt + timings.heartbeatMs
       sequence += 1
       if (part.type === 'finish') {
         finished = true
@@ -179,16 +175,32 @@ async function* pumpStream(
     }
   } catch (error) {
     hooks.onError('pump', error)
-    yield endFrame({ request_id: requestId, status: 'failed', error: { message: 'Internal streaming failure.' } })
+    failureMessage = 'Internal streaming failure.'
+    yield endFrame({ request_id: requestId, status: 'failed', error: { message: failureMessage } })
   } finally {
-    await hooks.onFinish(usage, finishReason).catch(() => {})
+    await hooks
+      .onFinish({
+        status: finished ? 'complete' : 'failed',
+        failureMessage,
+        finishReason,
+        usage,
+      })
+      .catch(() => {})
   }
 }
 
 export function createLlmRoutes(deps: LlmRoutesDeps): Hono<AppEnv> {
-  const { config, redis, logger } = deps
-  const catalog = deps.catalog ?? parseModelCatalog(config.LLM_MODEL_CATALOG)
-  const resolveModel = deps.modelResolver ?? createModelResolver({ openai: config.OPENAI_API_KEY, anthropic: config.ANTHROPIC_API_KEY })
+  const { config, db, redis, logger } = deps
+  const staticCatalog = deps.catalog ?? parseModelCatalog(config.LLM_MODEL_CATALOG)
+  // The test seam wins over the console-owned store so suites pin their own catalog.
+  const catalogStore = deps.catalogStore
+  const loadCatalog = deps.catalog
+    ? async () => deps.catalog!
+    : catalogStore
+      ? () => catalogStore.load()
+      : async () => staticCatalog
+  const providerKeys = { openai: config.OPENAI_API_KEY, anthropic: config.ANTHROPIC_API_KEY, google: config.GOOGLE_GENERATIVE_AI_API_KEY }
+  const resolveModel = deps.modelResolver ?? createModelResolver(providerKeys)
   const concurrency = new ConcurrencyGuard(redis, config.LLM_STREAM_MAX_CONCURRENT_PER_USER)
   const timings: StreamTimings = {
     firstEventTimeoutMs: config.LLM_STREAM_FIRST_EVENT_TIMEOUT_MS,
@@ -199,28 +211,62 @@ export function createLlmRoutes(deps: LlmRoutesDeps): Hono<AppEnv> {
 
   const routes = new Hono<AppEnv>()
 
+  routes.get('/models', async (c) => {
+    requireAuthContext(c)
+    c.header('Cache-Control', 'private, no-store')
+    return c.json(publicModelCatalog(await loadCatalog(), providerKeys))
+  })
+
   routes.post('/stream', async (c) => {
     const auth = requireAuthContext(c)
     const requestId = c.get('requestId')
-    requireSameOrigin(c, new URL(config.BETTER_AUTH_URL).origin)
+    const startedAt = Date.now()
+    assertSameOrigin(c, new URL(config.BETTER_AUTH_URL).origin)
+
+    // Attributed pre-flight failures land in the request journal, then rethrow.
+    const reject = async (error: unknown): Promise<never> => {
+      if (error instanceof HttpApiError) {
+        await recordRequestLog(db, {
+          requestId, auth, modelId: '(unresolved)', status: 'rejected',
+          errorCode: error.code, errorMessage: error.message, durationMs: Date.now() - startedAt,
+        })
+      }
+      throw error
+    }
 
     const body = await c.req.json().catch(() => null)
     if (body === null) {
-      throw new HttpApiError(400, 'invalid_json', 'Request body is not valid JSON.')
+      await reject(new HttpApiError(400, 'invalid_json', 'Request body is not valid JSON.'))
     }
     const request = parseBody(body)
     let entry: CatalogEntry
     try {
-      entry = resolveCatalogEntry(catalog, request.model, { openai: config.OPENAI_API_KEY, anthropic: config.ANTHROPIC_API_KEY })
+      entry = resolveCatalogEntry(await loadCatalog(), request.model, providerKeys)
     } catch (error) {
       if (error instanceof CatalogError) {
+        await recordRequestLog(db, {
+          requestId, auth, modelId: request.model, status: 'rejected',
+          errorCode: error.code, errorMessage: error.message, durationMs: Date.now() - startedAt,
+        })
         throw new HttpApiError(error.status, error.code, error.message)
       }
       throw error
     }
 
-    const startedAt = Date.now()
-    await concurrency.acquire(auth.userId)
+    let concurrencyLimit: number | null
+    try {
+      ({ concurrencyLimit } = await enforceQuota(db, redis, auth.userId, entry.id))
+    } catch (error) {
+      await recordRequestLog(db, {
+        requestId, auth, modelId: entry.id, status: 'rejected',
+        errorCode: error instanceof HttpApiError ? error.code : 'internal_error',
+        errorMessage: error instanceof HttpApiError ? error.message : undefined,
+        durationMs: Date.now() - startedAt,
+      })
+      throw error
+    }
+
+    await concurrency.acquire(auth.userId, concurrencyLimit)
 
     // The server-side ceiling clamps the client's ask; either alone still applies.
     const maxOutputTokens =
@@ -237,10 +283,22 @@ export function createLlmRoutes(deps: LlmRoutesDeps): Hono<AppEnv> {
     let model: LanguageModel
     try {
       model = resolveModel(entry)
+      await validateMedia(request, entry.provider, model)
     } catch (error) {
       await concurrency.release(auth.userId)
       c.req.raw.signal.removeEventListener('abort', onClientAbort)
+      if (error instanceof HttpApiError) {
+        await recordRequestLog(db, {
+          requestId, auth, modelId: entry.id, status: 'rejected',
+          errorCode: error.code, errorMessage: error.message, durationMs: Date.now() - startedAt,
+        })
+        throw error
+      }
       logger.error({ requestId, model: entry.id, err: error }, 'llm model resolution failed')
+      await recordRequestLog(db, {
+        requestId, auth, modelId: entry.id, status: 'rejected',
+        errorCode: 'dependency_unavailable', durationMs: Date.now() - startedAt,
+      })
       throw new HttpApiError(503, 'dependency_unavailable', 'The model backend is not available.')
     }
 
@@ -258,6 +316,7 @@ export function createLlmRoutes(deps: LlmRoutesDeps): Hono<AppEnv> {
       seed: request.seed,
       maxRetries: 0,
       abortSignal: upstreamAbort.signal,
+      experimental_download: directMediaOnly,
     })
 
     const generator = pumpStream(
@@ -270,7 +329,7 @@ export function createLlmRoutes(deps: LlmRoutesDeps): Hono<AppEnv> {
         onError: (stage, error) => {
           logger.error({ requestId, model: entry.id, stage, err: error }, 'llm stream pump failed')
         },
-        onFinish: async (usage, finishReason) => {
+        onFinish: async (outcome) => {
           c.req.raw.signal.removeEventListener('abort', onClientAbort)
           logger.info(
             {
@@ -278,13 +337,18 @@ export function createLlmRoutes(deps: LlmRoutesDeps): Hono<AppEnv> {
               userId: auth.userId,
               sessionId: auth.sessionId,
               model: entry.id,
-              finish_reason: finishReason,
+              finish_reason: outcome.finishReason,
               duration_ms: Date.now() - startedAt,
-              usage,
+              usage: outcome.usage,
             },
             'llm stream finished',
           )
-          await recordStreamUsage(redis, auth.userId, entry.id, usage)
+          await recordStreamUsage(redis, auth.userId, entry.id, outcome.usage)
+          await recordRequestLog(db, {
+            requestId, auth, modelId: entry.id, status: outcome.status,
+            errorMessage: outcome.failureMessage, finishReason: outcome.finishReason,
+            usage: outcome.usage, durationMs: Date.now() - startedAt,
+          })
         },
       },
     )

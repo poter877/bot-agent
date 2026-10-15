@@ -1,3 +1,5 @@
+import type { ModelOptionProvider } from '@hermes/shared'
+
 /** Which model/provider pair a picker should mark "current". SessionView state
  *  also drives the composer label, so a complete pair there wins over an older
  *  `model.options` response. During initial hydration (or pre-session startup),
@@ -5,7 +7,7 @@
  *  a model is never shown under a different provider. */
 export function currentPickerSelection(
   store: { model: string; provider: string },
-  options?: { model?: string; provider?: string }
+  options?: { model?: string; provider?: string; managed?: boolean; providers?: ModelOptionProvider[] }
 ): { model: string; provider: string } {
   const storeSelection = {
     model: String(store.model || ''),
@@ -15,6 +17,14 @@ export function currentPickerSelection(
   const optionsSelection = {
     model: String(options?.model || ''),
     provider: String(options?.provider || '')
+  }
+
+  if (options?.managed) {
+    const available = options.providers?.some(
+      provider => provider.slug === storeSelection.provider && provider.models?.includes(storeSelection.model)
+    )
+
+    return available ? storeSelection : optionsSelection
   }
 
   if (storeSelection.model && storeSelection.provider) {

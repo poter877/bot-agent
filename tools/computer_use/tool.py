@@ -155,16 +155,16 @@ def _cua_permission_mode(session_id: str) -> str:
     return configured
 
 def _new_backend(permission_mode: str) -> ComputerUseBackend:
-    from plugins.computer_use import get_active_provider
-    return get_active_provider().create_backend(permission_mode=permission_mode)
+    from tools.computer_use.session_provider import current_provider
+    return current_provider().create_backend(permission_mode=permission_mode)
 
 def _install_backend(sid: str, backend: ComputerUseBackend, permission_mode: str) -> ComputerUseBackend:
     """Record a backend in the session caches (the empty session also mirrors it onto the ``_backend`` hook).
     Caller holds ``_backend_lock``."""
     global _backend
-    from tools.computer_use.cua_backend import desktop_identity
+    from tools.computer_use.session_provider import current_provider
     _backends[sid], _backend_permission_modes[sid] = backend, permission_mode
-    _backend_displays[sid] = desktop_identity()
+    _backend_displays[sid] = current_provider().desktop_identity()
     _backend_call_locks[sid] = threading.RLock()
     _backend = backend if sid == "" else _backend
     return backend
@@ -199,6 +199,13 @@ def _scoped_sid(session_id: str) -> str:
     return sid if get_hermes_home_override() is None else f"{sid}@{hermes_home_key()}"
 
 def _get_backend(session_id: str = "") -> ComputerUseBackend:
+    from tools.computer_use.session_provider import bind_session_provider
+    with bind_session_provider(session_id):
+        return _get_backend_for_provider(session_id)
+
+
+def _get_backend_for_provider(session_id: str) -> ComputerUseBackend:
+    from tools.computer_use.session_provider import current_provider
     bare_sid, sid = str(session_id or ""), _scoped_sid(session_id)
     while True:
         with _backend_lock:
@@ -210,9 +217,9 @@ def _get_backend(session_id: str = "") -> ComputerUseBackend:
                 backend = _new_backend(permission_mode)
                 backend.start()  # under the cache lock: one backend per session; a concurrent toggle releases it
                 return _install_backend(sid, backend, permission_mode)
-            from tools.computer_use.cua_backend import backend_display_stale, desktop_identity
+            from tools.computer_use.cua_backend import backend_display_stale
             if (_backend_permission_modes.get(sid, "standard") == permission_mode
-                    and not backend_display_stale(_backend_displays.get(sid, ""), desktop_identity())):
+                    and not backend_display_stale(_backend_displays.get(sid, ""), current_provider().desktop_identity())):
                 return cached
             # Cua's mode and DISPLAY are fixed at daemon startup: a /yolo toggle, or a Bot Desktop that started
             # (or moved) after this backend was cached, replaces only this session's backend.
@@ -227,7 +234,8 @@ def _backend_for_call(session_id: str = "") -> Iterator[ComputerUseBackend]:
     while a caller waits. Revalidate AFTER acquiring its profile-scoped call
     lock; teardown needs that same lock. Never wait under the global cache lock.
     """
-    from tools.computer_use.cua_backend import backend_display_stale, desktop_identity
+    from tools.computer_use.cua_backend import backend_display_stale
+    from tools.computer_use.session_provider import provider_for_session
 
     sid = _scoped_sid(session_id)
     while True:
@@ -244,17 +252,20 @@ def _backend_for_call(session_id: str = "") -> Iterator[ComputerUseBackend]:
                 # A queued call can outlive a display/config change even when
                 # no other caller has replaced the cached backend yet.
                 if (_backend_permission_modes.get(sid) != _cua_permission_mode(str(session_id or ""))
-                        or backend_display_stale(_backend_displays.get(sid, ""), desktop_identity())):
+                        or backend_display_stale(_backend_displays.get(sid, ""), provider_for_session(session_id).desktop_identity())):
                     continue
             yield backend
             return
 
 
-def release_computer_use_session(session_id: str) -> bool:
+def release_computer_use_session(session_id: str, *, preserve_provider: bool = False) -> bool:
     """Release one session-owned backend (lifecycle seam for hosts/plugins); idempotent, True iff one was released.
     Cache entries are removed BEFORE stopping so new lookups cannot retain the stale target/ref namespace. Approval
     grants are not touched here: they live in the shared store and die with ``tools.approval.clear_session``."""
     sid = _scoped_sid(session_id)
+    from tools.computer_use.session_provider import release_session_provider
+    if not preserve_provider:
+        release_session_provider(session_id)
     _reset_screenshot_dedup(sid)  # the next capture of a re-created session must deliver pixels
     with _backend_lock:
         backend, call_lock = _detach_locked(sid)
@@ -287,8 +298,10 @@ def _shutdown_backend_atexit() -> None:
         _stop_backend(backend, call_lock, lambda e: logger.debug("cua-driver atexit teardown failed: %s", e))
 
 def reset_backend_for_tests() -> None:  # pragma: no cover — tear down the cached backend and per-session state
+    from tools.computer_use.session_provider import reset_session_providers
     _shutdown_backend_atexit()
     _reset_screenshot_dedup()
+    reset_session_providers()
 
 def _noop_stub(name: str, *params: str, result: Any = None):
     # Recording stub: positional args are folded in under *params* (declared params default to None). ``result`` may
@@ -321,16 +334,19 @@ def handle_computer_use(args: dict[str, Any], **kwargs) -> Any:
     if not action:
         return json.dumps({"error": "missing `action`"})
     session_id = str(kwargs.get("session_id") or "")  # approval-state / daemon-mode isolation key
-    # Bot Desktop lease: while a human drives the screen every action, capture included, is refused.
     from tools.bot_desktop import lease as _bd_lease
-    from tools.bot_desktop.runtime import ensure_started_for_tool as _bd_ensure_started
-    def _refused(e: Exception) -> str:
-        return json.dumps({"ok": False, "action": action, "code": "human_has_control", "error": str(e)})
+    from tools.computer_use.session_provider import provider_for_session
     try:
-        admitted = _bd_lease.assert_agent_may_act()
+        with provider_for_session(session_id).action_scope() as fence:
+            return _handle_admitted_computer_use(args, session_id, action, fence)
     except _bd_lease.HumanHasControl as e:
-        return _refused(e)
-    _bd_ensure_started()  # headless gateway: bring the profile's screen up before the backend probes DISPLAY
+        return json.dumps({"ok": False, "action": action, "code": "human_has_control", "error": str(e)})
+    except Exception as e:
+        logger.exception("computer_use %s failed", action)
+        return json.dumps({"error": f"{action} failed: {e}"})
+
+
+def _handle_admitted_computer_use(args, session_id, action, fence):
     if (err := _reject_unsafe(action, args)) is not None:
         return err
     scopes = ([action] if action in _ACTIONS and _ACTIONS[action].destructive else []) + (
@@ -344,38 +360,17 @@ def handle_computer_use(args: dict[str, Any], **kwargs) -> Any:
     try:
         backend = call.enter_context(_backend_for_call(session_id))
     except Exception as e:
+        logger.exception("computer_use backend startup failed")
         from plugins.computer_use import DEFAULT_BACKEND, configured_backend_name
         hint = ({"hint": "If the cua-driver binary is missing, run `hermes computer-use install`. If a Python "
                          "dependency is missing, the error above shows the exact install command."}
                 if configured_backend_name() == DEFAULT_BACKEND else {})
         return json.dumps({"error": f"computer_use backend unavailable: {e}", **hint})
-    try:
-        with call:
-            # Re-check under the dispatch lock: approval, backend start-up and lock waits above can take
-            # seconds, and a human may have taken over meanwhile. A result produced after such a flip is
-            # discarded too — it may picture what they typed.
-            try:
-                _bd_lease.assert_agent_may_act()
-            except _bd_lease.HumanHasControl as e:
-                return _refused(e)
-
-            def _fence() -> None:
-                # Any lease transition since admission voids the frame — including a full take-over /
-                # hand-back cycle that already finished: it still belongs to the human's turn. Capture
-                # paths call this BEFORE the frame is persisted, spilled or sent to auxiliary vision.
-                if _bd_lease.get().epoch != admitted.epoch:
-                    raise _bd_lease.HumanHasControl(
-                        "A human took over this desktop while the action ran; its result was discarded. "
-                        "Tell the user what you need and re-capture once they hand back.")
-            _fence()  # input actions never receive fence=; refuse before the device op starts
-            result = _dispatch(backend, action, args, fence=_fence, session_id=session_id or None)
-            _fence()
-            return result
-    except _bd_lease.HumanHasControl as e:
-        return _refused(e)
-    except Exception as e:
-        logger.exception("computer_use %s failed", action)
-        return json.dumps({"error": f"{action} failed: {e}"})
+    with call:
+        fence()  # approval and driver startup can outlive a human takeover
+        result = _dispatch(backend, action, args, fence=fence, session_id=session_id or None)
+        fence()
+        return result
 
 def _request_approval(action: str, args: dict[str, Any]) -> Optional[str]:
     """None if approved, else a JSON error string. The decision (yolo bypass, session/permanent grants, CLI prompt,

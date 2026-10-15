@@ -1,5 +1,6 @@
 // ar overrides for the login gate's copy (accountAuth).
 export const arAccountAuth = {
+  signOutAction: 'تسجيل الخروج',
   checking: 'جارٍ التحقق من تسجيل الدخول…',
   unavailableTitle: 'خدمة المصادقة غير متاحة',
   unavailableBody: 'تعذّر الوصول إلى خدمة الحسابات. تحقق من اتصالك وحاول مرة أخرى.',

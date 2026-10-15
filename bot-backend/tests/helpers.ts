@@ -7,6 +7,7 @@ import { createLogger, type Logger } from '../src/shared/logger.js'
 import { createApp } from '../src/app.js'
 import type { Hono } from 'hono'
 import type { AppEnv } from '../src/shared/context.js'
+import type { CloudComputerService } from '../src/modules/cloud-computer/service.js'
 
 const INFO_FILE = path.join(process.cwd(), 'node_modules', '.bot-backend-test-infra.json')
 
@@ -28,12 +29,14 @@ export interface TestApp {
   redis: RedisConnections
   logger: Logger
   app: Hono<AppEnv>
+  cloudComputers: CloudComputerService | null
   close(): Promise<void>
 }
 
 export async function createTestApp(
   overrides: Record<string, string> = {},
   llm?: Parameters<typeof createApp>[0]['llm'],
+  cloudComputer?: Parameters<typeof createApp>[0]['cloudComputer'],
 ): Promise<TestApp> {
   const infra = testInfra()
   const config = loadConfig({
@@ -51,13 +54,14 @@ export async function createTestApp(
   })
   const redis = await createRedisConnections(config.REDIS_URL)
   const logger = createLogger(config)
-  const { hono } = await createApp({ config, database, redis, logger, llm })
+  const { hono, cloudComputers } = await createApp({ config, database, redis, logger, llm, cloudComputer })
   return {
     config,
     database,
     redis,
     logger,
     app: hono,
+    cloudComputers,
     close: async () => {
       await closeRedisConnections(redis)
       await closeDatabase(database)
@@ -66,14 +70,14 @@ export async function createTestApp(
 }
 
 export async function truncateAll(database: Database): Promise<void> {
-  await database.pool.query('TRUNCATE "user", session, account, verification CASCADE')
+  await database.pool.query('TRUNCATE "user", session, account, verification, llm_models, user_quotas, llm_request_log CASCADE')
 }
 
-export function flushRateLimits(redis: RedisConnections): Promise<void> {
-  return redis.commands.flushDb()
+export async function flushRateLimits(redis: RedisConnections): Promise<void> {
+  await redis.commands.flushDb()
 }
 
-export function jsonRequest(
+export async function jsonRequest(
   app: Hono<AppEnv>,
   method: 'GET' | 'POST',
   urlPath: string,

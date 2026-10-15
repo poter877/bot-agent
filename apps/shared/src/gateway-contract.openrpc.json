@@ -475,6 +475,168 @@
       }
     },
     {
+      "name": "cloudComputer.action",
+      "summary": "Human input while holding this account's cloud computer lease.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/CloudComputerActionParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/CloudComputerActionResult"
+        }
+      }
+    },
+    {
+      "name": "cloudComputer.capture",
+      "summary": "Human viewer screenshot; Agent screenshots use the cloud provider's lease checks.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/CloudComputerCaptureParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/CloudComputerCaptureResult"
+        }
+      }
+    },
+    {
+      "name": "cloudComputer.configure",
+      "summary": "Select cloud computer control for new Agent sessions without changing live sessions.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/CloudComputerConfigureParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/CloudComputerConfigureResult"
+        }
+      }
+    },
+    {
+      "name": "cloudComputer.lease.acquire",
+      "summary": "Take over the cloud computer; returned viewerToken stays in the UI's memory.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ProfileParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/CloudComputerAcquireResult"
+        }
+      }
+    },
+    {
+      "name": "cloudComputer.lease.release",
+      "summary": "Release the current human viewer's lease.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/CloudComputerLeaseParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/CloudComputerSnapshot"
+        }
+      }
+    },
+    {
+      "name": "cloudComputer.lease.renew",
+      "summary": "Renew the current human viewer's lease.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/CloudComputerLeaseParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/CloudComputerSnapshot"
+        }
+      }
+    },
+    {
+      "name": "cloudComputer.start",
+      "summary": "Start the authenticated account's cloud computer.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ProfileParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/CloudComputerSnapshot"
+        }
+      }
+    },
+    {
+      "name": "cloudComputer.status",
+      "summary": "Status the authenticated account's cloud computer.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ProfileParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/CloudComputerSnapshot"
+        }
+      }
+    },
+    {
+      "name": "cloudComputer.stop",
+      "summary": "Stop the authenticated account's cloud computer.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ProfileParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/CloudComputerSnapshot"
+        }
+      }
+    },
+    {
       "name": "command.dispatch",
       "summary": "Run a quick/plugin/bundle/skill/built-in slash command and answer a structured directive.",
       "params": [
@@ -4707,6 +4869,28 @@
   ],
   "components": {
     "schemas": {
+      "AccountAuthInvalidatedPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "$ref": "#/components/schemas/AccountAuthInvalidationReason"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "AccountAuthInvalidatedPayload",
+        "type": "object"
+      },
+      "AccountAuthInvalidationReason": {
+        "enum": [
+          "expired",
+          "signed_out",
+          "unavailable"
+        ],
+        "title": "AccountAuthInvalidationReason",
+        "type": "string"
+      },
       "AccountAuthSignInParams": {
         "additionalProperties": false,
         "properties": {
@@ -8287,6 +8471,684 @@
         "title": "ClipboardPasteParams",
         "type": "object"
       },
+      "CloudCapabilities": {
+        "additionalProperties": false,
+        "properties": {
+          "actions": {
+            "items": {
+              "enum": [
+                "click",
+                "move",
+                "drag",
+                "type",
+                "key",
+                "scroll"
+              ],
+              "type": "string"
+            },
+            "title": "Actions",
+            "type": "array"
+          },
+          "capture": {
+            "title": "Capture",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "actions",
+          "capture"
+        ],
+        "title": "CloudCapabilities",
+        "type": "object"
+      },
+      "CloudClickArgs": {
+        "additionalProperties": false,
+        "properties": {
+          "x": {
+            "maximum": 8191,
+            "minimum": 0,
+            "title": "X",
+            "type": "integer"
+          },
+          "y": {
+            "maximum": 8191,
+            "minimum": 0,
+            "title": "Y",
+            "type": "integer"
+          },
+          "button": {
+            "default": "left",
+            "enum": [
+              "left",
+              "middle",
+              "right"
+            ],
+            "title": "Button",
+            "type": "string"
+          },
+          "clicks": {
+            "default": 1,
+            "maximum": 3,
+            "minimum": 1,
+            "title": "Clicks",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "x",
+          "y"
+        ],
+        "title": "CloudClickArgs",
+        "type": "object"
+      },
+      "CloudComputer": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "starting",
+              "running",
+              "stopping",
+              "stopped",
+              "error"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "generation": {
+            "minimum": 0,
+            "title": "Generation",
+            "type": "integer"
+          },
+          "width": {
+            "maximum": 8192,
+            "minimum": 1,
+            "title": "Width",
+            "type": "integer"
+          },
+          "height": {
+            "maximum": 8192,
+            "minimum": 1,
+            "title": "Height",
+            "type": "integer"
+          },
+          "capabilities": {
+            "$ref": "#/components/schemas/CloudCapabilities"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "required": [
+          "id",
+          "state",
+          "generation",
+          "width",
+          "height",
+          "capabilities",
+          "error"
+        ],
+        "title": "CloudComputer",
+        "type": "object"
+      },
+      "CloudComputerAcquireResult": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "computer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CloudComputer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lease": {
+            "$ref": "#/components/schemas/CloudLease"
+          },
+          "agentEnabled": {
+            "title": "Agentenabled",
+            "type": "boolean"
+          },
+          "viewerToken": {
+            "title": "Viewertoken",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "computer",
+          "lease",
+          "agentEnabled",
+          "viewerToken"
+        ],
+        "title": "CloudComputerAcquireResult",
+        "type": "object"
+      },
+      "CloudComputerActionParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "computerGeneration": {
+            "minimum": 0,
+            "title": "Computergeneration",
+            "type": "integer"
+          },
+          "leaseEpoch": {
+            "minimum": 0,
+            "title": "Leaseepoch",
+            "type": "integer"
+          },
+          "viewerToken": {
+            "minLength": 1,
+            "title": "Viewertoken",
+            "type": "string"
+          },
+          "action": {
+            "enum": [
+              "click",
+              "move",
+              "drag",
+              "type",
+              "key",
+              "scroll"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "params": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CloudClickArgs"
+              },
+              {
+                "$ref": "#/components/schemas/CloudMoveArgs"
+              },
+              {
+                "$ref": "#/components/schemas/CloudDragArgs"
+              },
+              {
+                "$ref": "#/components/schemas/CloudTypeArgs"
+              },
+              {
+                "$ref": "#/components/schemas/CloudKeyArgs"
+              },
+              {
+                "$ref": "#/components/schemas/CloudScrollArgs"
+              }
+            ],
+            "title": "Params"
+          }
+        },
+        "required": [
+          "computerGeneration",
+          "leaseEpoch",
+          "viewerToken",
+          "action",
+          "params"
+        ],
+        "title": "CloudComputerActionParams",
+        "type": "object"
+      },
+      "CloudComputerActionResult": {
+        "additionalProperties": false,
+        "properties": {
+          "computerGeneration": {
+            "minimum": 0,
+            "title": "Computergeneration",
+            "type": "integer"
+          },
+          "leaseEpoch": {
+            "minimum": 0,
+            "title": "Leaseepoch",
+            "type": "integer"
+          },
+          "ok": {
+            "const": true,
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "computerGeneration",
+          "leaseEpoch",
+          "ok"
+        ],
+        "title": "CloudComputerActionResult",
+        "type": "object"
+      },
+      "CloudComputerCaptureParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "computerGeneration": {
+            "minimum": 0,
+            "title": "Computergeneration",
+            "type": "integer"
+          },
+          "leaseEpoch": {
+            "minimum": 0,
+            "title": "Leaseepoch",
+            "type": "integer"
+          },
+          "viewerToken": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Viewertoken"
+          }
+        },
+        "required": [
+          "computerGeneration",
+          "leaseEpoch"
+        ],
+        "title": "CloudComputerCaptureParams",
+        "type": "object"
+      },
+      "CloudComputerCaptureResult": {
+        "additionalProperties": false,
+        "properties": {
+          "computerGeneration": {
+            "minimum": 0,
+            "title": "Computergeneration",
+            "type": "integer"
+          },
+          "leaseEpoch": {
+            "minimum": 0,
+            "title": "Leaseepoch",
+            "type": "integer"
+          },
+          "image": {
+            "$ref": "#/components/schemas/CloudImage"
+          }
+        },
+        "required": [
+          "computerGeneration",
+          "leaseEpoch",
+          "image"
+        ],
+        "title": "CloudComputerCaptureResult",
+        "type": "object"
+      },
+      "CloudComputerConfigureParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "CloudComputerConfigureParams",
+        "type": "object"
+      },
+      "CloudComputerConfigureResult": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "appliesTo": {
+            "const": "new-sessions",
+            "title": "Appliesto",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "appliesTo"
+        ],
+        "title": "CloudComputerConfigureResult",
+        "type": "object"
+      },
+      "CloudComputerLeaseParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "viewerToken": {
+            "minLength": 1,
+            "title": "Viewertoken",
+            "type": "string"
+          }
+        },
+        "required": [
+          "viewerToken"
+        ],
+        "title": "CloudComputerLeaseParams",
+        "type": "object"
+      },
+      "CloudComputerSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "computer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CloudComputer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lease": {
+            "$ref": "#/components/schemas/CloudLease"
+          },
+          "agentEnabled": {
+            "title": "Agentenabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled",
+          "computer",
+          "lease",
+          "agentEnabled"
+        ],
+        "title": "CloudComputerSnapshot",
+        "type": "object"
+      },
+      "CloudDragArgs": {
+        "additionalProperties": false,
+        "properties": {
+          "fromX": {
+            "maximum": 8191,
+            "minimum": 0,
+            "title": "Fromx",
+            "type": "integer"
+          },
+          "fromY": {
+            "maximum": 8191,
+            "minimum": 0,
+            "title": "Fromy",
+            "type": "integer"
+          },
+          "toX": {
+            "maximum": 8191,
+            "minimum": 0,
+            "title": "Tox",
+            "type": "integer"
+          },
+          "toY": {
+            "maximum": 8191,
+            "minimum": 0,
+            "title": "Toy",
+            "type": "integer"
+          },
+          "durationMs": {
+            "default": 300,
+            "maximum": 2000,
+            "minimum": 100,
+            "title": "Durationms",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "fromX",
+          "fromY",
+          "toX",
+          "toY"
+        ],
+        "title": "CloudDragArgs",
+        "type": "object"
+      },
+      "CloudImage": {
+        "additionalProperties": false,
+        "properties": {
+          "mediaType": {
+            "const": "image/png",
+            "title": "Mediatype",
+            "type": "string"
+          },
+          "data": {
+            "title": "Data",
+            "type": "string"
+          },
+          "width": {
+            "maximum": 8192,
+            "minimum": 1,
+            "title": "Width",
+            "type": "integer"
+          },
+          "height": {
+            "maximum": 8192,
+            "minimum": 1,
+            "title": "Height",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "mediaType",
+          "data",
+          "width",
+          "height"
+        ],
+        "title": "CloudImage",
+        "type": "object"
+      },
+      "CloudKeyArgs": {
+        "additionalProperties": false,
+        "properties": {
+          "keys": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Keys",
+            "type": "array"
+          }
+        },
+        "required": [
+          "keys"
+        ],
+        "title": "CloudKeyArgs",
+        "type": "object"
+      },
+      "CloudLease": {
+        "additionalProperties": false,
+        "properties": {
+          "holder": {
+            "enum": [
+              "agent",
+              "human"
+            ],
+            "title": "Holder",
+            "type": "string"
+          },
+          "epoch": {
+            "minimum": 0,
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "expiresAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expiresat"
+          }
+        },
+        "required": [
+          "holder",
+          "epoch",
+          "expiresAt"
+        ],
+        "title": "CloudLease",
+        "type": "object"
+      },
+      "CloudMoveArgs": {
+        "additionalProperties": false,
+        "properties": {
+          "x": {
+            "maximum": 8191,
+            "minimum": 0,
+            "title": "X",
+            "type": "integer"
+          },
+          "y": {
+            "maximum": 8191,
+            "minimum": 0,
+            "title": "Y",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "x",
+          "y"
+        ],
+        "title": "CloudMoveArgs",
+        "type": "object"
+      },
+      "CloudScrollArgs": {
+        "additionalProperties": false,
+        "properties": {
+          "direction": {
+            "enum": [
+              "up",
+              "down",
+              "left",
+              "right"
+            ],
+            "title": "Direction",
+            "type": "string"
+          },
+          "amount": {
+            "maximum": 20,
+            "minimum": 1,
+            "title": "Amount",
+            "type": "integer"
+          },
+          "x": {
+            "anyOf": [
+              {
+                "maximum": 8191,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "X"
+          },
+          "y": {
+            "anyOf": [
+              {
+                "maximum": 8191,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Y"
+          }
+        },
+        "required": [
+          "direction",
+          "amount"
+        ],
+        "title": "CloudScrollArgs",
+        "type": "object"
+      },
+      "CloudTypeArgs": {
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "CloudTypeArgs",
+        "type": "object"
+      },
       "CommandCatalogMeta": {
         "additionalProperties": false,
         "properties": {
@@ -9118,7 +9980,7 @@
       },
       "ConfigProviderRef": {
         "additionalProperties": true,
-        "description": "``hermes_cli/models.py::list_available_providers`` row.",
+        "description": "``hermes_cli/models_inventory.py::list_available_providers`` row.",
         "properties": {
           "id": {
             "title": "Id",
@@ -19798,6 +20660,54 @@
             ],
             "default": null,
             "title": "Can Disable Reasoning"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Text"
+          },
+          "tools": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Tools"
+          },
+          "vision": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Vision"
+          },
+          "video": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Video"
           }
         },
         "required": [
@@ -19875,6 +20785,33 @@
             },
             "title": "Models",
             "type": "array"
+          },
+          "display_names": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Display Names"
+          },
+          "managed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Managed"
           },
           "total_models": {
             "anyOf": [
@@ -20202,6 +21139,23 @@
             "default": "",
             "title": "Provider",
             "type": "string"
+          },
+          "managed": {
+            "default": false,
+            "title": "Managed",
+            "type": "boolean"
+          },
+          "default_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Default Model"
           }
         },
         "required": [
@@ -33821,6 +34775,18 @@
             "title": "Ok",
             "type": "boolean"
           },
+          "managed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Managed"
+          },
           "provider": {
             "anyOf": [
               {
@@ -33904,6 +34870,18 @@
         "additionalProperties": false,
         "description": "``provider_configured`` is the loose answer; the boot record's fields (``ready``,\n``free_tier_account``, ``free_tier_route``, ``other_providers``, ``inference_provider``) ride along\non the launch profile. An unknown ``profile`` answers ``ok=False`` + ``error``.",
         "properties": {
+          "managed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Managed"
+          },
           "provider_configured": {
             "anyOf": [
               {
@@ -41272,6 +42250,18 @@
     }
   ],
   "x-notifications": [
+    {
+      "name": "accountAuth.invalidated",
+      "summary": "The current profile's account authority ended; unmount business UI and reauthenticate.",
+      "params": [
+        {
+          "name": "payload",
+          "schema": {
+            "$ref": "#/components/schemas/AccountAuthInvalidatedPayload"
+          }
+        }
+      ]
+    },
     {
       "name": "agent.terminal.output",
       "summary": "Output chunk from an agent-owned background process.",

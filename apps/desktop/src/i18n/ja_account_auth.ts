@@ -1,5 +1,6 @@
 // ja overrides for the login gate's copy (accountAuth).
 export const jaAccountAuth = {
+  signOutAction: 'ログアウト',
   checking: 'サインイン状態を確認しています…',
   unavailableTitle: '認証サービスが利用できません',
   unavailableBody: 'アカウントサービスに接続できません。ネットワークを確認して再試行してください。',

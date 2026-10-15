@@ -36,6 +36,7 @@ export interface OnboardingTranslations {
   signInFailed: string
   signInExpired: string
   signInDidNotFinish: (provider: string) => string
+  companyUnavailable: string
   tryAgain: string
   useApiKeyInstead: string
   errorDetails: string

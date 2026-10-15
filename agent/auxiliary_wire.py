@@ -12,6 +12,9 @@ def prepare_chat_messages(client, kwargs: dict) -> dict:
     transport sanitizes its copy. The resolved SDK client identifies the wire;
     native Messages/Responses adapters must retain their reasoning sidecars.
     """
+    from agent.company_backend_policy import ensure_company_client
+
+    ensure_company_client(client)
     if not isinstance(client, (OpenAI, AsyncOpenAI)) or "messages" not in kwargs:
         return kwargs
     from agent.reasoning_carriers import shape_wire_carriers

@@ -1,5 +1,6 @@
 // zh overrides for the login gate's copy (accountAuth).
 export const zhAccountAuth = {
+  signOutAction: '退出登录',
   checking: '正在检查登录状态…',
   unavailableTitle: '认证服务不可用',
   unavailableBody: '无法连接账号服务，请检查网络后重试。',

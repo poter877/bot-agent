@@ -1,14 +1,12 @@
 import { useStore } from '@nanostores/react'
-import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
+import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useI18n } from '@/i18n'
-import {
-  $accountAuth,
-  setAccountAuthState
-} from '@/store/account-auth'
+import { $accountAuth } from '@/store/account-auth'
 
+import { createAccountAuthLifecycle } from './account-auth-lifecycle'
 import {
   type AccountAuthTransport,
   AccountAuthUnavailableError,
@@ -23,11 +21,13 @@ import {
  */
 export function AuthGate({
   children,
-  transport: injectedTransport
+  transport: injectedTransport,
+  resetBusinessState = reloadAccountSurface
 }: {
   children: ReactNode
   /** Test seam; production dials the local gateway's accountAuth.* methods. */
   transport?: AccountAuthTransport
+  resetBusinessState?: () => void
 }) {
   const { t } = useI18n()
   const state = useStore($accountAuth)
@@ -37,23 +37,26 @@ export function AuthGate({
     [injectedTransport]
   )
 
-  const runCheck = useCallback(() => {
-    setAccountAuthState({ phase: 'checking', user: null })
-    transport
-      .status()
-      .then(status =>
-        setAccountAuthState(
-          status.authenticated && status.user
-            ? { phase: 'authenticated', user: status.user }
-            : { phase: 'unauthenticated', user: null }
-        )
-      )
-      .catch(() => setAccountAuthState({ phase: 'unavailable', user: null }))
-  }, [transport])
+  const lifecycle = useMemo(() => createAccountAuthLifecycle(transport, resetBusinessState), [transport, resetBusinessState])
 
   useEffect(() => {
-    runCheck()
-  }, [runCheck])
+    lifecycle.start()
+    void lifecycle.check()
+    const revalidate = () => lifecycle.revalidate()
+    const interval = window.setInterval(revalidate, 30_000)
+    window.addEventListener('focus', revalidate)
+    window.addEventListener('online', revalidate)
+    const offline = () => lifecycle.offline()
+    window.addEventListener('offline', offline)
+
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener('focus', revalidate)
+      window.removeEventListener('online', revalidate)
+      window.removeEventListener('offline', offline)
+      lifecycle.stop()
+    }
+  }, [lifecycle])
 
   if (state.phase === 'authenticated') {
     return <>{children}</>
@@ -62,16 +65,16 @@ export function AuthGate({
   return (
     <AuthWindow
       checkingLabel={t.accountAuth.checking}
-      onAuthenticated={() => runCheck()}
-      onRetry={runCheck}
+      onAuthenticated={() => { void lifecycle.check() }}
+      onRetry={() => { void lifecycle.check() }}
       phase={state.phase}
       retryLabel={t.accountAuth.retry}
-      transport={transport}
+      transport={lifecycle.transport}
     />
   )
 }
 
-type AuthWindowProps = {
+interface AuthWindowProps {
   phase: 'checking' | 'unauthenticated' | 'unavailable'
   transport: AccountAuthTransport
   onAuthenticated: () => void
@@ -219,4 +222,10 @@ function AuthShell({ children }: { children: ReactNode }) {
       <div className="flex w-full max-w-sm flex-col gap-4 p-8">{children}</div>
     </div>
   )
+}
+
+function reloadAccountSurface(): void {
+  // A new identity must never inherit mounted stores, queries, terminals or old promises.
+  // Durable profile work stays on disk; a fresh gate rechecks the server before mounting it.
+  window.location.reload()
 }

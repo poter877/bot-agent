@@ -856,6 +856,9 @@ def get_model_capabilities(
     self-unblock path for custom/local models (#8731) and for models with wrong metadata in models.dev
     (#84482).
     """
+    from agent.company_model_metadata import company_capabilities
+    if company := company_capabilities(provider, model):
+        return company
     models = _get_provider_models(provider, allow_network=allow_network, config=config)
     entry = _find_model_entry(models, model, provider) if models is not None else None
     unknown_base = (

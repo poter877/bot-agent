@@ -72,6 +72,7 @@ export const deOnboarding: TranslationOverrides['onboarding'] = {
     'Die Anmeldung ist beim Warten auf die Autorisierung abgelaufen. Meist bedeutet das, dass die Anmeldeseite im geöffneten Tab hängen geblieben ist (serverseitiges Problem) – schließen Sie die Anmeldung dort ab und versuchen Sie es dann erneut. Wenn es weiterhin fehlschlägt, verwenden Sie stattdessen einen API-Key oder die CLI als Alternative.',
   signInDidNotFinish: provider =>
     `Die Anmeldung bei ${provider} wurde nicht abgeschlossen. Prüfen Sie Ihre Internetverbindung und versuchen Sie es erneut, oder wählen Sie einen anderen Anbieter.`,
+  companyUnavailable: 'Der Unternehmensdienst ist vorübergehend nicht verfügbar. Bitte versuchen Sie es erneut.',
   tryAgain: 'Erneut versuchen',
   useApiKeyInstead: 'API-Key verwenden',
   errorDetails: 'Details',

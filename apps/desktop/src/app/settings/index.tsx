@@ -38,6 +38,7 @@ import { $localModelsEnabled } from '@/store/local-models-flag'
 import { notifyError } from '@/store/notifications'
 import { $settingsScopeProfile } from '@/store/settings-scope'
 
+import { AccountSignOutAction } from '../auth-gate/account-sign-out-action'
 import { useRouteEnumParam } from '../hooks/use-route-enum-param'
 import { OverlayIconButton } from '../overlays/overlay-chrome'
 import { OverlayMain, OverlayNav, type OverlayNavGroup, OverlaySplitLayout } from '../overlays/overlay-split-layout'
@@ -506,6 +507,7 @@ export function SettingsView({ onClose, onConfigSaved, onMainModelChanged }: Set
 
   const navFooter = (
     <>
+      <AccountSignOutAction />
       <Tip label={t.settings.exportConfig}>
         <OverlayIconButton onClick={() => void exportConfig()}>
           <Download />

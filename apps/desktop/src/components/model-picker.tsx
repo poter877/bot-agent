@@ -5,7 +5,13 @@ import { useQuery } from '@tanstack/react-query'
 import { type ReactElement, useMemo, useRef, useState } from 'react'
 
 import { useI18n } from '@/i18n'
-import { catalogProviderMatches, modelOptionsQueryKey, requestModelOptions } from '@/lib/model-options'
+import {
+  catalogModelLabel,
+  catalogProviderMatches,
+  localModelOptionsAllowed,
+  modelOptionsQueryKey,
+  requestModelOptions
+} from '@/lib/model-options'
 import { currentPickerSelection } from '@/lib/model-status-label'
 import { accountResetMs, formatReset, modelResetMs } from '@/lib/provider-limit'
 import { foldIncludes, normalize } from '@/lib/text'
@@ -24,6 +30,7 @@ import type { LocalModelLoadProgress, LocalRuntimeJob } from '@/types/hermes'
 import type { HermesGateway } from '../hermes'
 import { startManualOnboarding } from '../store/onboarding'
 
+import { DirectModelOptions } from './direct-model-options'
 import { InlineNotice } from './notifications'
 import { ProviderStatusChip } from './provider-status-chip'
 import { Badge } from './ui/badge'
@@ -95,7 +102,7 @@ export function ModelPickerDialog({
   // "nothing loading" (remote-only installs have no local-models routes).
   // Every local-models read here sits behind the --local launch flag (strict:
   // the llamacpp provider group hides even with staged models on disk).
-  const localModelsEnabled = $localModelsEnabled.get()
+  const localModelsEnabled = localModelOptionsAllowed(modelOptions.data, $localModelsEnabled.get())
 
   const owner: LocalModelsOwner = useLocalModelsOwner(profile, ownerConnectionId)
   const localStatus = useLocalModelsStatus(owner, open && localModelsEnabled, true)
@@ -218,12 +225,14 @@ export function ModelPickerDialog({
         </Command>
 
         <DialogFooter className="flex-row items-center justify-end gap-2 bg-card p-3">
-          <Button className="mr-auto" onClick={enterSlug} variant="ghost">
-            {copy.addCustomModelAction}
-          </Button>
-          <Button onClick={addProvider} variant="ghost">
-            {copy.addProvider}
-          </Button>
+          <DirectModelOptions options={modelOptions.data}>
+            <Button className="mr-auto" onClick={enterSlug} variant="ghost">
+              {copy.addCustomModelAction}
+            </Button>
+            <Button onClick={addProvider} variant="ghost">
+              {copy.addProvider}
+            </Button>
+          </DirectModelOptions>
           <Button onClick={() => onOpenChange(false)} variant="outline">
             {t.common.cancel}
           </Button>
@@ -292,7 +301,9 @@ function ModelResults({
       return [...models]
     }
 
-    return fuzzyRank(models, q, modelSearchText).map(r => r.item)
+    return fuzzyRank(models, q, model => `${modelSearchText(model)} ${catalogModelLabel(provider, model)}`).map(
+      r => r.item
+    )
   }
 
   // Only configured providers (those with curated models) are selectable
@@ -384,7 +395,7 @@ function ModelResults({
                   value={`${provider.slug}:${model}`}
                 >
                   <span className={cn('min-w-0 flex-1 truncate', dimmed && !isCurrent && 'text-muted-foreground')}>
-                    <HighlightMatches foldSeparators query={search} text={model} />
+                    <HighlightMatches foldSeparators query={search} text={catalogModelLabel(provider, model)} />
                   </span>
                   {loadProgress && (
                     <span className="flex shrink-0 items-center gap-1.5" title={copy.loadingIntoMemory}>

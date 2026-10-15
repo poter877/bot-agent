@@ -831,21 +831,6 @@ def _provider_has_credentials(pid: str) -> bool:
         return False
 
 
-def list_available_providers() -> list[dict[str, str]]:
-    """``{id, label, aliases, authenticated}`` per listed provider (shared with ``hermes model`` / ``/model``)."""
-    from hermes_cli.models_catalog_static import listed_canonical_providers
-    aliases_for: dict[str, list[str]] = {}
-    for alias, canonical in _PROVIDER_ALIASES.items():
-        aliases_for.setdefault(canonical, []).append(alias)
-    return [
-        {
-            "id": pid,
-            "label": _PROVIDER_LABELS.get(pid, pid),
-            "aliases": aliases_for.get(pid, []),
-            "authenticated": _provider_has_credentials(pid)}
-        for pid in [p.slug for p in listed_canonical_providers()] + ["custom"]]
-
-
 def parse_model_input(
         raw: str, current_provider: str, *, custom_ids: Optional[set[str]] = None) -> tuple[str, str]:
     """Parse ``/model`` input into ``(provider, model)``. The colon is a provider delimiter only when

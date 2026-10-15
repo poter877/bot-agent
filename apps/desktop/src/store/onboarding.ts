@@ -57,7 +57,14 @@ export type OnboardingFlow =
       saving: boolean
       status: 'confirming_model'
     }
-  | { detail?: string; message: string; provider?: OAuthProvider; start?: OAuthStartResponse; status: 'error' }
+  | {
+      detail?: string
+      managed?: boolean
+      message: string
+      provider?: OAuthProvider
+      start?: OAuthStartResponse
+      status: 'error'
+    }
 
 export interface DesktopOnboardingState {
   /** null until the first runtime check resolves. Seeded from localStorage so
@@ -761,6 +768,29 @@ export function setOnboardingMode(mode: OnboardingMode) {
   patch({ mode })
 }
 
+function applyCompanyReadiness(runtime: RuntimeReadinessResult, ctx: OnboardingContext): boolean {
+  if (!runtime.managed) {
+    return false
+  }
+  if (runtime.ready) {
+    completeDesktopOnboarding()
+    ctx.onCompleted?.()
+  } else {
+    writeCachedConfigured(false)
+    patch({
+      configured: false,
+      firstRunSkipped: false,
+      manual: false,
+      freeTierReady: false,
+      localEndpoint: false,
+      providers: [],
+      reason: null,
+      flow: { status: 'error', managed: true, message: '', detail: runtime.reason ?? undefined }
+    })
+  }
+  return true
+}
+
 /**
  * `stillWanted`, when given, is re-asked after the readiness round: a background
  * caller (the `setup.ready` listener) passes it so a user action that started
@@ -785,6 +815,10 @@ export async function refreshOnboarding(ctx: OnboardingContext, stillWanted?: ()
 
   if (stillWanted && !stillWanted()) {
     return false
+  }
+
+  if (applyCompanyReadiness(runtime, ctx)) {
+    return runtime.ready
   }
 
   if (runtime.ready) {

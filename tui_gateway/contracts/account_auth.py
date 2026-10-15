@@ -8,8 +8,8 @@ server-provided, form-displayable message (never credentials).
 
 from __future__ import annotations
 
-from .base import Params, Result
-from .registry import method
+from .base import Params, Payload, Result, WireEnum
+from .registry import event, method
 
 
 class AccountAuthUser(Result):
@@ -47,3 +47,17 @@ method("accountAuth.signUp", params=AccountAuthSignUpParams, result=AccountAuthS
        doc="Email+password sign-up relayed to the account backend; establishes the subprocess-held session.")
 method("accountAuth.signOut", params=Params, result=AccountAuthSignOutResult,
        doc="Revoke the subprocess-held Better Auth session.")
+
+
+class AccountAuthInvalidationReason(WireEnum):
+    expired = "expired"
+    signed_out = "signed_out"
+    unavailable = "unavailable"
+
+
+class AccountAuthInvalidatedPayload(Payload):
+    reason: AccountAuthInvalidationReason
+
+
+event("accountAuth.invalidated", AccountAuthInvalidatedPayload,
+      doc="The current profile's account authority ended; unmount business UI and reauthenticate.")

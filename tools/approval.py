@@ -253,14 +253,14 @@ def approve_session(session_key: str, pattern_key: str):
         _session_approved.setdefault(session_key, set()).add(pattern_key)
 
 
-def _release_permission_mode_dependents(session_key: str) -> None:
+def _release_permission_mode_dependents(session_key: str, *, preserve_provider: bool = False) -> None:
     """Drop resources whose immutable mode derives from Hermes YOLO. Lazy import so approval-only
     sessions never load computer-use; releasing on BOTH edges makes enabling YOLO replace a
     standard backend and disabling it revoke a private unrestricted daemon immediately."""
     try:
         from tools.computer_use.tool import release_computer_use_session
 
-        release_computer_use_session(session_key)
+        release_computer_use_session(session_key, preserve_provider=preserve_provider)
     except Exception:
         logger.debug("Failed to release permission-mode dependent resources for %s", session_key, exc_info=True)
 
@@ -270,7 +270,7 @@ def _set_session_yolo(session_key: str, enabled: bool) -> None:
         return
     with _lock:
         (_session_yolo.add if enabled else _session_yolo.discard)(session_key)
-    _release_permission_mode_dependents(session_key)
+    _release_permission_mode_dependents(session_key, preserve_provider=True)
 
 
 def enable_session_yolo(session_key: str) -> None:

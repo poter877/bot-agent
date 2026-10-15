@@ -24,6 +24,8 @@ from types import SimpleNamespace
 from typing import Any, Callable, Dict, List, NamedTuple, Optional, Tuple, TYPE_CHECKING, Union
 from urllib.parse import urlparse, parse_qs, urlunparse
 
+from agent.auxiliary_client_async import AsyncCompletionsAdapter
+from account_backend_session import company_backend_enabled, account_session_fingerprint
 from agent.error_classifier import (
     _BILLING_PATTERNS,
     _OVERLOADED_PATTERNS,
@@ -1621,17 +1623,6 @@ class _ChatShim:
         self.completions = adapter
 
 
-class _AsyncCompletionsAdapter:
-    """Async adapter: runs the sync adapter's ``create`` via asyncio.to_thread()."""
-
-    def __init__(self, sync_adapter: Any):
-        self._sync = sync_adapter
-
-    async def create(self, **kwargs) -> Any:
-        import asyncio
-        return await asyncio.to_thread(self._sync.create, **kwargs)
-
-
 class _AsyncAuxiliaryClientBase:
     """Async-compatible wrapper matching AsyncOpenAI.chat.completions.create().
 
@@ -1640,7 +1631,7 @@ class _AsyncAuxiliaryClientBase:
     """
 
     def __init__(self, sync_wrapper: Any):
-        self.chat = _ChatShim(_AsyncCompletionsAdapter(sync_wrapper.chat.completions))
+        self.chat = _ChatShim(AsyncCompletionsAdapter(sync_wrapper.chat.completions))
         self.api_key = sync_wrapper.api_key
         self.base_url = sync_wrapper.base_url
         if hasattr(sync_wrapper, "_real_client"):
@@ -1652,7 +1643,7 @@ class _AsyncAuxiliaryClientBase:
             self._real_client = sync_wrapper._real_client
 
 
-_AsyncAnthropicCompletionsAdapter = _AsyncCompletionsAdapter  # imported by tests
+_AsyncAnthropicCompletionsAdapter = AsyncCompletionsAdapter  # imported by tests
 
 
 class CodexAuxiliaryClient:
@@ -4725,6 +4716,10 @@ def _to_async_client(sync_client, model: str, is_vision: bool = False):
         from agent.gemini_native_adapter import GeminiNativeClient, AsyncGeminiNativeClient
         if isinstance(sync_client, GeminiNativeClient):
             return AsyncGeminiNativeClient(sync_client), model
+    from agent.hono_auxiliary_client import AsyncHonoStreamClient
+    from agent.hono_stream_client import HonoStreamClient
+    if isinstance(sync_client, HonoStreamClient):
+        return AsyncHonoStreamClient(sync_client), model
     # ACP shims (subprocess, not an HTTP pool) are already async-safe and opt out of the wrapper.
     if _client_declares(sync_client, "HERMES_SKIP_ASYNC_WRAP"):
         return sync_client, model
@@ -5430,6 +5425,9 @@ def resolve_provider_client(
     (full auto-detection chain). ``model=None`` → provider's default aux model. ``raw_codex`` → bare OpenAI
     client for ``responses.stream()`` callers. ``api_mode`` forces "codex_responses"/"chat_completions"/
     "anthropic_messages" instead of auto-detect. Returns (client, resolved_model) or (None, None)."""
+    if company_backend_enabled():
+        from agent.company_backend_policy import company_auxiliary_client
+        return company_auxiliary_client(model, task=task or ("vision" if is_vision else None), async_mode=async_mode)
     _validate_proxy_env_urls()
     # Keep the pre-alias name so a custom_providers entry named like a built-in alias
     # (e.g. "kimi" → "kimi-coding") is still reachable via the named-custom branch.
@@ -5460,29 +5458,8 @@ def resolve_provider_client(
     # Excluded: ``auto`` (a stale main slug could pair with any picked provider) and Nous + vision (the
     # Portal's tier-aware vision recommendation must win over a text-only model).
     if not model and provider != "auto" and not (provider == "nous" and is_vision):
-        # ``auto`` is intentionally excluded: `_resolve_auto_route(main_runtime=...)` returns the model paired
-        # with the provider it actually selected. Pre-filling an auto call from `_read_main_model()` can
-        # leak a stale process-global runtime into a different provider (for example Claude model slug on
-        # Codex OAuth) and override that correctly resolved model. 1. ``model`` argument (caller knew what
-        # they wanted) 2. Provider's catalog default — cheap/fast model the provider registered via
-        # ``ProviderProfile.default_aux_model`` or the legacy ``_API_KEY_PROVIDER_AUX_MODELS_FALLBACK``
-        # dict. 3. User's main model from ``model.model`` in config.yaml. This is the load-bearing step for
-        # OAuth providers: an xai-oauth user with grok-4.3 configured gets grok-4.3 for title generation
-        # instead of silently dropping to whatever Step-2 fallback (#31845). When the main provider is MoA,
-        # ``_read_main_model_for_aux()`` substitutes the preset's aggregator model — the preset NAME is
-        # never a valid wire model id, so unset aux models default to the preset's acting model instead.
-        # Each provider branch below sees a non-empty ``model`` whenever the user has *anything* configured
-        # — no provider-specific empty-model guards needed. When the user has NOTHING configured (fresh
-        # install, main_model also empty), the branches still hit their own missing-credentials returns and
-        # ``_resolve_auto_route`` falls through to the Step-2 chain as before. Do NOT pre-fill a blank ``auto``
-        # request from the config/main default here. Claude model sent to Codex after the main lane fell
-        # back to gpt-5.5). Let _resolve_auto_route() return the actual current runtime model when the caller did
-        # not explicitly request one. (# compression-current-model) Nous + vision is the one carve-out: the
-        # branch below resolves its model from the Portal's tier-aware vision recommendation
-        # (``_try_nous(vision= True)``), and ``final_model = model or default`` means anything pre-filled
-        # here wins over that. The main chat model is routinely text-only (e.g. a ``:free`` chat SKU), so
-        # pre-filling it sends the image to a model that cannot accept one and the Portal 404s. Leave
-        # ``model`` unset and let the Portal slot through; only an explicit caller model may override it.
+        # Auto must keep the model paired with its resolved runtime; pre-filling can send a
+        # stale model to another provider. Nous vision similarly needs the Portal's vision choice.
         model = _get_aux_model_for_provider(provider) or _read_main_model_for_aux() or model
     req = _ResolveRequest(
         provider, original_provider, model, async_mode, raw_codex,
@@ -5804,7 +5781,8 @@ def _client_cache_key(
     # Profile home leads the key: callers that omit api_key (pool / Nous auth.json paths) would
     # otherwise share one client across multiplex profiles holding different credentials.
     return (hermes_home_key(), provider, async_mode, base_url or "", api_key_key, api_mode or "", runtime_key, is_vision, task_key, pool_hint, model_key,
-            _borrowed_main_credential_key(provider, base_url, api_key, runtime))
+            _borrowed_main_credential_key(provider, base_url, api_key, runtime),
+            account_session_fingerprint() if company_backend_enabled() else "")
 
 
 def _borrowed_main_credential_key(provider: str, base_url: Optional[str], api_key: Any, runtime: dict[str, Any]) -> tuple:
@@ -6024,6 +6002,9 @@ def _get_cached_client(
     previously occurred in long-running gateways where recycled worker threads created unbounded entries
     (#10200).
     """
+    if company_backend_enabled():
+        from agent.company_backend_policy import company_auxiliary_route
+        provider, model, base_url, api_key, api_mode = company_auxiliary_route(task or ("vision" if is_vision else None), model)
     # A bare llama.cpp alias keys on the live local endpoint: a restarted server (new port/key)
     # must not be served the old client, and a stopped one resolves to nothing, not a cloud client.
     from agent.auxiliary_local_runtime import bare_llamacpp_endpoint
@@ -6179,6 +6160,9 @@ def _resolve_task_provider_model(
     but a first-class provider + base_url keeps the provider identity so its auth/transport
     shaping still applies. api_mode is "chat_completions", "codex_responses", or None (auto).
     """
+    if company_backend_enabled():
+        from agent.company_backend_policy import company_auxiliary_route
+        return company_auxiliary_route(task, None if model == "auto" else model)
     cfg_provider = cfg_model = cfg_base_url = cfg_api_key = resolved_api_mode = None
     if task:
         task_config = _get_auxiliary_task_config(task)

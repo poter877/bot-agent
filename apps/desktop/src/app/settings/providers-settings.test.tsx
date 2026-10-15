@@ -25,6 +25,7 @@ vi.mock('@/store/profile', () => ({
 }))
 
 vi.mock('@/hermes', () => ({
+  getGlobalModelOptions: vi.fn().mockResolvedValue({ managed: false, providers: [] }),
   setApiRequestProfile: vi.fn(),
   getProfiles: async () => ({ profiles: (await import('@/store/profile')).$profiles.get() }),
   disconnectOAuthProvider: (...args: unknown[]) => disconnectOAuthProvider(...args),
@@ -40,11 +41,14 @@ vi.mock('@/store/onboarding', () => ({
   startManualLocalEndpoint: (reason: null | string) => startManualLocalEndpoint(reason)
 }))
 
+vi.mock('./model-settings', () => ({ ModelSettings: () => <div>Company model settings</div> }))
+
 // Load once at module scope so no test's 15s budget pays the heavy transform
 // + import (the first-test timeout flake under CI load).
 const { ProvidersSettings } = await import('./providers-settings')
 const { $settingsScopeOverride } = await import('@/store/settings-scope')
 const { $activeGatewayProfile, $profiles } = await import('@/store/profile')
+const { getGlobalModelOptions } = await import('@/hermes')
 
 function provider(id: string, loggedIn: boolean, patch: Partial<OAuthProvider> = {}): OAuthProvider {
   return {
@@ -81,6 +85,7 @@ function keyVar(patch: Partial<EnvVarInfo> = {}): EnvVarInfo {
 }
 
 beforeEach(() => {
+  vi.mocked(getGlobalModelOptions).mockResolvedValue({ managed: false, providers: [] })
   onboarding.set({ manual: false })
   getEnvVars.mockResolvedValue({})
   disconnectOAuthProvider.mockResolvedValue({ ok: true, provider: 'nous' })
@@ -113,6 +118,14 @@ async function renderProvidersSettings() {
 
   return result!
 }
+
+it('company mode replaces provider credentials with the existing model settings surface', async () => {
+  vi.mocked(getGlobalModelOptions).mockResolvedValue({ managed: true, providers: [] })
+  await renderProvidersSettings()
+  expect(await screen.findByText('Company model settings')).toBeTruthy()
+  expect(listOAuthProviders).not.toHaveBeenCalled()
+  expect(getEnvVars).not.toHaveBeenCalled()
+})
 
 describe('ProvidersSettings', () => {
   it('reads and saves API keys for the shared Settings target and reloads when it changes', async () => {

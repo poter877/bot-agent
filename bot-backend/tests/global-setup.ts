@@ -99,7 +99,7 @@ async function startRedis(): Promise<{ redisUrl: string; stop: () => Promise<voi
   const port = await server.getPort()
   return {
     redisUrl: `redis://127.0.0.1:${port}`,
-    stop: () => server.stop(),
+    stop: async () => { await server.stop() },
   }
 }
 

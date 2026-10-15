@@ -80,6 +80,10 @@ export function customModelSlug(text: string): string | null {
 /** The slug a search query would add, or null when some provider already lists
  *  it exactly (then the normal row is the thing to pick). */
 export function customModelCandidate(search: string, providers: readonly ModelOptionProvider[]): string | null {
+  if (providers.some(provider => provider.managed)) {
+    return null
+  }
+
   const slug = customModelSlug(search)
 
   if (!slug) {
@@ -105,6 +109,10 @@ export function withCustomModels(
   let changed = false
 
   const next = providers.map(provider => {
+    if (provider.managed) {
+      return provider
+    }
+
     const models = provider.models ?? []
     const extra = customs.filter(entry => entry.provider === provider.slug && !models.includes(entry.model))
 

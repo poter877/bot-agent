@@ -2,6 +2,19 @@ import type { ModelCapabilities, ModelOptionProvider, ModelOptionsResult } from 
 
 import { getGlobalModelOptions, type HermesGateway } from '@/hermes'
 
+/** Direct-provider affordances stay hidden until the owning backend returns its policy. */
+export function directModelOptionsAllowed(options: ModelOptionsResult | undefined): boolean {
+  return !!options && !options.managed
+}
+
+export function localModelOptionsAllowed(options: ModelOptionsResult | undefined, enabled: boolean): boolean {
+  return enabled && directModelOptionsAllowed(options)
+}
+
+export function catalogModelLabel(provider: ModelOptionProvider, model: string, fallback = model): string {
+  return provider.display_names?.[model] ?? fallback
+}
+
 type CatalogProviderIdentity = Partial<Pick<ModelOptionProvider, 'aliases' | 'name'>> &
   Pick<ModelOptionProvider, 'slug'>
 
@@ -183,7 +196,7 @@ export async function requestModelOptions({
       gatewayError = error
     }
 
-    if (gatewayOptions && hasSelectableModels(gatewayOptions)) {
+    if (gatewayOptions && (gatewayOptions.managed || hasSelectableModels(gatewayOptions))) {
       return gatewayOptions
     }
 

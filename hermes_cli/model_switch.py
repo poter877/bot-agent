@@ -1747,6 +1747,10 @@ def switch_model(
     step returns a failure :class:`ModelSwitchResult` to stop the chain, or ``None`` to continue.
     ``user_providers`` / ``custom_providers`` are the config.yaml ``providers:`` dict and
     ``custom_providers:`` list."""
+    from account_backend_session import company_backend_enabled
+    if company_backend_enabled():
+        from hermes_cli.model_switch_company import switch_company_model
+        return switch_company_model(raw_input, explicit_provider, current_provider, is_global)
     st = _Switch(
         raw_input=raw_input, current_provider=current_provider, current_model=current_model,
         current_base_url=current_base_url, current_api_key=current_api_key, is_global=is_global,

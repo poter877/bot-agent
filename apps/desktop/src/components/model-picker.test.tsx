@@ -109,6 +109,31 @@ afterEach(() => {
 })
 
 describe('ModelPickerDialog download rows', () => {
+  it('selects a company alias by its display name without vendor or custom model entry points', async () => {
+    vi.mocked(requestModelOptions).mockResolvedValue({
+      managed: true,
+      model: 'daily',
+      provider: 'hono',
+      default_model: 'daily',
+      providers: [
+        {
+          slug: 'hono',
+          name: 'Company models',
+          models: ['daily'],
+          managed: true,
+          display_names: { daily: '日常助手' },
+          authenticated: true
+        }
+      ]
+    })
+    const onSelect = vi.fn()
+    renderPicker({ currentModel: 'daily', currentProvider: 'hono', onSelect })
+    const row = await screen.findByText('日常助手')
+    expect(screen.queryByRole('button', { name: /add provider/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /add custom model/i })).toBeNull()
+    fireEvent.click(row)
+    expect(onSelect).toHaveBeenCalledWith({ provider: 'hono', model: 'daily' })
+  })
   it('shows an in-flight download as a disabled progress row in the Local group', async () => {
     setRuntimeJobs([DOWNLOAD_JOB])
     renderPicker()

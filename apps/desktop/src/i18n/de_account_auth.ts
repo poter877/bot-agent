@@ -1,5 +1,6 @@
 // de overrides for the login gate's copy (accountAuth).
 export const deAccountAuth = {
+  signOutAction: 'Abmelden',
   checking: 'Anmeldung wird überprüft…',
   unavailableTitle: 'Authentifizierungsdienst nicht verfügbar',
   unavailableBody: 'Der Konto-Dienst ist nicht erreichbar. Prüfe deine Verbindung und versuche es erneut.',

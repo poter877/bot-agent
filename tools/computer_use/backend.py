@@ -193,6 +193,17 @@ class ComputerUseProvider(ProviderBase):
         """Usable on this host right now (the tool's ``check_fn``). Cheap: no network, no spawning."""
         return True
 
+    def action_scope(self):
+        """Yield a fence checked before input and before screenshots reach history. Defaults to the
+        profile's local lease; a remote provider supplies its authoritative lease and startup policy."""
+        from tools.computer_use.action_scope import local_action_scope
+        return local_action_scope()
+
+    def desktop_identity(self) -> str:
+        """Cheap target identity for cached driver replacement; remote drivers must not read local DISPLAY."""
+        from tools.computer_use.cua_backend import desktop_identity
+        return desktop_identity()
+
     def doctor(self) -> Optional[int]:
         """``hermes computer-use doctor`` for this backend: print findings, return the exit code.
         ``None`` (default) means the backend ships no doctor."""

@@ -14,15 +14,10 @@ profile's dynamic ``base_url`` (HERMES_BOT_BACKEND_URL, the same env the
 account bridge requires) and ``create_client`` engages.
 """
 
-import logging
-import os
 from typing import Any
 
 from providers import register_provider
 from providers.base import ProviderProfile
-
-logger = logging.getLogger(__name__)
-
 
 class HonoProfile(ProviderProfile):
     """Company backend — Better Auth session auth, no vendor keys locally."""
@@ -34,34 +29,28 @@ class HonoProfile(ProviderProfile):
 
     @property
     def base_url(self) -> str:  # type: ignore[override]
-        # Dynamic on purpose: _profile_for_base_url prefix-matches the resolved
-        # runtime base_url against profile.base_url, and the deployment URL is
-        # only known at runtime — HERMES_BOT_BACKEND_URL, else this profile's
-        # own providers.hono.base_url config entry.
-        env = (os.environ.get("HERMES_BOT_BACKEND_URL") or "").rstrip("/")
-        if env:
-            return env
-        try:
-            from hermes_cli.config import load_config_readonly
+        from account_backend_session import AccountBackendError, bot_backend_base
 
-            entry = (load_config_readonly().get("providers") or {}).get(self.name)
-            if isinstance(entry, dict) and entry.get("base_url"):
-                return str(entry["base_url"]).rstrip("/")
-        except Exception:
-            logger.debug("hono profile: config base_url lookup failed", exc_info=True)
-        return (self._base_url_override or "").rstrip("/")
+        # Discovery also runs on installations where the hidden plugin is unconfigured.
+        # Credential scope violations must propagate rather than reading the launch profile.
+        try:
+            return bot_backend_base()
+        except AccountBackendError:
+            return (self._base_url_override or "").rstrip("/")
 
     @base_url.setter
     def base_url(self, value: str) -> None:
         self._base_url_override = value
 
     def create_client(self, **client_kwargs: Any) -> Any | None:
-        from account_backend_session import bot_backend_base, load_account_auth_jar
+        from agent.company_backend_policy import create_company_client
 
-        base_url = str(client_kwargs.get("base_url") or "").strip() or bot_backend_base()
-        from agent.hono_stream_client import HonoStreamClient
+        return create_company_client()
 
-        return HonoStreamClient(base_url=base_url, cookie_jar=load_account_auth_jar())
+    def fetch_models(self, *, api_key=None, base_url=None, timeout: float = 8.0):
+        from account_backend_models import fetch_company_models
+
+        return [model["id"] for model in fetch_company_models(timeout=timeout)["models"]]
 
 
 hono = HonoProfile(
@@ -80,7 +69,8 @@ hono = HonoProfile(
     # model.provider: hono opts in.
     hidden=True,
     supports_health_check=False,
-    supports_model_listing=False,
+    supports_model_listing=True,
+    native_reasoning_details_type="hono.native_assistant",
 )
 
 register_provider(hono)

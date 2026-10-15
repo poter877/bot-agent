@@ -14,6 +14,7 @@ const notify = vi.fn()
 const notifyError = vi.fn()
 
 vi.mock('@/hermes', () => ({
+  getGlobalModelOptions: vi.fn().mockResolvedValue({ managed: false, providers: [] }),
   setApiRequestProfile: vi.fn(),
   getProfiles: async () => ({ profiles: [] }),
   disconnectOAuthProvider: (...args: unknown[]) => disconnectOAuthProvider(...args),

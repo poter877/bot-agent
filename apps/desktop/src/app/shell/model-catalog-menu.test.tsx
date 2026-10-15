@@ -228,6 +228,30 @@ function renderMenu(current: Partial<ModelMenuController['current']> = {}) {
 // the kanban board would end up disagreeing about what "my models" means —
 // which is exactly the drift extracting this component was meant to prevent.
 describe('the catalog owns model curation', () => {
+  it('shows company display names and never resurrects an unavailable saved model', async () => {
+    getGlobalModelOptions.mockResolvedValue({
+      managed: true,
+      provider: 'hono',
+      model: 'daily',
+      providers: [
+        {
+          slug: 'hono',
+          name: 'Company models',
+          models: ['daily'],
+          managed: true,
+          display_names: { daily: '日常助手' },
+          capabilities: { daily: { fast: false, reasoning: false } }
+        }
+      ]
+    })
+    const select = renderMenu({ model: 'removed-model', provider: 'hono' })
+    const row = await screen.findByText('日常助手')
+    expect(screen.queryByText('Removed Model')).toBeNull()
+    expect(screen.queryByText('removed-model')).toBeNull()
+    expect(screen.queryByText(/add custom model/i)).toBeNull()
+    fireEvent.click(row)
+    expect(select).toHaveBeenCalledWith('daily', 'hono')
+  })
   it('honours the stored Edit Models shortlist', async () => {
     setVisibleModels(new Set([modelVisibilityKey('google', 'gemini-2.5-flash')]))
 

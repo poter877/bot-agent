@@ -31,7 +31,7 @@ class ConfigGetParams(ProfileParams):
 
 
 class ConfigProviderRef(OpenModel):
-    """``hermes_cli/models.py::list_available_providers`` row."""
+    """``hermes_cli/models_inventory.py::list_available_providers`` row."""
 
     id: str
     label: str
@@ -116,6 +116,7 @@ class SetupStatusResult(Result):
     ``free_tier_account``, ``free_tier_route``, ``other_providers``, ``inference_provider``) ride along
     on the launch profile. An unknown ``profile`` answers ``ok=False`` + ``error``."""
 
+    managed: bool | None = None
     provider_configured: bool | None = None
     ready: bool | None = None
     free_tier_account: bool | None = None
@@ -143,6 +144,7 @@ class SetupRuntimeCheckResult(Result):
     selected route is the welcome host."""
 
     ok: bool
+    managed: bool | None = None
     provider: str | None = None
     model: str | None = None
     source: str | None = None
@@ -475,6 +477,10 @@ class ModelCapabilities(Result):
     ultrafast: bool = False
     reasoning: bool
     can_disable_reasoning: bool | None = None
+    text: bool | None = None
+    tools: bool | None = None
+    vision: bool | None = None
+    video: bool | None = None
 
 
 class ProviderLimit(Result):
@@ -540,6 +546,8 @@ class ModelOptionProvider(OpenModel):
     slug: str
     name: str
     models: list[str] = Field(default_factory=list)
+    display_names: dict[str, str] | None = None
+    managed: bool | None = None
     total_models: int | None = None
     is_current: bool | None = None
     is_user_defined: bool | None = None
@@ -566,6 +574,8 @@ class ModelOptionsResult(Result):
     providers: list[ModelOptionProvider]
     model: str = ""
     provider: str = ""
+    managed: bool = False
+    default_model: str | None = None
 
 
 method("model.options", params=ModelOptionsParams, result=ModelOptionsResult,

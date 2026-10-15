@@ -1,0 +1,30 @@
+[Unit]
+Description=Private company cloud computer worker
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/bot-agent/bot-backend
+EnvironmentFile=/etc/bot-cloud-worker.env
+# Restores the exact same firewall policy that every worker start/action verifies.
+ExecStartPre=/usr/bin/bash /opt/bot-agent/bot-backend/cloud-computer-runtime/setup-network.sh ${CLOUD_WORKER_NETWORK}
+ExecStart=/usr/bin/node /opt/bot-agent/bot-backend/dist/cloud-worker/index.js
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=32
+KillSignal=SIGTERM
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+StateDirectory=bot-cloud-worker
+Environment=HOME=/var/lib/bot-cloud-worker
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+
+[Install]
+WantedBy=multi-user.target

@@ -4,6 +4,7 @@ import { createLogger } from './shared/logger.js'
 import { closeDatabase, createDatabase } from './db/client.js'
 import { closeRedisConnections, createRedisConnections } from './redis/client.js'
 import { createApp } from './app.js'
+import { startCloudComputerReconciler } from './modules/cloud-computer/reconciler.js'
 
 /**
  * Boot sequence: validate config (fail fast, no default secrets) -> open
@@ -21,7 +22,8 @@ const database = createDatabase({
 })
 const redis = await createRedisConnections(config.REDIS_URL)
 
-const { hono } = await createApp({ config, database, redis, logger })
+const { hono, cloudComputers } = await createApp({ config, database, redis, logger })
+const stopCloudComputers = startCloudComputerReconciler(cloudComputers, logger)
 
 const server = serve({ fetch: hono.fetch, port: config.PORT }, (info) => {
   logger.info({ port: info.port, env: config.NODE_ENV }, 'listening')
@@ -33,8 +35,9 @@ async function shutdown(signal: string): Promise<void> {
   shuttingDown = true
   logger.info({ signal }, 'shutdown_started')
   const drained = new Promise<void>((resolve) => server.close(() => resolve()))
+  const cloudDrained = stopCloudComputers()
   const budgetExhausted = new Promise<void>((resolve) => setTimeout(resolve, config.SERVER_GRACEFUL_TIMEOUT_MS).unref())
-  await Promise.race([drained, budgetExhausted])
+  await Promise.race([Promise.all([drained, cloudDrained]), budgetExhausted])
   await closeRedisConnections(redis)
   await closeDatabase(database)
   logger.info('shutdown_complete')

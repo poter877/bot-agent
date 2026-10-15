@@ -71,6 +71,7 @@ export const esOnboarding: TranslationOverrides['onboarding'] = {
     'La página de inicio de sesión caducó antes de que terminaras. Vuelve a intentarlo y completa el paso del navegador en unos minutos, o usa una clave API.',
   signInDidNotFinish: (provider: string) =>
     `No se completó el inicio de sesión con ${provider}. Comprueba tu conexión a internet y vuelve a intentarlo, o elige otro proveedor.`,
+  companyUnavailable: 'El servicio de la empresa no está disponible temporalmente. Inténtalo de nuevo.',
   tryAgain: 'Reintentar',
   useApiKeyInstead: 'Usar una clave API',
   errorDetails: 'Detalles',

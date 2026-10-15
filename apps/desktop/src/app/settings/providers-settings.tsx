@@ -1,6 +1,6 @@
 import { useStore } from '@nanostores/react'
 import type { ReactNode } from 'react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 
 import { runInTerminal } from '@/app/right-sidebar/store'
 import {
@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/button'
 import { RowButton } from '@/components/ui/row-button'
 import { SearchField } from '@/components/ui/search-field'
 import { Tip } from '@/components/ui/tooltip'
-import { disconnectOAuthProvider, listOAuthProviders } from '@/hermes'
+import { disconnectOAuthProvider, getGlobalModelOptions, listOAuthProviders } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { Check, ChevronDown, ChevronRight, KeyRound, Loader2, Terminal, Trash2 } from '@/lib/icons'
 import { normalize } from '@/lib/text'
@@ -41,6 +41,7 @@ import { useDeepLinkHighlight } from './use-deep-link-highlight'
 // The embedded terminal (and thus the "run disconnect command" path) only
 // exists in the Electron desktop shell, not the web dashboard.
 const canRunInTerminal = () => typeof window !== 'undefined' && Boolean(window.hermesDesktop?.terminal)
+const CompanyModelSettings = lazy(() => import('./model-settings').then(module => ({ default: module.ModelSettings })))
 
 // Parallel group headers ("Connected", "Other providers") so the expanded list
 // reads as its own section instead of bleeding into the connected group.
@@ -384,7 +385,51 @@ function LocalEndpointRow({ onOpen }: { onOpen: (reason: null | string) => void 
   )
 }
 
-export function ProvidersSettings({
+export function ProvidersSettings(props: ProvidersSettingsProps) {
+  const scopeProfile = useStore($settingsRequestProfile)
+  const [policy, setPolicy] = useState<{ profile: string | undefined; managed?: boolean; error?: string }>()
+  useEffect(() => {
+    let active = true
+    void getGlobalModelOptions({}, scopeProfile).then(
+      result => active && setPolicy({ profile: scopeProfile, managed: result.managed === true }),
+      error => active && setPolicy({ profile: scopeProfile, error: String(error) })
+    )
+
+    return () => {
+      active = false
+    }
+  }, [scopeProfile])
+
+  if (!policy || policy.profile !== scopeProfile) {
+    return <SettingsSkeleton />
+  }
+
+  if (policy.error) {
+    return (
+      <SettingsContent>
+        <p role="alert">{policy.error}</p>
+      </SettingsContent>
+    )
+  }
+
+  if (policy.managed) {
+    return (
+      <SettingsContent>
+        <Suspense fallback={<SettingsSkeleton />}>
+          <CompanyModelSettings
+            onMainModelChanged={props.onMainModelChanged}
+            scopeProfile={scopeProfile}
+            subpage="main"
+          />
+        </Suspense>
+      </SettingsContent>
+    )
+  }
+
+  return <DirectProvidersSettings {...props} />
+}
+
+function DirectProvidersSettings({
   onClose,
   onConfigSaved,
   onMainModelChanged,

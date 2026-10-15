@@ -1009,6 +1009,10 @@ def resolve_runtime_provider(*, requested: Optional[str] = None, explicit_api_ke
          api_mode to ``codex_app_server``; the rung's credential/endpoint is then not used
     target_model overrides model_cfg["default"] when computing provider-specific api_mode (e.g.
     OpenCode Zen/Go where different models route through different API surfaces)."""
+    from account_backend_session import company_backend_enabled
+    if company_backend_enabled():
+        from agent.company_backend_policy import company_runtime
+        return company_runtime(target_model)
     requested_provider = resolve_requested_provider(requested)
     _raise_if_provider_disabled(requested_provider)
     # Same alias expansion the auxiliary client applies, so ``provider: openai`` means one thing on

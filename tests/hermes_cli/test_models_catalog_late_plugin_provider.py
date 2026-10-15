@@ -16,7 +16,7 @@ def _profile(name: str) -> ProviderProfile:
 
 def test_late_registered_provider_reaches_picker_catalog(monkeypatch):
     import hermes_cli.models_catalog_static as catalog
-    from hermes_cli.models import list_available_providers
+    from hermes_cli.models_inventory import list_available_providers
 
     # this module is imported (the snapshot exists) before the registration below
     monkeypatch.setattr(catalog, "CANONICAL_PROVIDERS", list(catalog.CANONICAL_PROVIDERS))

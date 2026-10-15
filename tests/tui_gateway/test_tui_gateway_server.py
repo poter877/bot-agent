@@ -17953,13 +17953,11 @@ def test_browser_manage_status_falls_back_to_config_cdp_url(monkeypatch):
     config.yaml so users see what the next tool call will read."""
     monkeypatch.delenv("BROWSER_CDP_URL", raising=False)
 
-    fake_cfg = types.SimpleNamespace(
-        read_raw_config=lambda: {"browser": {"cdp_url": "http://lan:9222"}}
+    monkeypatch.setattr("hermes_cli.config.read_raw_config",
+                        lambda: {"browser": {"cdp_url": "http://lan:9222"}})
+    resp = server.handle_request(
+        {"id": "1", "method": "browser.manage", "params": {"action": "status"}}
     )
-    with patch.dict(sys.modules, {"hermes_cli.config": fake_cfg}):
-        resp = server.handle_request(
-            {"id": "1", "method": "browser.manage", "params": {"action": "status"}}
-        )
 
     assert {k: resp["result"][k] for k in ("connected", "url")} == {"connected": True, "url": "http://lan:9222"}
 
@@ -18628,9 +18626,8 @@ def test_reload_env_rpc_surfaces_errors(monkeypatch):
     def _broken():
         raise RuntimeError("env path locked")
 
-    fake = types.SimpleNamespace(reload_env=_broken)
-    with patch.dict(sys.modules, {"hermes_cli.config": fake}):
-        resp = server.handle_request({"id": "1", "method": "reload.env", "params": {}})
+    monkeypatch.setattr("hermes_cli.config.reload_env", _broken)
+    resp = server.handle_request({"id": "1", "method": "reload.env", "params": {}})
 
     assert "error" in resp
     assert "env path locked" in resp["error"]["message"]

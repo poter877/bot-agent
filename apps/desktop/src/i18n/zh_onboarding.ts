@@ -1,6 +1,7 @@
 import type { TranslationOverrides } from './define-locale'
 
 export const zhOnboarding: TranslationOverrides['onboarding'] = {
+  companyUnavailable: '公司服务暂不可用，请重试。',
   headerTitle: '开始设置 Hermes Agent',
   headerDesc: '连接模型提供方即可开始对话。大多数选项只需一次点击。',
   preparingInstall: 'Hermes 正在完成安装。首次运行通常不到一分钟。',

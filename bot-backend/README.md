@@ -28,7 +28,8 @@ npm run dev                   # tsx watch 启动
 | GET /api/auth/get-session | 查询当前会话与用户 |
 
 错误码由库返回（如重复注册 422、密码错误 401）。邮箱验证、找回密码、社交登录、
-消息认证不在当前范围。服务端绝不新增自研账号端点——未知 /v1 路径一律要求认证（401）。
+等账号扩展不在当前范围。模型目录、模型请求和业务路由均要求认证。
+服务端绝不新增自研账号端点——未知 /v1 路径一律要求认证（401）。
 
 **受保护业务路由**：`GET /v1/users/me`（示例），经 `getSession`（禁用 Cookie 缓存，每次
 回源权威会话存储）校验；身份只来自服务端验证结果，Body 里的 user_id/role/owner_id 一律
@@ -52,7 +53,7 @@ npm run dev                   # tsx watch 启动
   "messages": [                             // AI SDK ModelMessage：user / assistant / tool
     {"role": "user", "content": "你好"},
     {"role": "assistant", "content": [
-      {"type": "reasoning", "text": "…", "providerMetadata": {"hono": {"details": "…回放状态"}}},
+      {"type": "reasoning", "text": "…", "providerOptions": {"anthropic": {"signature": "…原始签名"}}},
       {"type": "text", "text": "…"},
       {"type": "tool-call", "toolCallId": "c1", "toolName": "get_weather", "input": {"city": "北京"}}
     ]},
@@ -98,10 +99,117 @@ data: {"request_id":"…","status":"complete"}     // 或 status:"failed" + erro
 上游终止。用量以服务端上游回报为准记录（按用户/日，Redis + 结构化日志），缺失标 unknown，
 绝不算 0，也不以客户端提交数为结算依据。
 
-模型目录 `LLM_MODEL_CATALOG`（JSON 数组：`id/provider/model/enabled/maxOutputTokens`），
-厂商密钥 `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` 只在目录引用其 provider 时必需。
+模型目录 `LLM_MODEL_CATALOG` 是 JSON 数组，每项包含 `id/provider/model`，可选
+`enabled/displayName/default/contextLength/maxOutputTokens/capabilities`。
+厂商密钥 `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GOOGLE_GENERATIVE_AI_API_KEY`
+只在目录引用对应的 `openai` / `anthropic` / `google` provider 时必需。
 Python 侧接入：`agent/hono_stream_client.py` + `plugins/model-providers/hono/`
 （`providers.hono.base_url` + `HERMES_BOT_BACKEND_URL`，会话 Cookie 与 accountAuth 共享）。
+
+### 公司模型目录与桌面选择
+
+`GET /api/llm/models` 使用同一 Better Auth 认证，返回 `Cache-Control: private, no-store`。
+仅包含已启用且服务端配置了对应厂商密钥的模型；不返回厂商密钥、上游地址或真实模型名。
+响应为 `{models: [{id, displayName, capabilities, contextLength?, maxOutputTokens?}], defaultModel}`。
+`defaultModel` 优先取标记 `default: true` 的可用条目，否则取首个；空目录返回 `null`。
+模型 id 忽略大小写匹配且不能重复，最多指定一个默认模型。
+
+```json
+[
+  {
+    "id": "company-video",
+    "displayName": "公司多模态助手",
+    "provider": "google",
+    "model": "gemini-2.5-flash",
+    "default": true,
+    "contextLength": 1048576,
+    "maxOutputTokens": 8192,
+    "capabilities": {"tools": true, "vision": true, "video": true, "reasoning": true}
+  }
+]
+```
+
+能力声明应与公司实际开放的模型一致。公共目录 `text` 固定为 true；兼容旧目录，
+未填写 `tools/vision` 时默认为 true，`video/reasoning` 默认为 false。
+桌面的聊天模型选择、模型设置与辅助模型选择都读取此目录。加载失败时显示错误并可重试，
+不会展示本地缓存的厂商目录或提供自定义厂商密钥入口。
+首次登录或恢复旧厂商会话时使用公司默认模型；已选择的公司别名失效时明确报错。
+启动引导也遵守公司模式：服务或目录故障只提供错误提示与重试，不引导用户填写厂商密钥。
+目录的上下文长度、输出 token 上限以及工具/视觉能力同步到本地 Agent 的实际运行配置。
+
+### 统一路由与登录生命周期
+
+桌面进程、配置了公司后端地址的 Python 进程，以及显式选择 Hono 的配置，均使用公司路由。
+主模型、标题、压缩、视觉等辅助调用都由 Hono 发起；旧会话的厂商 URL、密钥和备用直连配置
+不能覆盖它。未知目录 id 会报错，不会转向其他厂商。通用 CLI 未启用公司配置时保留原路由。
+
+桌面未确认登录时仅挂载登录/注册界面；每 30 秒及窗口重新聚焦时向账号服务复核。
+登录失效、断网或退出会收回业务界面，清空内存状态；Python 中断该 profile 的活动任务并
+清理模型客户端。退出即使遇到远端不可达也清除本地会话凭据。账号与密码的权威存储始终
+在服务端；本地仅保留权限为 0600 的会话 Cookie 和工作数据。
+本地业务 RPC 也校验公司登录状态，模型请求仍由 Hono 在每次请求时独立认证。
+
+### 多轮工具调用回放
+
+Python 接收 AI SDK 完整事件流，并按原顺序保存文本、推理和工具调用。厂商元数据经
+`reasoning_details` → `NormalizedResponse.provider_data` → 本地会话历史持久化；下一轮
+转换为 AI SDK 部件的 `providerOptions`。保留 Anthropic 签名及 redactedData、Google
+thoughtSignature、OpenAI itemId/encrypted reasoning。服务端兼容输入的
+`providerMetadata` 并规范化为 `providerOptions`，不会将这些状态降成纯文本。
+回放匹配当前保留的工具调用 id；已被历史裁剪移除的工具不会重新出现。
+Agent 循环、工具执行和工作文件继续留在本地。
+
+### 图片、视频与工具截图输入
+
+用户 `content` 支持字符串或文本与文件部件数组。图片、视频、音频和文档沿用 AI SDK 7 的
+`file` 格式；工具截图放在 `tool-result.output: {type: "content", value: [...]}`，不能转成
+JSON 字符串代替媒体。`assistant.content` 也接受文件回放，所选 provider 必须支持该角色。
+
+```json
+{
+  "model": "company-video",
+  "messages": [{
+    "role": "user",
+    "content": [
+      {"type": "text", "text": "分析这段视频"},
+      {"type": "file", "mediaType": "video/mp4", "filename": "clip.mp4", "data": {"type": "data", "data": "<纯 base64，实际请求需替换>"}}
+    ]
+  }]
+}
+```
+
+`data.type=data` 是纯 base64（data URL 由 Python 拆分 MIME 和数据）；`data.type=url`
+使用公开 HTTP(S) URL 字符串，后端转为 AI SDK 要求的 `URL` 实例。只允许模型原生接收的
+URL 直传，后端禁用 SDK 自动下载；需要下载的 URL 返回 `media_inline_required`，请发送
+文件字节。Google 的工具结果和 assistant 文件使用 inline 数据，避免 SDK 将 URL 文本化。
+`providerOptions` 保留图片精度等部件参数，例如 `openai.imageDetail`。
+
+当前固定依赖 `ai@7.0.140`、`@ai-sdk/google@4.0.96`、`@ai-sdk/openai@4.0.94`、
+`@ai-sdk/anthropic@4.0.80`。图片由支持视觉的模型处理；原生视频使用 Google provider 中
+支持视频的 Gemini 模型。OpenAI/Anthropic 原生视频、以及其 SDK 无法回放的 assistant
+文件会在 SSE 开始前明确返回 `unsupported_media`，不会悄悄丢掉媒体。目录按公司授权配置，
+例如 `{"id":"company-video","provider":"google","model":"gemini-2.5-flash"}`。
+
+桌面 Agent 的普通及辅助视觉调用都配置 Hono，密钥留在后端；本地 `config.yaml` 例如：
+
+```yaml
+providers:
+  hono:
+    base_url: https://api.example.com
+model:
+  provider: hono
+  default: company-video
+  supports_vision: true
+auxiliary:
+  vision:
+    provider: hono
+    model: company-video
+```
+
+模型路由的 JSON 请求上限默认 64 MiB，可用 `LLM_STREAM_BODY_LIMIT_BYTES` 调整，最大
+256 MiB，计入 base64 约 4/3 的膨胀；超限返回 413。反向代理模型路径需配置相同上限，
+账号接口仍使用原来的 16 KiB 限制。大视频优先用模型支持的文件 URL，避免重复内联。
+本节针对媒体输入与理解；图片／视频生成输出仍遵循 v1 的显式 unsupported 事件约定。
 
 ## 请求边界（共同安全配置，两棵树都生效）
 
@@ -133,20 +241,56 @@ npm test            # 真实集成测试
 测试自备基础设施：`tests/global-setup.ts` 在临时目录 `initdb` 一次性 PostgreSQL 集群
 （不改系统），并用 redis-memory-server 拉起**真实 Redis**；CI 可用
 `BOT_BACKEND_TEST_DATABASE_URL` / `BOT_BACKEND_TEST_REDIS_URL` 跳过自备流程。
-22 个用例覆盖：注册→会话→登出闭环、重复注册 422、弱密码 400、密码错误 401、会话服务端
+测试覆盖：注册→会话→登出闭环、重复注册 422、弱密码 400、密码错误 401、会话服务端
 撤销后立即失效（禁 Cookie 缓存）、身份只来自服务端会话、伪造 Cookie 拒绝、按账号限流 429、
 Redis 故障 fail-closed 503、413/415/400 边界、安全头与请求 ID、配置启动校验、
-`/v1` 下无自研账号端点。
+`/v1` 下无自研账号端点；模型目录授权、流式取消、图片/视频与工具截图、以及三家厂商
+SDK 的两轮签名回放；运营后台的管理员门槛、停用闭环（立即掉线+拒重登）、额度强制
+（quota_exceeded / model_not_allowed）、目录 CRUD 联动网关、请求日志。厂商请求使用模拟
+HTTP 响应，不消耗真实模型额度。
+
+## 运营管理后台（/admin，SSR，中文界面）
+
+浏览器打开 `https://<后端>/admin`，用 Better Auth 账号登录（同源 Cookie）。首次开通：把运营
+人员的邮箱写进 `BOT_BACKEND_ADMIN_EMAILS`，该邮箱**注册即成为管理员**（`role=admin`）；之后的
+角色管理都在后台内完成。身份与停用全部走 Better Auth 官方 admin 插件——服务端不自建角色表、
+不自建封禁逻辑。
+
+| 页面 | 能做什么 |
+|---|---|
+| 用户 | 搜索/列出用户；**停用**（填原因，库同时吊销其全部会话——立即掉线且无法重登）/ **启用**；设为/取消管理员（不能操作自己）；进入个人页 |
+| 个人页（额度并入用户） | 每日 token 上限、并发流上限、可用模型白名单（留空=跟随服务默认/不限制）；当日已知用量；该用户最近 20 条请求 |
+| 模型 | 目录 CRUD（新增/编辑/启停/删除、默认模型唯一）——**改目录不再动配置文件**：`llm_models` 表是唯一事实源，`LLM_MODEL_CATALOG` 仅在空表时播种一次；15 秒内对全部实例生效 |
+| 请求 | 每条已归属的模型流请求（完成/失败/拒绝）——错误信息、用量、耗时，按状态筛选，失败请求排查的入口 |
+| 状态 | PostgreSQL / Redis 连通、进行中的模型流数、运行时长、用户与目录统计、24h 请求量与失败率 |
+
+约束：所有表单 POST 重新校验 `Origin`（CSRF）；每页都回源校验会话角色（禁 Cookie 缓存）；
+拒绝服务路径：非管理员一律 403。额度生效点在模型流的**响应头建立前**（`quota_exceeded` /
+`model_not_allowed` / 并发上限），拒绝同样落请求日志。
 
 ## 部署要点
 
 `Dockerfile`（多阶段、非 root、HEALTHCHECK 打 /healthz）+ `deploy/nginx.conf.example`。
 上线前固定 Node 24 LTS 补丁版本与基础镜像 digest；`BETTER_AUTH_SECRET` 与
 `BETTER_AUTH_URL` 必须与实际入口一致；跨域浏览器客户端需配置 `CORS_ALLOWED_ORIGINS` +
-`BETTER_AUTH_TRUSTED_ORIGINS`。桌面端（下一步）经 Better Auth 的 Electron 集成处理认证，
-敏感会话凭据留在主进程。
+`BETTER_AUTH_TRUSTED_ORIGINS`。桌面经本地 Python 网关访问 Better Auth，敏感会话凭据
+保存在 profile 的 Cookie 文件中，不传给 renderer。
 
 ## 明确不在本期范围
 
-消息/agent-bridge 模块、WebSocket、邮箱验证、找回密码、社交登录、完整 16 项中间件、
-桌面强制登录接入。代码中无占位实现。
+服务端 Agent 执行、业务 WebSocket、邮箱验证、找回密码、
+社交登录、完整 16 项中间件。真实公司环境的部署、证书与厂商账号联调需单独验收。
+
+## 账号专属云电脑（公司服务器自建）
+
+已增加 Better Auth 账号归属、每账号一台桌面、异步创建/启动/停止/恢复、持久化 home、
+截图、鼠标/键盘操作与人工接管租约。桌面新增“云电脑”入口，经本地 Python 转发；
+Agent 使用现有 `computer_use` provider 接口，模型调用和 Agent 循环仍按前述架构运行。
+本地 terminal/browser 工具不会因为打开云电脑而被重定向。
+
+Hono 只连接私有 worker；worker 在专用 Linux 宿主机管理 Docker，公开 API 不挂载 Docker
+socket。功能默认关闭，配置好 worker 后启用。数据库迁移新增 `cloud_computer`。
+首版画面为约每秒截图刷新，支持坐标操作、拖动、滚动、快捷键和 Unicode 文本粘贴，
+不宣称实时视频或 noVNC 流。停止保留文件和浏览器资料，正在运行的进程不做内存快照。
+
+部署步骤、接口和验收边界见 [cloud-computer.md](cloud-computer.md)。

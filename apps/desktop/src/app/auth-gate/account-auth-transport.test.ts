@@ -15,6 +15,9 @@ function fakeClient(results: { method: string; value?: unknown; error?: unknown 
     requests,
     client: {
       connect: vi.fn().mockResolvedValue(undefined),
+      close: vi.fn(),
+      on: vi.fn((_type: string, _handler: (event: unknown) => void) => () => {}),
+      onState: vi.fn((_handler: (state: string) => void) => () => {}),
       request: vi.fn(async (method: string, params: unknown) => {
         requests.push({ method, params })
         const hit = results.find(entry => entry.method === method)
@@ -51,6 +54,48 @@ describe('gateway account-auth transport', () => {
     expect(client.connect).toHaveBeenCalledWith('ws://127.0.0.1:1/ws')
     expect(requests[0]).toEqual({ method: 'accountAuth.status', params: {} })
     expect(status).toEqual({ authenticated: true, user: USER, error: null })
+  })
+
+  it('creates a fresh connection after a rejected initial connection promise', async () => {
+    const { client } = fakeClient([
+      { method: 'accountAuth.status', value: { authenticated: true, user: USER } }
+    ])
+
+    const getConnection = vi.fn()
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValue({ wsUrl: 'ws://recovered' })
+
+    const transport = createGatewayAccountAuthTransport(getConnection, {
+      clientFactory: () => client as never
+    })
+
+    await expect(transport.status()).rejects.toBeInstanceOf(AccountAuthUnavailableError)
+    expect((await transport.status()).authenticated).toBe(true)
+    expect(getConnection).toHaveBeenCalledTimes(2)
+  })
+
+  it('forwards account invalidation and reconnects after the auth socket closes', async () => {
+    const first = fakeClient([{ method: 'accountAuth.status', value: { authenticated: true, user: USER } }]).client
+    const second = fakeClient([{ method: 'accountAuth.status', value: { authenticated: false } }]).client
+    let onEvent!: (event: unknown) => void
+    let onState!: (state: string) => void
+    first.on.mockImplementation((_type, handler) => { onEvent = handler;
+
+ return () => {} })
+    first.onState.mockImplementation(handler => { onState = handler;
+
+ return () => {} })
+    const factory = vi.fn().mockReturnValueOnce(first).mockReturnValueOnce(second)
+    const transport = createGatewayAccountAuthTransport(async () => ({ wsUrl: 'ws://local' }), { clientFactory: factory })
+    const invalidated = vi.fn()
+    transport.onInvalidated?.(invalidated)
+    await transport.status()
+    onEvent({ type: 'accountAuth.invalidated', payload: { reason: 'expired' } })
+    expect(invalidated).toHaveBeenCalledWith('expired')
+    onState('closed')
+    expect(invalidated).toHaveBeenCalledWith('unavailable')
+    expect((await transport.status()).authenticated).toBe(false)
+    expect(factory).toHaveBeenCalledTimes(2)
   })
 
   it('signs in through the agent bridge and reports the confirmed user', async () => {

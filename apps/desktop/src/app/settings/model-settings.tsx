@@ -112,9 +112,19 @@ const NO_PROVIDERS: readonly ModelOptionProvider[] = [{ name: '—', slug: '', m
 function mainProviderOptionsFor(providers: readonly ModelOptionProvider[], selectedProvider: string) {
   const options = providers.length ? providers : NO_PROVIDERS
 
+  if (providers.some(provider => provider.managed)) {
+    return options
+  }
+
   return selectedProvider && !findCatalogProvider(providers, selectedProvider)
     ? [{ name: selectedProvider, slug: selectedProvider, models: [] as string[] }, ...providers]
     : options
+}
+
+function slotProviderSlugs(providers: readonly ModelOptionProvider[], selected: string): readonly string[] {
+  const slugs = providers.map(provider => provider.slug || 'none')
+
+  return providers.some(provider => provider.managed) ? slugs : withActive(slugs, selected)
 }
 
 // True when the provider row is a configured endpoint the backend may know
@@ -312,6 +322,7 @@ export function ModelSettings({ onMainModelChanged, scopeProfile, subpage }: Mod
   // model added from the composer is selectable here too.
   const customModels = useStore($customModels)
   const providers = useMemo(() => withCustomModels(catalogProviders, customModels), [catalogProviders, customModels])
+  const managed = providers.some(provider => provider.managed)
   const [selectedProvider, setSelectedProvider] = useState('')
   const [selectedModel, setSelectedModel] = useState('')
   const [auxiliary, setAuxiliary] = useState<AuxiliaryModelsResponse | null>(null)
@@ -393,9 +404,12 @@ export function ModelSettings({ onMainModelChanged, scopeProfile, subpage }: Mod
         const auxiliaryModels = settledValue(auxiliaryModelsResult)
         // MOA has always been optional-on-failure; keep it out of the banner.
         const moaModels = moaModelsResult.status === 'fulfilled' ? moaModelsResult.value : null
+
         // The main assignment also lives in the auxiliary config read, so the
         // page still knows the current model when only the live probe failed.
-        const resolvedMain = modelInfo ?? auxiliaryModels?.main ?? null
+        const resolvedMain = modelOptions?.managed
+          ? { model: modelOptions.model ?? '', provider: 'hono' }
+          : (modelInfo ?? auxiliaryModels?.main ?? null)
 
         if (resolvedMain) {
           setMainModel({ model: resolvedMain.model, provider: resolvedMain.provider })
@@ -1044,6 +1058,7 @@ export function ModelSettings({ onMainModelChanged, scopeProfile, subpage }: Mod
               <>
                 <ModelSelect
                   className="min-w-60"
+                  managed={managed}
                   models={selectedProviderModels}
                   onValueChange={setSelectedModel}
                   provider={selectedProviderRow}
@@ -1234,6 +1249,7 @@ export function ModelSettings({ onMainModelChanged, scopeProfile, subpage }: Mod
                             <ModelSelect
                               aria-label={`${copy.label} model`}
                               className="min-w-48"
+                              managed={managed}
                               models={auxDraftProviderModels}
                               onValueChange={value => setAuxDraft(prev => ({ ...prev, model: value }))}
                               provider={findCatalogProvider(providers, auxDraft.provider)}
@@ -1431,10 +1447,7 @@ export function ModelSettings({ onMainModelChanged, scopeProfile, subpage }: Mod
                         <SelectValue placeholder={m.provider} />
                       </SelectTrigger>
                       <SelectContent>
-                        {withActive(
-                          moaSlotProviderOptions.map(p => p.slug || 'none'),
-                          slot.provider
-                        ).map(slug => {
+                        {slotProviderSlugs(moaSlotProviderOptions, slot.provider).map(slug => {
                           const provider = moaSlotProviderOptions.find(p => (p.slug || 'none') === slug)
 
                           return (
@@ -1447,6 +1460,7 @@ export function ModelSettings({ onMainModelChanged, scopeProfile, subpage }: Mod
                     </Select>
                     <ModelSelect
                       className="min-w-48"
+                      managed={managed}
                       models={modelsForProvider(slot.provider)}
                       onValueChange={value =>
                         updateMoaPreset(prev => ({
@@ -1519,10 +1533,7 @@ export function ModelSettings({ onMainModelChanged, scopeProfile, subpage }: Mod
                       <SelectValue placeholder={m.provider} />
                     </SelectTrigger>
                     <SelectContent>
-                      {withActive(
-                        moaSlotProviderOptions.map(p => p.slug || 'none'),
-                        currentMoaPreset.aggregator.provider
-                      ).map(slug => {
+                      {slotProviderSlugs(moaSlotProviderOptions, currentMoaPreset.aggregator.provider).map(slug => {
                         const provider = moaSlotProviderOptions.find(p => (p.slug || 'none') === slug)
 
                         return (
@@ -1535,6 +1546,7 @@ export function ModelSettings({ onMainModelChanged, scopeProfile, subpage }: Mod
                   </Select>
                   <ModelSelect
                     className="min-w-48"
+                    managed={managed}
                     models={modelsForProvider(currentMoaPreset.aggregator.provider)}
                     onValueChange={value =>
                       updateMoaPreset(prev => ({

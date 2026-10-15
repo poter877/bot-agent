@@ -482,6 +482,108 @@ export interface ProjectFacts {
   verifyCommands: string[]
   contextFiles: string[]
 }
+export interface CloudComputerSnapshot {
+  enabled: boolean
+  computer: CloudComputer | null
+  lease: CloudLease
+  agentEnabled: boolean
+}
+export interface CloudComputer {
+  id: string
+  state: 'starting' | 'running' | 'stopping' | 'stopped' | 'error'
+  generation: number
+  width: number
+  height: number
+  capabilities: CloudCapabilities
+  error: string | null
+}
+export interface CloudCapabilities {
+  actions: ('click' | 'move' | 'drag' | 'type' | 'key' | 'scroll')[]
+  capture: boolean
+}
+export interface CloudLease {
+  holder: 'agent' | 'human'
+  epoch: number
+  expiresAt: string | null
+}
+export interface CloudComputerCaptureParams {
+  profile?: string | null
+  computerGeneration: number
+  leaseEpoch: number
+  viewerToken?: string | null
+}
+export interface CloudComputerCaptureResult {
+  computerGeneration: number
+  leaseEpoch: number
+  image: CloudImage
+}
+export interface CloudImage {
+  mediaType: 'image/png'
+  data: string
+  width: number
+  height: number
+}
+export interface CloudComputerActionParams {
+  profile?: string | null
+  computerGeneration: number
+  leaseEpoch: number
+  viewerToken: string
+  action: 'click' | 'move' | 'drag' | 'type' | 'key' | 'scroll'
+  params: CloudClickArgs | CloudMoveArgs | CloudDragArgs | CloudTypeArgs | CloudKeyArgs | CloudScrollArgs
+}
+export interface CloudClickArgs {
+  x: number
+  y: number
+  button?: 'left' | 'middle' | 'right'
+  clicks?: number
+}
+export interface CloudMoveArgs {
+  x: number
+  y: number
+}
+export interface CloudDragArgs {
+  fromX: number
+  fromY: number
+  toX: number
+  toY: number
+  durationMs?: number
+}
+export interface CloudTypeArgs {
+  text: string
+}
+export interface CloudKeyArgs {
+  keys: string[]
+}
+export interface CloudScrollArgs {
+  direction: 'up' | 'down' | 'left' | 'right'
+  amount: number
+  x?: number | null
+  y?: number | null
+}
+export interface CloudComputerActionResult {
+  computerGeneration: number
+  leaseEpoch: number
+  ok: true
+}
+export interface CloudComputerAcquireResult {
+  enabled: boolean
+  computer: CloudComputer | null
+  lease: CloudLease
+  agentEnabled: boolean
+  viewerToken: string
+}
+export interface CloudComputerLeaseParams {
+  profile?: string | null
+  viewerToken: string
+}
+export interface CloudComputerConfigureParams {
+  profile?: string | null
+  enabled: boolean
+}
+export interface CloudComputerConfigureResult {
+  enabled: boolean
+  appliesTo: 'new-sessions'
+}
 /** ``key`` selects one getter from ``_CONFIG_GETTERS``; ``cwd`` feeds the ``project`` getter, ``session_id`` lets ``reasoning`` / ``fast`` answer with the session's live pin. */
 export interface ConfigGetParams {
   profile?: string | null
@@ -505,7 +607,7 @@ export interface ConfigGetResult {
   mtime?: number | null
   mcp_rev?: string | null
 }
-/** ``hermes_cli/models.py::list_available_providers`` row. */
+/** ``hermes_cli/models_inventory.py::list_available_providers`` row. */
 export interface ConfigProviderRef {
   id: string
   label: string
@@ -614,6 +716,7 @@ export interface McpServerStatus {
 }
 /** ``provider_configured`` is the loose answer; the boot record's fields (``ready``, ``free_tier_account``, ``free_tier_route``, ``other_providers``, ``inference_provider``) ride along on the launch profile. An unknown ``profile`` answers ``ok=False`` + ``error``. */
 export interface SetupStatusResult {
+  managed?: boolean | null
   provider_configured?: boolean | null
   ready?: boolean | null
   free_tier_account?: boolean | null
@@ -634,6 +737,7 @@ export interface SetupRuntimeCheckParams {
 /** ``ok=False`` + ``error`` when the resolved model can't be served; ``free_tier_route`` says the selected route is the welcome host. */
 export interface SetupRuntimeCheckResult {
   ok: boolean
+  managed?: boolean | null
   provider?: string | null
   model?: string | null
   source?: string | null
@@ -806,12 +910,16 @@ export interface ModelOptionsResult {
   providers: ModelOptionProvider[]
   model?: string
   provider?: string
+  managed?: boolean
+  default_model?: string | null
 }
 /** One ``hermes_cli/inventory.py::build_models_payload`` provider row (the union of every field the builder sets; ``pricing_pending`` / ``free_tier_pending`` mark the cached-only path). */
 export interface ModelOptionProvider {
   slug: string
   name: string
   models?: string[]
+  display_names?: Record<string, string> | null
+  managed?: boolean | null
   total_models?: number | null
   is_current?: boolean | null
   is_user_defined?: boolean | null
@@ -840,6 +948,10 @@ export interface ModelCapabilities {
   ultrafast?: boolean
   reasoning: boolean
   can_disable_reasoning?: boolean | null
+  text?: boolean | null
+  tools?: boolean | null
+  vision?: boolean | null
+  video?: boolean | null
 }
 /** ``hermes_cli/inventory.py::_apply_pricing`` — formatted $/Mtok strings (``""`` unknown, ``"free"``); the sale fields are Nous Portal-only. */
 export interface ModelPricing {
@@ -4697,6 +4809,10 @@ export interface DisplayInstallSudoParams {
   session_id: string
   profile_key: string
 }
+export interface AccountAuthInvalidatedPayload {
+  reason: AccountAuthInvalidationReason
+}
+export type AccountAuthInvalidationReason = 'expired' | 'signed_out' | 'unavailable'
 /** ``methods_connectors._connection_update``: one target transition (``target``/``from``/``to``/ ``actor``) or the settlement (none of those), with the full snapshot. */
 export interface ConnectionUpdatePayload {
   op_id: string
@@ -5193,6 +5309,24 @@ export interface RpcMethods {
   'client.capabilities': { params: ClientCapabilitiesParams; result: ClientCapabilitiesResult }
   /** Save the host clipboard image into the session and queue it for the next turn. */
   'clipboard.paste': { params: ClipboardPasteParams; result: AttachedImageResult }
+  /** Human input while holding this account's cloud computer lease. */
+  'cloudComputer.action': { params: CloudComputerActionParams; result: CloudComputerActionResult }
+  /** Human viewer screenshot; Agent screenshots use the cloud provider's lease checks. */
+  'cloudComputer.capture': { params: CloudComputerCaptureParams; result: CloudComputerCaptureResult }
+  /** Select cloud computer control for new Agent sessions without changing live sessions. */
+  'cloudComputer.configure': { params: CloudComputerConfigureParams; result: CloudComputerConfigureResult }
+  /** Take over the cloud computer; returned viewerToken stays in the UI's memory. */
+  'cloudComputer.lease.acquire': { params: ProfileParams; result: CloudComputerAcquireResult }
+  /** Release the current human viewer's lease. */
+  'cloudComputer.lease.release': { params: CloudComputerLeaseParams; result: CloudComputerSnapshot }
+  /** Renew the current human viewer's lease. */
+  'cloudComputer.lease.renew': { params: CloudComputerLeaseParams; result: CloudComputerSnapshot }
+  /** Start the authenticated account's cloud computer. */
+  'cloudComputer.start': { params: ProfileParams; result: CloudComputerSnapshot }
+  /** Status the authenticated account's cloud computer. */
+  'cloudComputer.status': { params: ProfileParams; result: CloudComputerSnapshot }
+  /** Stop the authenticated account's cloud computer. */
+  'cloudComputer.stop': { params: ProfileParams; result: CloudComputerSnapshot }
   /** Run a quick/plugin/bundle/skill/built-in slash command and answer a structured directive. */
   'command.dispatch': { params: CommandDispatchParams; result: CommandDispatchResult }
   /** Canonical registry command for a name or alias. */
@@ -5692,6 +5826,15 @@ export const RPC_METHODS = [
   'cli.exec',
   'client.capabilities',
   'clipboard.paste',
+  'cloudComputer.action',
+  'cloudComputer.capture',
+  'cloudComputer.configure',
+  'cloudComputer.lease.acquire',
+  'cloudComputer.lease.release',
+  'cloudComputer.lease.renew',
+  'cloudComputer.start',
+  'cloudComputer.status',
+  'cloudComputer.stop',
   'command.dispatch',
   'command.resolve',
   'commands.catalog',
@@ -5986,6 +6129,8 @@ export const SERVER_REQUEST_METHODS = [
 
 // ── Notifications (`event` frames) ──
 export interface BackendGatewayEventMap {
+  /** The current profile's account authority ended; unmount business UI and reauthenticate. */
+  'accountAuth.invalidated': AccountAuthInvalidatedPayload
   /** Output chunk from an agent-owned background process. */
   'agent.terminal.output': TerminalOutputPayload
   /** Pending gateway approvals were dropped by interrupt/reap/teardown; the wait resolved as deny (not a user refusal). */
@@ -6143,6 +6288,7 @@ export interface BackendGatewayEventMap {
 }
 export type BackendGatewayEventName = keyof BackendGatewayEventMap
 export const GATEWAY_EVENT_TYPES = [
+  'accountAuth.invalidated',
   'agent.terminal.output',
   'approval.cancelled',
   'background.complete',

@@ -26,7 +26,7 @@ def test_solstice_is_off_every_discovery_surface_until_signed_in_but_always_reso
     home = tmp_path / "hermes"
     home.mkdir()
     monkeypatch.setenv("HERMES_HOME", str(home))
-    from hermes_cli.models import list_available_providers
+    from hermes_cli.models_inventory import list_available_providers
     from hermes_cli.models_catalog_static import listed_canonical_providers
     from hermes_cli.provider_catalog import provider_catalog
     from hermes_cli.web_routers.oauth import _build_oauth_catalog

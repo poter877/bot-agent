@@ -19,6 +19,12 @@ import { createAuth, type Auth } from './modules/auth/auth.js'
 import { createUsersRoutes } from './modules/users/users.routes.js'
 import { createHealthRoutes } from './modules/health/health.routes.js'
 import { createLlmRoutes } from './modules/llm/llm.routes.js'
+import { CatalogStore, parseModelCatalog } from './modules/llm/catalog.js'
+import { createAdminRoutes } from './modules/admin/admin.routes.js'
+import { createCloudComputerRoutes } from './modules/cloud-computer/cloud-computer.routes.js'
+import { CloudComputerService } from './modules/cloud-computer/service.js'
+import { HttpCloudWorker } from './modules/cloud-computer/worker-client.js'
+import type { CloudWorker } from './modules/cloud-computer/protocol.js'
 
 export interface AppDeps {
   config: Config
@@ -27,11 +33,13 @@ export interface AppDeps {
   logger: Logger
   /** Test seams for the model stream route (defaults: env catalog + env keys). */
   llm?: { modelResolver?: Parameters<typeof createLlmRoutes>[0]['modelResolver']; catalog?: Parameters<typeof createLlmRoutes>[0]['catalog'] }
+  cloudComputer?: { worker: CloudWorker }
 }
 
 export interface App {
   hono: Hono<AppEnv>
   auth: Auth
+  cloudComputers: CloudComputerService | null
 }
 
 /**
@@ -53,6 +61,12 @@ export async function createApp(deps: AppDeps): Promise<App> {
   const db = database.db
 
   const auth = createAuth(config, database)
+  const cloudComputers = config.CLOUD_COMPUTER_ENABLED
+    ? new CloudComputerService(db, deps.cloudComputer?.worker ?? new HttpCloudWorker(config.CLOUD_COMPUTER_WORKER_URL!, config.CLOUD_COMPUTER_WORKER_TOKEN!))
+    : null
+  // The console-owned model directory: llm_models is the source of truth,
+  // LLM_MODEL_CATALOG only seeds an empty table (运营后台 CRUD 目标).
+  const catalogStore = new CatalogStore(db, parseModelCatalog(config.LLM_MODEL_CATALOG))
 
   const app = new Hono<AppEnv>()
 
@@ -82,17 +96,21 @@ export async function createApp(deps: AppDeps): Promise<App> {
   app.use(processingTimeout(config.REQUEST_TIMEOUT_MS))
 
   for (const tree of ['/api/auth/*', '/v1/*']) {
-    app.use(tree, bodyPolicyMiddleware(config.API_BODY_LIMIT_BYTES))
-    app.use(
-      tree,
-      rateLimitMiddleware({
+    const ordinaryBody = bodyPolicyMiddleware(config.API_BODY_LIMIT_BYTES)
+    const cloudBody = bodyPolicyMiddleware(64 * 1024)
+    app.use(tree, (c, next) => c.req.path.startsWith('/v1/cloud-computer/') ? cloudBody(c, next) : ordinaryBody(c, next))
+    const ordinaryEntryLimit = rateLimitMiddleware({
         redis: redis.commands,
         scope: 'entry-ip',
         limit: config.RATE_LIMIT_ENTRY_MAX,
         windowSeconds: config.RATE_LIMIT_ENTRY_WINDOW_SECONDS,
         subject: (c) => c.get('realIp'),
-      }),
-    )
+      })
+    const cloudEntryLimit = rateLimitMiddleware({
+      redis: redis.commands, scope: 'cloud-computer-ip', limit: config.CLOUD_COMPUTER_IP_RATE_LIMIT_MAX,
+      windowSeconds: 60, subject: (c) => c.get('realIp'),
+    })
+    app.use(tree, (c, next) => c.req.path.startsWith('/v1/cloud-computer/') ? cloudEntryLimit(c, next) : ordinaryEntryLimit(c, next))
   }
   // The model stream carries whole conversations plus tool schemas — a
   // dedicated, larger body budget than the account JSON API (doc §4.1).
@@ -158,17 +176,20 @@ export async function createApp(deps: AppDeps): Promise<App> {
 
   // Everything below requires a verified Better Auth session.
   app.use('/v1/*', authenticate(auth))
-  app.use(
-    '/v1/*',
-    rateLimitMiddleware({
+  const ordinaryUserLimit = rateLimitMiddleware({
       redis: redis.commands,
       scope: 'user',
       limit: config.RATE_LIMIT_USER_MAX,
       windowSeconds: config.RATE_LIMIT_USER_WINDOW_SECONDS,
       subject: byAuthUserId,
-    }),
-  )
+    })
+  const cloudUserLimit = rateLimitMiddleware({
+    redis: redis.commands, scope: 'cloud-computer', limit: config.CLOUD_COMPUTER_RATE_LIMIT_MAX,
+    windowSeconds: 60, subject: byAuthUserId,
+  })
+  app.use('/v1/*', (c, next) => c.req.path.startsWith('/v1/cloud-computer/') ? cloudUserLimit(c, next) : ordinaryUserLimit(c, next))
   app.route('/v1/users', createUsersRoutes(db))
+  app.route('/v1/cloud-computer', createCloudComputerRoutes(cloudComputers, new URL(config.BETTER_AUTH_URL).origin))
 
   // Model streams ride the same Better Auth session (doc《流式服务端重构》§4.1:
   // 凭证传递方式沿用账号后端的实现约定) with their own per-user request budget.
@@ -183,9 +204,23 @@ export async function createApp(deps: AppDeps): Promise<App> {
       subject: byAuthUserId,
     }),
   )
-  app.route('/api/llm', createLlmRoutes({ config, redis: redis.commands, logger, ...deps.llm }))
+  app.route('/api/llm', createLlmRoutes({ config, db, redis: redis.commands, logger, catalogStore, ...deps.llm }))
+
+  // 运营管理后台: same-origin form posts (urlencoded — NOT the JSON body
+  // policy), session role check per request, entry-ip flood guard only.
+  app.use(
+    '/admin/*',
+    rateLimitMiddleware({
+      redis: redis.commands,
+      scope: 'entry-ip',
+      limit: config.RATE_LIMIT_ENTRY_MAX,
+      windowSeconds: config.RATE_LIMIT_ENTRY_WINDOW_SECONDS,
+      subject: (c) => c.get('realIp'),
+    }),
+  )
+  app.route('/admin', createAdminRoutes({ config, db, redis: redis.commands, logger, auth, catalogStore }))
 
   app.route('/', createHealthRoutes(database, redis.commands))
 
-  return { hono: app, auth }
+  return { hono: app, auth, cloudComputers }
 }

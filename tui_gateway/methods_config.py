@@ -182,7 +182,8 @@ _THINKING_MODES = frozenset({"collapsed", "truncated", "full"})
 
 
 def _cfg_get_provider(params):
-    from hermes_cli.models import list_available_providers, normalize_provider
+    from hermes_cli.models import normalize_provider
+    from hermes_cli.models_inventory import list_available_providers
     model = _resolve_model()
     parts = model.split("/", 1)
     return {"model": model, "provider": normalize_provider(parts[0]) if len(parts) > 1 else "unknown",
@@ -399,6 +400,9 @@ def _(rid, params: dict) -> dict:
         from hermes_cli.free_tier_bootstrap import wait_for_record
 
         def probe(profile, scoped):
+            from tui_gateway.company_models import company_setup_status
+            if (managed := company_setup_status()) is not None:
+                return {**managed, **scoped}
             record = None if profile else wait_for_record()
             if record is None:
                 # ``ready`` = this process's boot bootstrap has settled (a named profile has no
@@ -440,6 +444,9 @@ def _(rid, params: dict) -> dict:
         requested = str(params.get("provider") or "").strip() or None
 
         def probe(profile, scoped):
+            from tui_gateway.company_models import company_runtime_readiness
+            if (managed := company_runtime_readiness(requested)) is not None:
+                return {**managed, **scoped}
             startup_model, startup_provider = _resolve_startup_runtime()
             if requested:
                 model, runtime = startup_model, resolve_runtime_provider(

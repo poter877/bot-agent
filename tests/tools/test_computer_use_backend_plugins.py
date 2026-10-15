@@ -84,7 +84,7 @@ def test_selected_plugin_receives_tool_calls_and_unselected_stays_dormant(tmp_pa
         assert ("start", "standard") in calls and ("click", 3) in calls
         assert "_hermes_user_computer_use.cu-alpha" not in sys.modules  # installed, not selected: never imported
         from hermes_cli.tools_config_providers import _computer_use_provider_rows  # `hermes tools` / Desktop rows
-        assert [r["computer_use_backend"] for r in _computer_use_provider_rows()] == ["cu-alpha", "cu-beta"]
+        assert {"cu-alpha", "cu-beta"} <= {r["computer_use_backend"] for r in _computer_use_provider_rows()}
         assert "_hermes_user_computer_use.cu-alpha" not in sys.modules  # listing does not import either
     finally:
         reset_hermes_home_override(tok)
@@ -96,7 +96,7 @@ def test_unknown_backend_errors_naming_configured_and_available(tmp_path):
     try:
         from tools.computer_use.tool import check_computer_use_requirements, handle_computer_use
         out = json.loads(handle_computer_use({"action": "list_apps"}, session_id="s1"))
-        assert "'nope'" in out["error"] and "available: cua" in out["error"]
+        assert "'nope'" in out["error"] and "available:" in out["error"] and "cua" in out["error"]
         assert "hint" not in out  # the cua-driver install hint would mislead here
         assert check_computer_use_requirements() is True  # the tool stays visible so the call can say why
     finally:

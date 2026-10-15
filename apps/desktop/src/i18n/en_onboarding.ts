@@ -60,6 +60,7 @@ export const enOnboarding: Translations['onboarding'] = {
     'The sign-in page timed out before you finished. Try again and complete the browser step within a few minutes, or use an API key instead.',
   signInDidNotFinish: provider =>
     `Sign-in with ${provider} did not finish. Check your internet connection and try again, or pick a different provider.`,
+  companyUnavailable: 'Company service is temporarily unavailable. Please try again.',
   tryAgain: 'Try again',
   useApiKeyInstead: 'Use an API key',
   errorDetails: 'Details',

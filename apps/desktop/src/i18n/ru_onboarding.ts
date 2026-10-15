@@ -1,6 +1,7 @@
 import type { TranslationOverrides } from './define-locale'
 
 export const ruOnboarding: TranslationOverrides['onboarding'] = {
+  companyUnavailable: 'Сервис компании временно недоступен. Попробуйте ещё раз.',
   headerTitle: 'Настроим для вас Hermes Agent',
   headerDesc: 'Подключите провайдера модели, чтобы начать общение. Большинство вариантов — в один клик.',
   preparingInstall: 'Hermes завершает установку. Обычно это занимает меньше минуты при первом запуске.',

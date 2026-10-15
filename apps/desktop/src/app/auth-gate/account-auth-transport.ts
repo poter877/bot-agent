@@ -20,11 +20,15 @@ export interface AccountAuthStatus {
   error?: string | null
 }
 
+export type AccountAuthInvalidationReason = 'expired' | 'signed_out' | 'unavailable'
+
 export interface AccountAuthTransport {
   status(): Promise<AccountAuthStatus>
   signIn(input: { email: string; password: string }): Promise<AccountAuthStatus>
   signUp(input: { name: string; email: string; password: string }): Promise<AccountAuthStatus>
   signOut(): Promise<void>
+  onInvalidated?(handler: (reason: AccountAuthInvalidationReason) => void): () => void
+  close?(): void
 }
 
 /** Raised when the agent bridge or the backend cannot be reached at all. */
@@ -47,60 +51,71 @@ interface AuthClientOptions {
   clientFactory?: (wsUrl: string) => JsonRpcGatewayClient
 }
 
-// JSON-RPC standard "method not found" — the gateway predates the accountAuth
-// methods (older runtime), which is an availability problem for the gate.
-const RPC_METHOD_NOT_FOUND = -32601
-
-function toUnavailable(error: unknown): AccountAuthUnavailableError {
-  if (error instanceof AccountAuthUnavailableError) {return error}
-  const code = (error as { code?: unknown })?.code
-  const message = error instanceof Error ? error.message : String(error)
-
-  if (code === RPC_METHOD_NOT_FOUND || /not found|unknown method/i.test(message)) {
-    return new AccountAuthUnavailableError(error)
-  }
-
-  // Connection-level failures surface as plain Errors from the channel.
-  if (!(error instanceof Error) || /closed|connect|offline|network/i.test(message)) {
-    return new AccountAuthUnavailableError(error)
-  }
-
-  return new AccountAuthUnavailableError(error)
-}
-
 export function createGatewayAccountAuthTransport(
   getConnection: ConnectionGetter,
   options: AuthClientOptions = {},
 ): AccountAuthTransport {
   let clientPromise: Promise<JsonRpcGatewayClient> | null = null
+  let connectionGeneration = 0
+  let activeClient: JsonRpcGatewayClient | null = null
+  let unsubscribe: Array<() => void> = []
+  const listeners = new Set<(reason: AccountAuthInvalidationReason) => void>()
+  const notify = (reason: AccountAuthInvalidationReason) => listeners.forEach(handler => handler(reason))
 
-  async function client(): Promise<JsonRpcGatewayClient> {
-    clientPromise ??= (async () => {
+  function close(): void {
+    clientPromise = null
+    connectionGeneration += 1
+    unsubscribe.splice(0).forEach(stop => stop())
+    const previous = activeClient
+    activeClient = null
+    previous?.close()
+  }
+
+  function client(): Promise<JsonRpcGatewayClient> {
+    if (clientPromise) { return clientPromise }
+
+    const generation = ++connectionGeneration
+    const pending = (async () => {
       const connection = await getConnection()
 
-      const client =
-        options.clientFactory?.(connection.wsUrl) ??
-        new JsonRpcGatewayClient({
-          requestIdPrefix: 'auth',
-          // The gate tracks no sessions; a lossless replay is dead weight here.
-          replay: false
+      const gateway = options.clientFactory?.(connection.wsUrl) ?? new JsonRpcGatewayClient({
+        requestIdPrefix: 'auth', replay: false
+      })
+
+      // A stopped gate must not reopen its old socket after getConnection resolves.
+      if (generation !== connectionGeneration) { throw new AccountAuthUnavailableError() }
+      activeClient = gateway
+      unsubscribe = [
+        gateway.on('accountAuth.invalidated', event => {
+          notify(event.payload?.reason ?? 'expired')
+        }),
+        gateway.onState(state => {
+          if (state === 'closed' || state === 'error') {
+            close()
+            notify('unavailable')
+          }
         })
+      ]
+      await gateway.connect(connection.wsUrl)
 
-      await client.connect(connection.wsUrl)
-
-      return client
+      return gateway
     })()
 
-    return clientPromise
+    clientPromise = pending
+
+    return pending
   }
 
   async function request<T>(method: string, params: Record<string, unknown>): Promise<T> {
+    const pending = client()
+
     try {
-      const gateway = await client()
+      const gateway = await pending
 
       return await gateway.request<T>(method, params)
     } catch (error) {
-      throw toUnavailable(error)
+      if (clientPromise === pending) { close() }
+      throw new AccountAuthUnavailableError(error)
     }
   }
 
@@ -117,6 +132,12 @@ export function createGatewayAccountAuthTransport(
   }
 
   return {
+    close,
+    onInvalidated(handler) {
+      listeners.add(handler)
+
+      return () => listeners.delete(handler)
+    },
     async status(): Promise<AccountAuthStatus> {
       return toStatus(await request('accountAuth.status', {}))
     },

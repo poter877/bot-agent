@@ -45,6 +45,7 @@ def test_external_process_plugin_authenticated_flag_tracks_binary_and_catalog_us
     profile's fallback_models is its catalog when the subprocess probe yields nothing."""
     from providers.base import ProviderProfile
     from hermes_cli import models, models_catalog_static
+    from hermes_cli.models_inventory import list_available_providers
 
     exe = tmp_path / "acme-acp"
     exe.write_text("#!/bin/sh\nexit 0\n")
@@ -57,7 +58,7 @@ def test_external_process_plugin_authenticated_flag_tracks_binary_and_catalog_us
     monkeypatch.setattr(models, "CANONICAL_PROVIDERS", [*models.CANONICAL_PROVIDERS, entry])
 
     def authenticated():
-        return {r["id"]: r["authenticated"] for r in models.list_available_providers()}["acme-acp"]
+        return {r["id"]: r["authenticated"] for r in list_available_providers()}["acme-acp"]
 
     monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ.get('PATH', '')}")
     assert authenticated() is True

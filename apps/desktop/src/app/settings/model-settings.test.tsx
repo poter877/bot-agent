@@ -661,6 +661,36 @@ describe('ModelSettings', () => {
 })
 
 describe('ModelSettings provider switch', () => {
+  it('uses the company directory instead of saved direct-provider models', async () => {
+    getGlobalModelOptions.mockResolvedValue({
+      managed: true,
+      provider: 'hono',
+      model: 'daily',
+      providers: [
+        {
+          name: 'Company models',
+          slug: 'hono',
+          managed: true,
+          authenticated: true,
+          models: ['daily'],
+          display_names: { daily: 'Daily assistant' }
+        }
+      ]
+    })
+
+    renderModelSettings()
+    expect(await screen.findByText('Daily assistant')).toBeTruthy()
+    expect(screen.queryByText('hermes-4')).toBeNull()
+
+    fireEvent.click(screen.getAllByRole('combobox')[0])
+    expect(await screen.findByRole('option', { name: 'Company models' })).toBeTruthy()
+    expect(screen.queryByRole('option', { name: 'Nous' })).toBeNull()
+    fireEvent.keyDown(screen.getByRole('listbox'), { key: 'Escape' })
+    fireEvent.click(screen.getAllByRole('combobox')[1])
+    expect(await screen.findByRole('option', { name: 'Daily assistant' })).toBeTruthy()
+    expect(screen.queryByRole('option', { name: /Custom model/ })).toBeNull()
+  })
+
   // #59063: a provider's model list is per-provider. Switching must not carry
   // the previous provider's model over (ModelSelect's withActive() would keep
   // painting it), and an empty freshly-selected custom provider must be probed

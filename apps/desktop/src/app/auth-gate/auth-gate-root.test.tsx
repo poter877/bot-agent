@@ -121,3 +121,35 @@ describe('AuthGate', () => {
     expect(transport.signUp).not.toHaveBeenCalled()
   })
 })
+
+it('rechecks on focus and removes the mounted app when the server revokes the session', async () => {
+  const transport = fakeTransport({
+    status: vi.fn()
+      .mockResolvedValueOnce({ authenticated: true, user: USER })
+      .mockResolvedValue({ authenticated: false, user: null })
+  })
+
+  const reset = vi.fn()
+  render(<AuthGate resetBusinessState={reset} transport={transport}><div>business-shell</div></AuthGate>)
+  await screen.findByText('business-shell')
+  fireEvent(window, new Event('focus'))
+  await screen.findByRole('heading', { name: 'Sign in' })
+  expect(screen.queryByText('business-shell')).toBeNull()
+  expect(reset).toHaveBeenCalledOnce()
+})
+
+it('connects the visible sign-out action to account revocation and removes the business UI', async () => {
+  const { AccountSignOutAction } = await import('./account-sign-out-action')
+  const transport = fakeTransport({ status: vi.fn().mockResolvedValue({ authenticated: true, user: USER }) })
+  const reset = vi.fn()
+  render(
+    <AuthGate resetBusinessState={reset} transport={transport}>
+      <div>business-shell</div><AccountSignOutAction />
+    </AuthGate>
+  )
+  fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }))
+  await screen.findByRole('heading', { name: 'Sign in' })
+  expect(screen.queryByText('business-shell')).toBeNull()
+  expect(transport.signOut).toHaveBeenCalledOnce()
+  expect(reset).toHaveBeenCalledOnce()
+})

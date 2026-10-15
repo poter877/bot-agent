@@ -11,6 +11,8 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
+    "cloud-worker:dev": "tsx watch src/cloud-worker/index.ts",
+    "cloud-worker:start": "node dist/cloud-worker/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
@@ -19,6 +21,7 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "4.0.80",
+    "@ai-sdk/google": "4.0.96",
     "@ai-sdk/openai": "4.0.94",
     "@hono/node-server": "^2.1.5",
     "ai": "7.0.140",

@@ -1,4 +1,5 @@
 export interface SetupStatusSnapshot {
+  managed?: boolean
   provider_configured?: boolean
   /** Additive launch-profile fields (newer backends only; absent on older
    *  ones). Carried for consumers that read the record — readiness itself
@@ -18,6 +19,7 @@ export interface SetupStatusSnapshot {
 }
 
 export interface RuntimeCheckSnapshot {
+  managed?: boolean
   error?: string
   /** True when the resolved route is the free tier rather than a credential of
    *  the user's own. Absent on older backends. */
@@ -41,6 +43,7 @@ export interface RuntimeReadinessOptions {
 }
 
 export interface RuntimeReadinessResult {
+  managed?: boolean
   checksDisagree: boolean
   /** Passed through from `setup.runtime_check`: the resolved route is the free
    *  tier. Undefined when the check did not answer (older backend, transport
@@ -113,6 +116,27 @@ export async function fetchRuntimeReadinessSignals(
   }
 }
 
+function readinessChecksDisagree(setup: boolean | undefined, runtime: boolean | undefined): boolean {
+  return typeof setup === 'boolean' && typeof runtime === 'boolean' && setup !== runtime
+}
+
+function companyReadiness(
+  signals: RuntimeReadinessSignals,
+  runtimeOk: boolean | undefined,
+  failure: null | string
+): RuntimeReadinessResult | null {
+  if (!signals.setup?.managed && !signals.runtime?.managed) {
+    return null
+  }
+  return {
+    managed: true,
+    checksDisagree: false,
+    ready: runtimeOk === true,
+    reason: runtimeOk === true ? null : failure || 'Company service is temporarily unavailable.',
+    source: typeof runtimeOk === 'boolean' ? 'runtime_check' : 'setup_status'
+  }
+}
+
 export function interpretRuntimeReadiness(
   signals: RuntimeReadinessSignals,
   options: RuntimeReadinessOptions = {}
@@ -135,8 +159,11 @@ export function interpretRuntimeReadiness(
     model: normalizeMessage(signals.runtime?.model) ?? undefined
   }
 
-  const checksDisagree =
-    typeof setupConfigured === 'boolean' && typeof runtimeOk === 'boolean' && setupConfigured !== runtimeOk
+  const checksDisagree = readinessChecksDisagree(setupConfigured, runtimeOk)
+  const company = companyReadiness(signals, runtimeOk, runtimeFailure ?? setupFailure)
+  if (company) {
+    return { ...route, ...company }
+  }
 
   if (typeof runtimeOk === 'boolean') {
     if (runtimeOk) {
@@ -195,7 +222,7 @@ export function runtimeReadinessDisplay(status: RuntimeReadinessResult | null): 
   // Credentials exist but runtime resolution failed. Calling that "needs
   // setup" sends users back through onboarding for provider/quota failures
   // that setup cannot repair; the reason tooltip carries the specific cause.
-  return status.checksDisagree ? 'unavailable' : 'needs_setup'
+  return status.managed || status.checksDisagree ? 'unavailable' : 'needs_setup'
 }
 
 export async function evaluateRuntimeReadiness(

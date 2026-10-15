@@ -18,18 +18,24 @@ server catalog id, and auth is the profile's Better Auth session cookie jar
 
 from __future__ import annotations
 
+import base64
+import binascii
 import codecs
+import copy
 import json
 import logging
+import mimetypes
 import time
 from http.cookiejar import CookieJar
 from types import SimpleNamespace
 from typing import Any, Iterator
+from urllib.parse import urlsplit
 
 import httpx
 
 from agent.chat_completion_helpers import ProviderStreamError
 from agent.chat_completion_helpers_tool_calls import _ToolCallAccumulator
+from agent.hono_replay import AssistantReplay, legacy_reasoning_parts, replay_assistant_content
 
 logger = logging.getLogger(__name__)
 
@@ -180,7 +186,7 @@ class _StreamState:
         # buffered tool argument fragments (doc §5: 暂存参数片段，不能执行半截 JSON)
         self.tool_args: dict[str, list[str]] = {}
         self.tool_names: dict[str, str] = {}
-        self.tool_provider_metadata: dict[str, Any] = {}
+        self.replay = AssistantReplay()
 
     def tool_slot(self, tool_input_id: str) -> int:
         slot = self.tool_slot_by_id.get(tool_input_id)
@@ -222,10 +228,8 @@ def _final_usage_ns(total_usage: dict[str, Any]) -> Any:
 
 def _reasoning_delta_chunk(state: _StreamState, part: dict[str, Any]) -> Any:
     delta: dict[str, Any] = {"reasoning": part.get("text") or ""}
-    # Preserve the replay-critical opaque state: an anthropic thinking
-    # signature rides reasoning_details, which the stream loop merges and the
-    # transport parks in provider_data for next-turn replay. Broader provider
-    # metadata mapping is a two-vendor acceptance concern (doc §8.5).
+    # Keep the existing readable reasoning representation. Exact block order
+    # and all provider state travel separately in the private replay carrier.
     provider_metadata = part.get("providerMetadata") or {}
     signature = (provider_metadata.get("anthropic") or {}).get("signature")
     details: list[dict[str, Any]] = [{"type": "reasoning.text", "text": part.get("text") or ""}]
@@ -240,6 +244,7 @@ def translate_stream_part(state: _StreamState, part: dict[str, Any]) -> list[Any
 
     Raises ``ProviderStreamError`` for error/abort parts (the agent's failure /
     retry ladder takes over with already-displayed content preserved)."""
+    state.replay.feed(part)
     part_type = part.get("type")
     if part_type in ("start", "start-step"):
         if part_type == "start-step" and part.get("warnings"):
@@ -281,8 +286,6 @@ def translate_stream_part(state: _StreamState, part: dict[str, Any]) -> list[Any
         arguments = part.get("input")
         args_str = arguments if isinstance(arguments, str) else json.dumps(arguments or {}, ensure_ascii=False)
         state.tool_args.pop(part.get("toolCallId") or "", None)  # authoritative input supersedes buffered fragments
-        if part.get("providerMetadata"):
-            state.tool_provider_metadata[part.get("toolCallId") or ""] = part["providerMetadata"]
         return [
             _delta_chunk(
                 state,
@@ -304,9 +307,10 @@ def translate_stream_part(state: _StreamState, part: dict[str, Any]) -> list[Any
         state.usage_raw = _json_value(part.get("totalUsage") or {})
         # Delta with the SDK's full field set (None where empty) so consumers
         # can attribute-access like they do on real OpenAI chunks.
+        replay_record = state.replay.record()
         empty_delta = SimpleNamespace(
             role=None, content=None, refusal=None, reasoning=None, reasoning_content=None,
-            reasoning_details=None, tool_calls=None,
+            reasoning_details=[replay_record] if replay_record else None, tool_calls=None,
         )
         return [
             # OpenAI order: the finish_reason chunk first, then the choiceless usage frame.
@@ -354,11 +358,6 @@ def _assemble_message(state: _StreamState, content_parts: list[str], reasoning_p
                 ),
             )
         )
-    metadata = state.tool_provider_metadata
-    if metadata:
-        # General tool-call providerMetadata has no replay consumer yet; it is
-        # logged so its loss is observable, never silent (doc §4.2).
-        logger.debug("Hono stream tool-call providerMetadata dropped (no v1 consumer): %s", list(metadata))
     reasoning = "".join(reasoning_parts) or None
     return SimpleNamespace(
         role="assistant",
@@ -389,9 +388,157 @@ _PARAM_WHITELIST = ("temperature", "top_p", "seed")
 _PARAM_DROPPED_LOG = "Hono client dropped unsupported chat kwarg %r (protocol v1 does not carry it)"
 
 
+def _inline_media(data: Any) -> dict[str, str]:
+    if not isinstance(data, str) or not data:
+        raise HonoRequestError("media data must be non-empty base64")
+    try:
+        base64.b64decode(data, validate=True)
+    except (ValueError, binascii.Error):
+        raise HonoRequestError("media data is not valid base64") from None
+    return {"type": "data", "data": data}
+
+
+def _media_source(source: Any, media_type: str | None, kind: str | None) -> tuple[str, dict[str, str]]:
+    """Tag bytes and URLs explicitly so the server never mistakes one for the other."""
+    if isinstance(source, dict):
+        if source.get("type") == "data":
+            return media_type or "application/octet-stream", _inline_media(source.get("data"))
+        if source.get("type") != "url":
+            raise HonoRequestError("unsupported media data type")
+        source = source.get("url")
+    if not isinstance(source, str) or not source:
+        raise HonoRequestError("media must provide a data URL or an HTTP(S) URL")
+    if source.startswith("data:"):
+        header, comma, data = source.partition(",")
+        metadata = header[5:].split(";")
+        if not comma or "base64" not in metadata:
+            raise HonoRequestError("media data URLs must contain base64 data")
+        declared = metadata[0] or media_type or "application/octet-stream"
+        if media_type and declared != media_type:
+            raise HonoRequestError("media type does not match the data URL")
+        return declared, _inline_media(data)
+    parsed = urlsplit(source)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname or parsed.username or parsed.password:
+        raise HonoRequestError("media URLs must be HTTP(S) URLs without credentials")
+    inferred = mimetypes.guess_type(parsed.path)[0]
+    return media_type or inferred or (f"{kind}/*" if kind else "application/octet-stream"), {"type": "url", "url": source}
+
+
+def _file_content(source: Any, media_type: str | None = None, *, kind: str | None = None,
+                  filename: str | None = None) -> dict[str, Any]:
+    media_type, data = _media_source(source, media_type, kind)
+    if kind and not media_type.startswith(f"{kind}/"):
+        raise HonoRequestError(f"{kind} content has an incompatible media type")
+    result: dict[str, Any] = {"type": "file", "mediaType": media_type, "data": data}
+    if filename:
+        result["filename"] = filename
+    return result
+
+
+_MEDIA_PART_KEYS = {
+    "image_url": ("image_url", "image"),
+    "input_image": ("image_url", "image"),
+    "image": ("image", "image"),
+    "video_url": ("video_url", "video"),
+    "input_video": ("video_url", "video"),
+    "video": ("video", "video"),
+}
+
+
+def _url_content_part(part: dict[str, Any]) -> dict[str, Any]:
+    key, kind = _MEDIA_PART_KEYS[part["type"]]
+    value = part.get(key)
+    settings = value if isinstance(value, dict) else {}
+    source = settings.get("url") if settings else value
+    result = _file_content(source, part.get("mediaType") or settings.get("media_type"), kind=kind)
+    detail = settings.get("detail") or part.get("detail")
+    if kind == "image" and detail is not None:
+        result["providerOptions"] = {"openai": {"imageDetail": detail}}
+    return result
+
+
+def _attachment_content_part(part: dict[str, Any]) -> dict[str, Any]:
+    attachment = part.get("file")
+    if not isinstance(attachment, dict):
+        return _file_content(part.get("data"), part.get("mediaType"), filename=part.get("filename"))
+    source = attachment.get("file_data")
+    filename = attachment.get("filename")
+    media_type = attachment.get("media_type")
+    if isinstance(source, str) and not source.startswith("data:"):
+        source = {"type": "data", "data": source}
+        media_type = media_type or mimetypes.guess_type(filename or "")[0]
+    return _file_content(source, media_type, filename=filename)
+
+
+def _map_content_part(part: Any) -> dict[str, Any]:
+    if not isinstance(part, dict):
+        raise HonoRequestError("message content parts must be objects")
+    kind = part.get("type")
+    if kind in ("text", "input_text", "output_text"):
+        if not isinstance(part.get("text"), str):
+            raise HonoRequestError("text content must be a string")
+        result = {"type": "text", "text": part["text"]}
+    elif kind in _MEDIA_PART_KEYS:
+        result = _url_content_part(part)
+    elif kind == "file":
+        result = _attachment_content_part(part)
+    else:
+        raise HonoRequestError(f"unsupported message content type {kind!r}")
+    if part.get("providerOptions") is not None:
+        # Never mutate cached conversation content when preparing a request.
+        options = copy.deepcopy(part["providerOptions"])
+        for provider, values in result.get("providerOptions", {}).items():
+            options.setdefault(provider, {}).update(values)
+        result["providerOptions"] = options
+    return result
+
+
+def _content_parts(content: Any) -> list[dict[str, Any]]:
+    if isinstance(content, str):
+        return [{"type": "text", "text": content}]
+    if not isinstance(content, list):
+        raise HonoRequestError("message content must be text or a list of content parts")
+    return [_map_content_part(part) for part in content]
+
+
+def _assistant_content(message: dict[str, Any], _tool_names: dict[str, str]) -> dict[str, Any]:
+    parts = legacy_reasoning_parts(message)
+    if message.get("content"):
+        parts.extend(_content_parts(message["content"]))
+    for tool_call in message.get("tool_calls") or []:
+        function = tool_call.get("function") or {}
+        try:
+            tool_input = json.loads(function.get("arguments") or "{}")
+        except json.JSONDecodeError as error:
+            raise HonoRequestError(f"stored tool call {tool_call.get('id')!r} has malformed arguments: {error}") from None
+        parts.append({"type": "tool-call", "toolCallId": tool_call.get("id") or "",
+                      "toolName": function.get("name") or "", "input": tool_input})
+    parts = replay_assistant_content(message, parts)
+    return {"role": "assistant", "content": parts if parts else ""}
+
+
+def _tool_content(message: dict[str, Any], tool_names: dict[str, str]) -> dict[str, Any]:
+    tool_call_id = message.get("tool_call_id") or ""
+    tool_name = tool_names.get(tool_call_id)
+    if tool_name is None:
+        raise HonoRequestError(f"tool result for {tool_call_id!r} has no matching assistant tool call")
+    content = message.get("content")
+    output = ({"type": "text", "value": content} if isinstance(content, str)
+              else {"type": "content", "value": _content_parts(content)})
+    return {"role": "tool", "content": [{"type": "tool-result", "toolCallId": tool_call_id,
+                                         "toolName": tool_name, "output": output}]}
+
+
+def _user_content(message: dict[str, Any], _tool_names: dict[str, str]) -> dict[str, Any]:
+    content = message.get("content")
+    return {"role": "user", "content": content if isinstance(content, str) else _content_parts(content)}
+
+
+_MESSAGE_MAPPERS = {"user": _user_content, "assistant": _assistant_content, "tool": _tool_content}
+
+
 def _map_messages(messages: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]]:
-    """OpenAI-format history -> (system, wire messages). Vision parts are a
-    later product surface; they fail loudly instead of degrading to text."""
+    """Map a request copy while preserving media, tool identities and history order."""
     tool_names: dict[str, str] = {}
     for message in messages:
         for tool_call in message.get("tool_calls") or []:
@@ -410,56 +557,10 @@ def _map_messages(messages: list[dict[str, Any]]) -> tuple[str, list[dict[str, A
             else:
                 raise HonoRequestError("system message content must be a string")
             continue
-        if role == "user":
-            if not isinstance(content, str):
-                raise HonoRequestError("non-text user content (images/files) is not part of protocol v1")
-            mapped.append({"role": "user", "content": content})
-            continue
-        if role == "assistant":
-            parts: list[dict[str, Any]] = []
-            reasoning = message.get("reasoning") or message.get("reasoning_content")
-            if isinstance(reasoning, str) and reasoning:
-                reasoning_part: dict[str, Any] = {"type": "reasoning", "text": reasoning}
-                details = message.get("reasoning_details")
-                if details:
-                    reasoning_part["providerMetadata"] = {"hono": {"details": _json_value(details)}}
-                parts.append(reasoning_part)
-            if isinstance(content, str) and content:
-                parts.append({"type": "text", "text": content})
-            elif isinstance(content, list):
-                raise HonoRequestError("non-text assistant content is not part of protocol v1")
-            for tool_call in message.get("tool_calls") or []:
-                function = tool_call.get("function") or {}
-                try:
-                    tool_input = json.loads(function.get("arguments") or "{}")
-                except json.JSONDecodeError as error:
-                    raise HonoRequestError(f"stored tool call {tool_call.get('id')!r} has malformed arguments: {error}") from None
-                parts.append({
-                    "type": "tool-call",
-                    "toolCallId": tool_call.get("id") or "",
-                    "toolName": function.get("name") or "",
-                    "input": tool_input,
-                })
-            mapped.append({"role": "assistant", "content": parts if parts else ""})
-            continue
-        if role == "tool":
-            tool_call_id = message.get("tool_call_id") or ""
-            tool_name = tool_names.get(tool_call_id)
-            if tool_name is None:
-                raise HonoRequestError(f"tool result for {tool_call_id!r} has no matching assistant tool call")
-            if not isinstance(content, str):
-                raise HonoRequestError("tool result content must be a string")
-            mapped.append({
-                "role": "tool",
-                "content": [{
-                    "type": "tool-result",
-                    "toolCallId": tool_call_id,
-                    "toolName": tool_name,
-                    "output": {"type": "text", "value": content},
-                }],
-            })
-            continue
-        raise HonoRequestError(f"unsupported message role {role!r}")
+        mapper = _MESSAGE_MAPPERS.get(role)
+        if mapper is None:
+            raise HonoRequestError(f"unsupported message role {role!r}")
+        mapped.append(mapper(message, tool_names))
     return "\n\n".join(system_parts), mapped
 
 
@@ -518,6 +619,12 @@ class HonoStreamClient:
 
     # Auxiliary/relay layers must not wrap this client: it speaks the full wire itself.
     HERMES_SKIP_TRANSPORT_WRAP = True
+    # Compatibility for auxiliary introspection; authentication uses cookies.
+    api_key = ""
+
+    @property
+    def base_url(self) -> str:
+        return self._base
 
     def __init__(
         self,
@@ -583,11 +690,15 @@ class HonoStreamClient:
         return self._collect_events(request, model)
 
     def _open(self, request: httpx.Request) -> tuple[httpx.Response, str]:
+        from agent.company_backend_policy import ensure_company_client
+
+        ensure_company_client(self)
         if self._cancelled:
             raise InterruptedError("hono stream client cancelled before request")
         response = self._http.send(request, stream=True)
         self._active_response = response
         try:
+            ensure_company_client(self)
             if response.status_code != 200:
                 body_text = ""
                 try:
@@ -602,6 +713,10 @@ class HonoStreamClient:
                     parsed = None
                 if isinstance(parsed, dict):
                     body = parsed
+                if response.status_code == 401:
+                    from account_backend_session import notify_account_auth_failure
+
+                    notify_account_auth_failure(401, expected_binding=getattr(self, "_account_binding", None))
                 raise HonoHttpError(response.status_code, body, headers=dict(response.headers))
             version = response.headers.get("x-model-stream-version")
             if version is None:
@@ -647,6 +762,8 @@ class HonoStreamClient:
             response.close()
 
     def _consume(self, response: httpx.Response, request_id: str, model: str) -> Iterator[Any]:
+        from agent.company_backend_policy import ensure_company_client
+
         state = _StreamState(model, request_id)
         parser = SseParser()
         last_seq: int | None = None
@@ -690,6 +807,7 @@ class HonoStreamClient:
                         raw_text="",
                     )
                 for sse_event in parser.feed_bytes(raw_chunk):
+                    ensure_company_client(self)
                     if self._cancelled:
                         raise InterruptedError("hono stream cancelled")
                     last_seq = check_stream_ids(last_seq, sse_event.id, request_id)
@@ -733,4 +851,5 @@ class HonoStreamClient:
             )
         if state.unsupported:
             logger.info("Hono stream carried unsupported parts (never executed): %s", state.unsupported)
+        ensure_company_client(self)
         return _build_response(state, _assemble_message(state, content_parts, reasoning_parts, reasoning_details, accumulator))

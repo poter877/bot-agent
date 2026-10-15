@@ -31,7 +31,8 @@ def _handle_admitted_request(req: dict) -> dict | None:
             return _err(rid, 4000, problem)
     token = _current_rpc_method.set(method)
     try:
-        response = fn(rid, params)
+        from tui_gateway.account_auth_guard import invoke_account_guarded
+        response = invoke_account_guarded(method, fn, rid, params)
     except ProfileUnavailableError as exc:
         return _err(rid, 4064, str(exc))
     finally:
@@ -59,7 +60,8 @@ def dispatch(req: dict, transport: Optional[Transport] = None) -> dict | None:
         normalized = _normalize_request(req)
         if isinstance(normalized, dict):
             return normalized
-        if normalized[1] not in _LONG_HANDLERS:
+        from tui_gateway.account_auth_guard import requires_account_worker
+        if normalized[1] not in _LONG_HANDLERS and not requires_account_worker(normalized[1], normalized[2]):
             return handle_request(req)
         from hermes_cli.backend_retirement import retirement
 

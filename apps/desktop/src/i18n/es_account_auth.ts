@@ -1,5 +1,6 @@
 // es overrides for the login gate's copy (accountAuth).
 export const esAccountAuth = {
+  signOutAction: 'Cerrar sesión',
   checking: 'Comprobando tu sesión…',
   unavailableTitle: 'Servicio de autenticación no disponible',
   unavailableBody: 'No se pudo conectar con el servicio de cuentas. Comprueba tu conexión e inténtalo de nuevo.',

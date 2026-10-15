@@ -8,6 +8,8 @@ export const ERROR_CODES = [
   'invalid_json',
   'validation_failed',
   'invalid_token',
+  'unsupported_media',
+  'media_inline_required',
   // 401/403
   'unauthorized',
   'invalid_credentials',
@@ -18,6 +20,7 @@ export const ERROR_CODES = [
   'not_found',
   'model_not_found',
   'model_disabled',
+  'model_not_allowed',
   'provider_key_missing',
   'conflict',
   // 413/415
@@ -26,6 +29,7 @@ export const ERROR_CODES = [
   // 429/503/500
   'rate_limited',
   'concurrency_limit',
+  'quota_exceeded',
   'request_timeout',
   'dependency_unavailable',
   'internal_error',
@@ -52,5 +56,19 @@ export class HttpApiError extends Error {
     this.status = status
     this.code = code
     this.headers = headers
+  }
+}
+
+/**
+ * Cookie-authenticated mutations (console forms, the model stream) mirror the
+ * library's CSRF stance: a first-party server-side client sends Origin = base.
+ */
+export function assertSameOrigin(c: { req: { header(name: string): string | undefined } }, baseOrigin: string): void {
+  const origin = c.req.header('origin')
+  if (origin === undefined || origin.trim() === '') {
+    throw new HttpApiError(403, 'forbidden', 'Origin header is required.')
+  }
+  if (origin.trim().replace(/\/+$/, '') !== baseOrigin.replace(/\/+$/, '')) {
+    throw new HttpApiError(403, 'forbidden', 'Origin does not match the backend.')
   }
 }

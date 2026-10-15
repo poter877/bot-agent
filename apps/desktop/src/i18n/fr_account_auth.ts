@@ -1,5 +1,6 @@
 // fr overrides for the login gate's copy (accountAuth).
 export const frAccountAuth = {
+  signOutAction: 'Se déconnecter',
   checking: 'Vérification de votre session…',
   unavailableTitle: "Service d'authentification indisponible",
   unavailableBody: 'Impossible de joindre le service de comptes. Vérifiez votre connexion et réessayez.',

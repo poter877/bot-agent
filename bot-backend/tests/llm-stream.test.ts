@@ -29,7 +29,6 @@ const CATALOG = [
 const BASE_USAGE: LanguageModelV4Usage = {
   inputTokens: { total: 12, noCache: 10, cacheRead: 2, cacheWrite: undefined },
   outputTokens: { total: 5, text: 4, reasoning: 1 },
-  totalTokens: 17,
 }
 
 interface MockModelSetup {
@@ -46,7 +45,7 @@ function mockModel(parts: LanguageModelV4StreamPart[], options: { chunkDelayMs?:
         stream:
           options.chunkDelayMs === undefined
             ? convertArrayToReadableStream(parts)
-            : simulateReadableStream({ chunks: parts, initialDelayMs: 5, chunkDelayMs: options.chunkDelayMs }),
+            : simulateReadableStream({ chunks: parts, initialDelayInMs: 5, chunkDelayInMs: options.chunkDelayMs }),
       }
     },
   })
@@ -90,7 +89,7 @@ function parseSse(body: string): SseEvent[] {
   return events
 }
 
-function sseRequest(app: TestApp['app'], user: RegisteredUser, body: unknown): Promise<Response> {
+async function sseRequest(app: TestApp['app'], user: RegisteredUser, body: unknown): Promise<Response> {
   return app.request('/api/llm/stream', {
     method: 'POST',
     headers: { 'content-type': 'application/json', origin: 'http://127.0.0.1:3100', cookie: user.cookie },
@@ -229,7 +228,7 @@ describe('POST /api/llm/stream — SSE contract', () => {
       { type: 'text-delta', id: 'text_1', delta: '你好' },
       { type: 'text-delta', id: 'text_1', delta: '，世界' },
       { type: 'text-end', id: 'text_1' },
-      { type: 'finish', finishReason: { unified: 'stop' }, usage: BASE_USAGE },
+      { type: 'finish', finishReason: { unified: 'stop', raw: undefined }, usage: BASE_USAGE },
     ]).model
     const response = await sseRequest(testApp.app, user, textBody)
     expect(response.status).toBe(200)
@@ -278,7 +277,7 @@ describe('POST /api/llm/stream — SSE contract', () => {
       { type: 'tool-input-delta', id: 'call_1', delta: '"北京"}' },
       { type: 'tool-input-end', id: 'call_1' },
       { type: 'tool-call', toolCallId: 'call_1', toolName: 'get_weather', input: JSON.stringify({ city: '北京' }) },
-      { type: 'finish', finishReason: { unified: 'tool-calls' }, usage: BASE_USAGE },
+      { type: 'finish', finishReason: { unified: 'tool-calls', raw: undefined }, usage: BASE_USAGE },
     ])
     seam.holder.model = setup.model
     const response = await sseRequest(testApp.app, user, {
@@ -316,9 +315,43 @@ describe('POST /api/llm/stream — SSE contract', () => {
     expect(tool).toMatchObject({ name: 'get_weather', inputSchema: { type: 'object' } })
   })
 
+  it('keeps the pending upstream read across heartbeats without dropping replay signatures', async () => {
+    const model = new MockLanguageModelV4({
+      doStream: async () => ({ stream: simulateReadableStream({
+        initialDelayInMs: 1_150,
+        chunkDelayInMs: 0,
+        chunks: [
+          { type: 'stream-start', warnings: [] },
+          { type: 'reasoning-start', id: 'r' },
+          { type: 'reasoning-delta', id: 'r', delta: 'Reason', providerMetadata: { anthropic: { signature: 'retained-signature' } } },
+          { type: 'reasoning-end', id: 'r' },
+          { type: 'text-start', id: 't' },
+          { type: 'text-delta', id: 't', delta: 'After heartbeat' },
+          { type: 'text-end', id: 't' },
+          { type: 'finish', finishReason: { unified: 'stop', raw: undefined }, usage: BASE_USAGE },
+        ] satisfies LanguageModelV4StreamPart[],
+      }) }),
+    })
+    const app = await createTestApp({ OPENAI_API_KEY: 'k', LLM_STREAM_HEARTBEAT_MS: '1000',
+      LLM_STREAM_IDLE_TIMEOUT_MS: '3000' }, { catalog: CATALOG, modelResolver: () => model })
+    try {
+      const user = await registerUser(app.app, app.database, uniqueEmail(), 'password-123456')
+      const response = await sseRequest(app.app, user, textBody)
+      const body = await response.text()
+      expect(body).toContain(': heartbeat')
+      const parts = parseSse(body)
+      expect(parts.filter(part => (part.data as { type?: string }).type === 'reasoning-delta')).toHaveLength(1)
+      expect(body).toContain('retained-signature')
+      expect(body).toContain('After heartbeat')
+      expect(parts.at(-1)?.data).toMatchObject({ status: 'complete' })
+    } finally {
+      await app.close()
+    }
+  })
+
   it('clamps maxOutputTokens to the catalog ceiling and forwards whitelisted parameters', async () => {
     const user = await registerUser(testApp.app, testApp.database, uniqueEmail(), 'password-123456')
-    const setup = mockModel([{ type: 'stream-start', warnings: [] }, { type: 'finish', finishReason: { unified: 'length' }, usage: BASE_USAGE }])
+    const setup = mockModel([{ type: 'stream-start', warnings: [] }, { type: 'finish', finishReason: { unified: 'length', raw: undefined }, usage: BASE_USAGE }])
     seam.holder.model = setup.model
     const response = await sseRequest(testApp.app, user, {
       ...textBody,
@@ -376,7 +409,7 @@ describe('POST /api/llm/stream — SSE contract', () => {
     await response.body!.cancel()
     // The release path is asynchronous; the slot must return so a retry is admitted.
     await new Promise<void>((resolve) => setTimeout(resolve, 200))
-    seam.holder.model = mockModel([{ type: 'stream-start', warnings: [] }, { type: 'finish', finishReason: { unified: 'stop' }, usage: BASE_USAGE }]).model
+    seam.holder.model = mockModel([{ type: 'stream-start', warnings: [] }, { type: 'finish', finishReason: { unified: 'stop', raw: undefined }, usage: BASE_USAGE }]).model
     const again = await sseRequest(testApp.app, user, textBody)
     expect(again.status).toBe(200)
     await again.text()
@@ -423,7 +456,7 @@ describe('POST /api/llm/stream — budgets', () => {
     })
     expect(first.status).toBe(200)
 
-    seam.holder.model = mockModel([{ type: 'stream-start', warnings: [] }, { type: 'finish', finishReason: { unified: 'stop' }, usage: BASE_USAGE }]).model
+    seam.holder.model = mockModel([{ type: 'stream-start', warnings: [] }, { type: 'finish', finishReason: { unified: 'stop', raw: undefined }, usage: BASE_USAGE }]).model
     const second = await sseRequest(testApp.app, user, textBody)
     expect(second.status).toBe(429)
     expect(((await second.json()) as { error: { code: string } }).error.code).toBe('concurrency_limit')
@@ -438,7 +471,7 @@ describe('POST /api/llm/stream — budgets', () => {
 
   it('records upstream usage per user and day in redis', async () => {
     const user = await registerUser(testApp.app, testApp.database, uniqueEmail(), 'password-123456')
-    seam.holder.model = mockModel([{ type: 'stream-start', warnings: [] }, { type: 'finish', finishReason: { unified: 'stop' }, usage: BASE_USAGE }]).model
+    seam.holder.model = mockModel([{ type: 'stream-start', warnings: [] }, { type: 'finish', finishReason: { unified: 'stop', raw: undefined }, usage: BASE_USAGE }]).model
     const response = await sseRequest(testApp.app, user, textBody)
     await response.text()
     const day = new Date().toISOString().slice(0, 10).replaceAll('-', '')

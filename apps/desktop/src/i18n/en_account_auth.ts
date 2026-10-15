@@ -1,6 +1,7 @@
 // The login gate's copy, composed by en.ts (and overridden per locale).
 
 export const enAccountAuth = {
+  signOutAction: 'Sign out',
   checking: 'Checking your sign-in…',
   unavailableTitle: 'Authentication service unavailable',
   unavailableBody: 'Could not reach the account service. Check your connection and try again.',

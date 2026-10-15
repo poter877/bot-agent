@@ -110,6 +110,7 @@ import {
   watchSessionTiles,
   WorkspaceTabMenu
 } from '../chat/session-tile'
+import { CloudComputerContributions } from '../cloud-computer/contributions'
 import { AppContextMenu } from '../context-menu/app-context-menu'
 import { HudShell } from '../hud/hud-shell'
 import { $terminalTakeover, setTerminalTakeover } from '../right-sidebar/store'
@@ -811,6 +812,7 @@ export function ContribController() {
     >
       <ContribWiring>
         <AppContextMenu />
+        <CloudComputerContributions />
         <div
           className="flex h-screen min-h-0 w-screen flex-col bg-(--ui-bg-chrome) text-(--ui-text-primary)"
           // Window-glass hook: this div and the sidebar-wrapper above it are

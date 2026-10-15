@@ -89,6 +89,14 @@ def build_models_payload(
     cannot stall the response (GUI picker opens). ``fast_custom_probe`` overrides the
     custom-endpoint discovery budget ``for_picker`` otherwise implies (1.5s vs 5s) — ``None`` keeps
     the coupling, ``False`` retains the full 5s budget (#103843)."""
+    from account_backend_session import company_backend_enabled
+    from hermes_cli.config import load_config_readonly
+
+    # The routing policy and model metadata must agree on the same profile snapshot.
+    metadata_config = load_config_readonly()
+    if company_backend_enabled(config=metadata_config):
+        from hermes_cli.inventory_company import build_company_model_payload
+        return build_company_model_payload(ctx.current_model, ctx.current_provider)
     from hermes_cli.model_switch import list_authenticated_providers
 
     rows = list_authenticated_providers(
@@ -146,17 +154,6 @@ def build_models_payload(
         rows = _reorder_canonical(rows)
     if pricing:
         _apply_pricing(rows, force_fresh_nous_tier=force_fresh_nous_tier, cached_only=pricing_cache_only)
-    # Both metadata decorators consult ``model_overrides``.  Snapshot the
-    # read-only config once for this payload rather than letting each model
-    # lookup reopen config.yaml through models_dev._cfg_get().
-    metadata_config = None
-    if capabilities or featured:
-        try:
-            from hermes_cli.config import load_config_readonly
-
-            metadata_config = load_config_readonly()
-        except Exception:
-            metadata_config = None
     if capabilities:
         _apply_capabilities(rows, metadata_config=metadata_config)
     if featured:
@@ -247,6 +244,8 @@ def build_model_options_payload(
         refresh=refresh, probe_custom_providers=refresh, probe_current_custom_provider=not refresh,
         non_blocking_catalogs=not refresh,
     )
+    if payload.get("managed"):
+        return payload
     _apply_limits(payload["providers"])
     _apply_usage(payload["providers"])
     if not refresh:

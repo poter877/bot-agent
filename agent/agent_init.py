@@ -1096,15 +1096,14 @@ def _load_tools(agent, enabled_toolsets, disabled_toolsets):
     # used it, once per process, before discovery so its tools are in this agent's snapshot.
     from hermes_cli.left_core_migration import recover_at_startup
     recover_at_startup(say=getattr(agent, "_emit_startup_warning", None))
-    # A multiplexed gateway may have switched HERMES_HOME since model_tools was imported;
-    # make sure this profile's plugins are discovered before the tool snapshot.
+    # Discover the active profile's plugins before freezing its tool snapshot.
     try:
         from hermes_cli.plugins import discover_plugins
         discover_plugins()
     except Exception:
         logger.warning("Plugin discovery failed during agent setup", exc_info=True)
 
-    # Capture the registry generation FIRST so a concurrent refresh can detect staleness.
+    # Capture generation before discovery to detect concurrent refreshes.
     try:
         from tools.registry import registry as _snapshot_registry
         agent._tool_snapshot_generation = _snapshot_registry._generation
@@ -1123,9 +1122,7 @@ def _load_tools(agent, enabled_toolsets, disabled_toolsets):
         agent.tools = [t for t in agent.tools if t["function"]["name"] not in drops]
 
     agent.valid_tool_names = {tool["function"]["name"] for tool in agent.tools} if agent.tools else set()
-    # Kanban guidance is session-static for the dispatcher-owned worker only. Profiles may
-    # expose kanban_show interactively, and children/cron runs inherit the env var, without
-    # owning a task.
+    # Only dispatcher-owned kanban workers receive this session-static guidance.
     from agent.delegation_context import owned_kanban_task
     from agent.prompt_builder import KANBAN_GUIDANCE
     agent._kanban_worker_guidance = (
@@ -1184,6 +1181,9 @@ def _init_session_state(agent, session_id, session_db, parent_session_id, reason
     checkpoints_enabled, checkpoint_max_snapshots, checkpoint_max_total_size_mb, checkpoint_max_file_size_mb):
     agent.session_start = datetime.now()
     agent.session_id = session_id or new_session_id(agent.session_start)
+    if "computer_use" in agent.valid_tool_names:
+        from tools.computer_use.session_provider import pin_computer_use_provider
+        pin_computer_use_provider(agent.session_id)
     _publish_session_id(agent.session_id)
 
     # ~/.hermes/sessions/ — kept unconditionally for request_dump_*.json debug breadcrumbs.
@@ -2369,7 +2369,9 @@ def init_agent(
     tool_result_metadata_callback: Optional[Callable[..., dict]] = None,
 ):
     _install_safe_stdio()
-
+    from agent.company_backend_policy import normalize_agent_route
+    provider, model, base_url, api_key, api_mode, capabilities, credential_pool, fallback_model = normalize_agent_route(
+        provider, model, base_url, api_key, api_mode, capabilities, credential_pool, fallback_model)
     _params = locals()
     for _name in _PASSTHROUGH_PARAMS:
         setattr(agent, _name, _params[_name])
@@ -2386,11 +2388,6 @@ def init_agent(
     # Skips the end-of-turn review fork (~30K tokens/event); one switch for both review paths.
     agent.skip_background_review = bool(skip_background_review)
     agent.log_prefix = f"{log_prefix} " if log_prefix else ""
-    # Effective base URL for feature detection (prompt caching, reasoning, etc.)
-    from hermes_cli.providers import is_actual_route
-    if is_actual_route(provider, base_url):
-        from hermes_cli.auth import normalize_actual_base_url
-        base_url = normalize_actual_base_url(base_url)
     agent.base_url = base_url or ""
     provider_name = provider.strip().lower() if isinstance(provider, str) and provider.strip() else None
     agent.provider = provider_name or ""
@@ -2447,6 +2444,8 @@ def init_agent(
     except Exception:
         _agent_cfg = {}
 
+    from agent.company_model_metadata import configure_company_agent
+    _agent_cfg = configure_company_agent(agent, _agent_cfg)
     _apply_display_config(agent, _agent_cfg, platform)
     _init_memory(agent, _agent_cfg, skip_memory, platform, memory_manager=memory_manager)
     _apply_agent_section(agent, _agent_cfg)

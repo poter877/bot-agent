@@ -39,6 +39,8 @@ interface ModelSelectProps {
   provider?: ModelOptionProvider
   /** Provider slug the id belongs to. Empty while none is picked. */
   providerSlug: string
+  /** The directory is authoritative even when a saved provider no longer exists. */
+  managed?: boolean
   models: readonly string[]
   onValueChange: (model: string) => void
   value: string
@@ -53,6 +55,7 @@ interface ModelSelectProps {
 export function ModelSelect({
   'aria-label': ariaLabel,
   className,
+  managed = false,
   models,
   onValueChange,
   provider,
@@ -61,6 +64,7 @@ export function ModelSelect({
 }: ModelSelectProps) {
   const { t } = useI18n()
   const m = t.settings.model
+  const catalogOnly = managed || provider?.managed === true
   const [typing, setTyping] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -92,7 +96,7 @@ export function ModelSelect({
     }
   }
 
-  if (typing) {
+  if (typing && !catalogOnly) {
     return (
       <Input
         aria-label={ariaLabel}
@@ -144,18 +148,20 @@ export function ModelSelect({
         <SelectValue placeholder={m.model} />
       </SelectTrigger>
       <SelectContent>
-        {withActive(models, value).map(model => (
+        {(catalogOnly ? models : withActive(models, value)).map(model => (
           <SelectItem key={model} value={toItemValue(model)}>
-            {model}
+            {provider?.display_names?.[model] ?? model}
           </SelectItem>
         ))}
-        <SelectSeparator />
-        <SelectItem className="text-muted-foreground" value={CUSTOM_ITEM}>
-          <span className="inline-flex items-center gap-1.5">
-            <Plus className="size-3" />
-            {m.customModel}
-          </span>
-        </SelectItem>
+        {!catalogOnly && <SelectSeparator />}
+        {!catalogOnly && (
+          <SelectItem className="text-muted-foreground" value={CUSTOM_ITEM}>
+            <span className="inline-flex items-center gap-1.5">
+              <Plus className="size-3" />
+              {m.customModel}
+            </span>
+          </SelectItem>
+        )}
       </SelectContent>
     </Select>
   )
