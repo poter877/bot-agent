@@ -48,7 +48,12 @@ def provider_configured() -> bool:
 
 def inference_available(*, assume_fresh: bool = False) -> bool:
     """Something can carry a first chat on this backend: the trial (claimed, or claimable now) or a
-    configured provider. One walk of the provider ladder answers both halves."""
+    configured provider. One walk of the provider ladder answers both halves. 公司模式下只有公司
+    后端能承载推理：Nous 来宾与试用从不参与，资格就是公司 provider 已配置。"""
+    from account_backend_session import company_backend_enabled
+
+    if company_backend_enabled():
+        return provider_configured()
     if anon_auth.free_inference_active():
         return True
     configured = provider_configured()
@@ -68,7 +73,9 @@ class _Ask:
 
 
 # Cheapest first; the last one reads the disk. Each is a reason the trial cannot be claimed.
+# Company mode blocks first: 桌面公司模式下推理只走公司后端，本地永不铸造厂商/免费层凭据。
 _CLAIM_BLOCKERS: tuple[tuple[str, Callable[[_Ask], bool]], ...] = (
+    ("company mode carries inference", lambda _ask: _company_mode()),
     ("not the desktop's local backend", lambda _ask: not anon_auth.on_local_desktop_backend()),
     ("guests are switched off", lambda _ask: not anon_auth.guest_allowed()),
     ("a Nous identity exists", lambda _ask: _has_nous_identity()),
@@ -76,6 +83,12 @@ _CLAIM_BLOCKERS: tuple[tuple[str, Callable[[_Ask], bool]], ...] = (
      lambda ask: provider_configured() if ask.configured is None else ask.configured),
     ("Hermes was used on this machine", lambda ask: _machine_is_used(ask.assume_fresh)),
 )
+
+
+def _company_mode() -> bool:
+    from account_backend_session import company_backend_enabled
+
+    return company_backend_enabled()
 
 
 def claim_blocker(*, assume_fresh: bool = False, configured: Optional[bool] = None) -> Optional[str]:

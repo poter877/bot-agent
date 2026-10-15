@@ -1,7 +1,13 @@
 """``onboarding.state`` / ``onboarding.start`` and the desktop's welcome trial: a new run on a first
 install claims it with the install already marked due, a rerun never does, a failed claim leaves no guest
 and no chat and the next launch still due, a blocked claim with nothing to run on opens no chat, and only
-the desktop's local backend opens onboarding by itself."""
+the desktop's local backend opens onboarding by itself.
+
+These tests document the trial MACHINERY with company mode explicitly off
+(``company_mode_off``): 公司模式下桌面推理只走公司后端，试用被
+``welcome_trial._CLAIM_BLOCKERS`` 首条拒绝（covered in
+tests/hermes_cli/test_welcome_trial_company_mode.py），本文件保住机制本身的
+回归覆盖（安装标记、崩溃恢复、共享 Nous store）。"""
 
 from __future__ import annotations
 
@@ -14,7 +20,7 @@ import pytest
 from agent.onboarding_flow import Facts
 from hermes_cli import anon_auth, install_state
 from tests.hermes_cli.anon_portal import as_local_desktop_backend, install_portal
-from tests.tui_gateway.company_mode import signed_in_company_session
+from tests.tui_gateway.company_mode import company_mode_off
 from tui_gateway import server
 
 
@@ -44,7 +50,7 @@ def _call(method: str, params: dict | None = None) -> dict:
 
 def test_a_new_run_on_a_first_install_claims_the_trial_once(portal, monkeypatch):
     as_local_desktop_backend(monkeypatch)
-    signed_in_company_session(monkeypatch)
+    company_mode_off(monkeypatch)
 
     assert _call("onboarding.state")["result"]["run"] is True
     assert _call("onboarding.state")["result"]["eligible"] is True
@@ -58,7 +64,7 @@ def test_a_new_run_on_a_first_install_claims_the_trial_once(portal, monkeypatch)
 
 def test_a_rerun_on_a_first_install_never_claims(portal, monkeypatch):
     as_local_desktop_backend(monkeypatch)
-    signed_in_company_session(monkeypatch)
+    company_mode_off(monkeypatch)
 
     _call("onboarding.start", {"rerun": True})
 
@@ -69,7 +75,7 @@ def test_a_failed_claim_opens_nothing_and_the_next_launch_tries_again(portal, mo
     from hermes_cli import free_tier_bootstrap
 
     as_local_desktop_backend(monkeypatch)
-    signed_in_company_session(monkeypatch)
+    company_mode_off(monkeypatch)
     free_tier_bootstrap.run_bootstrap(announce=False)  # the first boot latches the install as due
     portal.create_response = httpx.Response(503, json={"error": "unavailable"})
 
@@ -93,7 +99,7 @@ def test_a_trial_another_install_took_first_opens_no_chat_it_cannot_run(portal, 
     from hermes_cli import free_tier_bootstrap
 
     as_local_desktop_backend(monkeypatch)
-    signed_in_company_session(monkeypatch)
+    company_mode_off(monkeypatch)
     free_tier_bootstrap.run_bootstrap(announce=False)
     assert _call("onboarding.state")["result"]["eligible"] is True
     install_state.mark_machine_used()  # the other install's claim consumed the reservation
@@ -110,7 +116,7 @@ def test_a_trial_another_install_took_first_opens_no_chat_it_cannot_run(portal, 
 
 def test_a_crash_right_after_the_claim_keeps_onboarding_due(portal, monkeypatch):
     as_local_desktop_backend(monkeypatch)
-    signed_in_company_session(monkeypatch)
+    company_mode_off(monkeypatch)
 
     mark = install_state.mark_machine_used
 
@@ -131,7 +137,7 @@ def test_only_the_local_desktop_backend_opens_onboarding_by_itself(portal, root,
     assert _call("onboarding.state")["result"]["eligible"] is False   # CLI / SSH / URL backend
 
     as_local_desktop_backend(monkeypatch)
-    signed_in_company_session(monkeypatch)
+    company_mode_off(monkeypatch)
     install_state.mark_machine_used()
     assert _call("onboarding.state")["result"] == {"run": False, "eligible": False, "session_id": None, "run_id": None}
 
@@ -147,7 +153,7 @@ def test_eligible_follows_the_default_profile_not_the_launch_profile(portal, roo
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     (root / ".env").write_text("OPENROUTER_API_KEY=sk-or-test\n", encoding="utf-8")
     as_local_desktop_backend(monkeypatch)
-    signed_in_company_session(monkeypatch)
+    company_mode_off(monkeypatch)
     install_state.mark_machine_used()
 
     assert _call("onboarding.state")["result"]["eligible"] is True
@@ -156,7 +162,7 @@ def test_eligible_follows_the_default_profile_not_the_launch_profile(portal, roo
 def test_a_claim_refreshes_the_setup_record(portal, monkeypatch):
     from hermes_cli import free_tier_bootstrap
     as_local_desktop_backend(monkeypatch)
-    signed_in_company_session(monkeypatch)
+    company_mode_off(monkeypatch)
     free_tier_bootstrap.run_bootstrap(announce=False)
 
     assert "result" in _call("onboarding.start")
@@ -167,7 +173,7 @@ def test_a_claim_refreshes_the_setup_record(portal, monkeypatch):
 
 def test_the_dev_fresh_install_switch_treats_a_used_machine_as_new(portal, monkeypatch):
     as_local_desktop_backend(monkeypatch)
-    signed_in_company_session(monkeypatch)
+    company_mode_off(monkeypatch)
     install_state.mark_machine_used()
 
     assert _call("onboarding.state", {"assume_fresh": True})["result"]["run"] is True
@@ -179,7 +185,7 @@ def test_the_due_answer_is_worked_out_at_boot_and_served_from_there(portal, monk
     from hermes_cli import auth, free_tier_bootstrap
 
     as_local_desktop_backend(monkeypatch)
-    signed_in_company_session(monkeypatch)
+    company_mode_off(monkeypatch)
     free_tier_bootstrap.run_bootstrap(announce=False)
     real, callers = auth.resolve_provider, []
     monkeypatch.setattr(auth, "resolve_provider",
@@ -216,7 +222,7 @@ def test_the_cached_due_answer_follows_shared_auth_and_the_managed_layer(portal,
     managed.mkdir()
     monkeypatch.setenv("HERMES_MANAGED_DIR", str(managed))
     as_local_desktop_backend(monkeypatch)
-    signed_in_company_session(monkeypatch)
+    company_mode_off(monkeypatch)
     free_tier_bootstrap.run_bootstrap(announce=False)
     cached = _call("onboarding.state")["result"]
     assert (cached["run"], cached["eligible"]) == (True, True)

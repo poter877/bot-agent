@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
+
+logger = logging.getLogger(__name__)
 
 from account_backend_session import (
     AccountBackendError, AccountSessionBinding, account_session_fingerprint, account_session_lock,
@@ -64,6 +67,9 @@ def _scope_params(method: str, params: dict) -> dict:
     except server.ProfileUnavailableError:
         raise
     except Exception:
+        # Deliberate catch-all: the refinement is advisory, and a scrape that
+        # raced a concurrent _sessions mutation must not fail the RPC.
+        logger.debug("account guard scope refinement fell back to plain params", exc_info=True)
         return params
 
 

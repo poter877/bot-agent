@@ -121,6 +121,11 @@ def install_portal(monkeypatch, tmp_path, fake: FakePortal | None = None) -> Fak
     from hermes_cli import auth as auth_mod
 
     fake = fake or FakePortal()
+    # 假门户世界 = 公司模式关闭的世界：公司模式下试用被整体封堵
+    # （welcome_trial._CLAIM_BLOCKERS 首条），本 fixture 的机制覆盖因此显式关掉它。
+    from tests.tui_gateway.company_mode import company_mode_off
+
+    company_mode_off(monkeypatch)
     monkeypatch.setenv("HERMES_PORTAL_BASE_URL", PORTAL)
     monkeypatch.setenv("HERMES_ANON_API_SECRET", "test-secret")
     monkeypatch.setenv("HERMES_SHARED_AUTH_DIR", str(tmp_path / "shared-store"))
@@ -157,8 +162,12 @@ def claimed_trial(monkeypatch) -> dict:
     """A guest that claimed the welcome trial, read on the desktop's local backend: the state every
     free-model surface needs. Mints through the fake portal installed by ``install_portal``."""
     from hermes_cli import welcome_trial
+    from tests.tui_gateway.company_mode import company_mode_off
 
     as_local_desktop_backend(monkeypatch)
+    # 公司模式封堵试用（welcome_trial._CLAIM_BLOCKERS 首条）：铸造试用状态的
+    # 机制测试显式关闭公司模式，行为见 test_welcome_trial_company_mode.py。
+    company_mode_off(monkeypatch)
     state = welcome_trial.claim_desktop_free_tier()
     assert state is not None, welcome_trial.claim_blocker()
     return state

@@ -1,6 +1,8 @@
 """``free_tier.status`` / ``free_tier.ack_notice`` (pull) and the free-tier branch of ``billing.state``,
 driven through the registered RPC handlers against a claimed welcome trial on the desktop's local
-backend (the fake account service in ``tests.hermes_cli.anon_portal``)."""
+backend (the fake account service in ``tests.hermes_cli.anon_portal``). 公司模式下试用被整体封堵
+（tests/hermes_cli/test_welcome_trial_company_mode.py），本文件以 ``company_mode_off`` 保住
+免费层机制本身的回归覆盖。"""
 
 from __future__ import annotations
 
@@ -10,6 +12,7 @@ import tui_gateway.server as srv
 from hermes_cli import anon_auth, free_tier_offer
 from hermes_cli.auth import _auth_store_lock, _load_auth_store, _save_auth_store
 from tests.hermes_cli.anon_portal import as_local_desktop_backend, claimed_trial, install_portal
+from tests.tui_gateway.company_mode import company_mode_off
 
 
 def _call(method: str, params: dict | None = None) -> dict:
@@ -21,6 +24,7 @@ def nas(tmp_path, monkeypatch):
     """The fake account service, read on the desktop's local backend of a first install."""
     fake = install_portal(monkeypatch, tmp_path)
     as_local_desktop_backend(monkeypatch)
+    company_mode_off(monkeypatch)
     return fake
 
 

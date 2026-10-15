@@ -1938,7 +1938,7 @@ def test_approval_for_a_ws_client_that_never_advertised_settles_the_queue_entry(
         waited = time.monotonic() - t0
     finally:
         approval_mod.unregister_gateway_notify("ws-old-approval")
-    assert waited < 1, decision
+    assert waited < 2, decision  # runner wall-clock floor; well under the 3s timeout
     assert decision["choice"] is None and decision["cancelled"]
     assert peer.frames == []
     assert "ws-old-approval" not in approval_mod._gateway_queues

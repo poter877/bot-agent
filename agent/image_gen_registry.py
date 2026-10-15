@@ -29,7 +29,18 @@ def get_active_provider() -> Optional[ImageGenProvider]:
     :mod:`agent.web_search_registry`): an explicitly configured provider is returned
     even if ``is_available()`` is False, so the dispatcher surfaces a precise
     "X_API_KEY is not set" error instead of silently switching backends; only the
-    unconfigured fallback path is filtered by availability."""
+    unconfigured fallback path is filtered by availability.
+
+    Company mode returns None unconditionally: image-gen plugins hold vendor keys
+    and call vendor endpoints directly (doc《流式服务端重构》§6 — no vendor
+    credentials on the client), so until the backend serves image generation the
+    tool reports its standard not-configured state instead of bypassing Hono."""
+    from account_backend_session import company_backend_enabled
+
+    if company_backend_enabled():
+        logger.info("image_gen disabled: company mode routes every model service through the company backend")
+        return None
+
     configured = configured_provider_name("image_gen", logger)
     snapshot = _registry.merged()
     if configured:
