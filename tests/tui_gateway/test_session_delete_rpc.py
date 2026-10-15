@@ -84,6 +84,12 @@ def test_session_delete_fails_closed_when_active_snapshot_raises(monkeypatch):
             raise AssertionError("delete must not run when active snapshot fails")
 
     class _ExplodingDict:
+        # The real failure mode is a concurrent mutation surfacing on VALUES
+        # iteration; lookups (.get) keep working, and the admission guard and
+        # profile wrapper legitimately read them before the handler.
+        def get(self, key, default=None):
+            return default
+
         def values(self):
             raise RuntimeError("dictionary changed size during iteration")
 

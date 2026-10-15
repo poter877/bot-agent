@@ -12,6 +12,7 @@ from agent.onboarding import PROFILE_BUILD_FLAG
 from hermes_cli import profiles
 from hermes_cli.config import read_user_config_raw
 from tests.hermes_cli.anon_portal import as_local_desktop_backend
+from tests.tui_gateway.company_mode import signed_in_company_session
 
 
 @pytest.fixture
@@ -38,6 +39,7 @@ def test_state_answers_run_and_eligible(launched_under_work, monkeypatch):
     # The user's own "work" profile is install history, so an unset flag is not due, and on the
     # desktop's local backend nothing carries a first chat: the trial is never claimed on a used machine.
     as_local_desktop_backend(monkeypatch)
+    signed_in_company_session(monkeypatch)
     for var in ("OPENROUTER_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "NOUS_API_KEY"):
         monkeypatch.delenv(var, raising=False)
     assert _call("onboarding.state")["result"] == {"run": False, "eligible": False, "session_id": None, "run_id": None}

@@ -41,19 +41,30 @@ def clear_account_auth_cache() -> None:
 
 
 def _scope_params(method: str, params: dict) -> dict:
+    """Best-effort session/profile refinement for the policy lookup: it must
+    never raise anything but ProfileUnavailableError — test doubles, exotic
+    params objects and profile-home races fall through to the plain params and
+    the normal scoped worker path."""
     from tui_gateway import server
 
-    owner = params.get("owner")
-    scoped = params
-    if method in server._CONNECTOR_RPC_METHODS and isinstance(owner, dict) and owner.get("type") == "session":
-        scoped = {**params, "session_id": owner.get("session_id")}
-    session = server._sessions.get(str(scoped.get("session_id") or ""))
-    if isinstance(session, dict) and str(scoped.get("profile") or "").strip():
-        requested = server._profile_home(scoped["profile"]) or server._launch_home()
-        actual = session.get("profile_home") or server._launch_home()
-        if hermes_home_key(requested) != hermes_home_key(actual):
-            raise server.ProfileUnavailableError("The session belongs to a different profile.")
-    return scoped
+    if not isinstance(params, dict):
+        return params
+    try:
+        owner = params.get("owner")
+        scoped = params
+        if method in server._CONNECTOR_RPC_METHODS and isinstance(owner, dict) and owner.get("type") == "session":
+            scoped = {**params, "session_id": owner.get("session_id")}
+        session = server._sessions.get(str(scoped.get("session_id") or ""))
+        if isinstance(session, dict) and str(scoped.get("profile") or "").strip():
+            requested = server._profile_home(scoped["profile"]) or server._launch_home()
+            actual = session.get("profile_home") or server._launch_home()
+            if hermes_home_key(requested) != hermes_home_key(actual):
+                raise server.ProfileUnavailableError("The session belongs to a different profile.")
+        return scoped
+    except server.ProfileUnavailableError:
+        raise
+    except Exception:
+        return params
 
 
 def requires_account_worker(method: str, params: dict) -> bool:

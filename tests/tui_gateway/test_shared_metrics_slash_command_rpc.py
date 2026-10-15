@@ -15,6 +15,8 @@ def test_client_reports_the_command_and_gateway_hops_do_not_count(monkeypatch):
     calls: list[dict] = []
     monkeypatch.setattr(events, "record_slash_command", lambda **kw: calls.append(kw))
     monkeypatch.setenv("HERMES_DESKTOP", "1")
+    from tests.tui_gateway.company_mode import signed_in_company_session
+    signed_in_company_session(monkeypatch)
     monkeypatch.delenv("HERMES_DESKTOP_TERMINAL", raising=False)
     monkeypatch.setitem(server._methods, "slash.exec", lambda rid, params: server._ok(rid, {"output": "ok"}))
 
