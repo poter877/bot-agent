@@ -71,7 +71,7 @@ const DESKTOP_BRIDGE_HANDLERS: Record<string, (ctx: GatewayEventContext) => void
     // two connections can report the same session id, and a reaction from
     // source B would mutate the transcript source A is showing. The
     // dispatcher's `fromActiveSource()` compares the composite
-    // (connectionId, profile) scope — same gate as the setup.ready /
+    // (connectionId, profile) scope — same gate as the skin.changed
     // skin.changed broadcasts — so only the source that owns the visible
     // session paints. The overlay entry carries that scope, and a read
     // keys the displayed session's own source (see agentLiveReactions), so

@@ -3,8 +3,6 @@ import { useEffect, useState } from 'react'
 import { getStatus } from '@/hermes'
 import { type I18nContextValue, useI18n } from '@/i18n'
 import { evaluateRuntimeReadiness, type RuntimeReadinessResult } from '@/lib/runtime-readiness'
-import { $freeTierStatus, refreshFreeTierStatus, setFreeTierRoute } from '@/store/free-tier'
-import { $setupReadyTick } from '@/store/live-sync'
 import { dismissNotification, notify } from '@/store/notifications'
 import { $desktopOnboarding } from '@/store/onboarding'
 import type { StatusResponse } from '@/types/hermes'
@@ -14,16 +12,11 @@ import type { StatusResponse } from '@/types/hermes'
 // visibility listeners refresh immediately on return.
 const REFRESH_MS = 60_000
 
-// The scope the cached free-tier verdict was read under. Module-level because
-// $freeTierStatus is one app-wide atom, not per hook instance.
-let freeTierScope: string | undefined
-
 type GatewayRequester = <T = unknown>(method: string, params?: Record<string, unknown>) => Promise<T>
 
 export function useStatusSnapshot(
   gatewayState: string | undefined,
-  requestGateway: GatewayRequester,
-  gatewayScope: string = ''
+  requestGateway: GatewayRequester
 ): { inferenceStatus: RuntimeReadinessResult | null; statusSnapshot: StatusResponse | null } {
   const { t }: I18nContextValue = useI18n()
   const warningMessage: string = t.notifications.sharedProfileWarning
@@ -52,14 +45,6 @@ export function useStatusSnapshot(
     setStatusSnapshot(null)
     publishInferenceStatus(null)
 
-    // The free-tier verdict belongs to one profile too. Drop it on a real switch
-    // only: a flap on the same scope keeps the last answer (refreshFreeTierStatus).
-    if (freeTierScope !== undefined && freeTierScope !== gatewayScope) {
-      $freeTierStatus.set(null)
-    }
-
-    freeTierScope = gatewayScope
-
     // A closed/connecting gateway cannot have an authoritative live-runtime
     // result. Clear readiness before starting the REST status leg so a hung
     // getStatus() cannot leave a stale "ready" state visible after disconnect.
@@ -85,31 +70,19 @@ export function useStatusSnapshot(
       // user is working in another app.
       document.visibilityState === 'visible' && document.hasFocus()
 
-    // Inference readiness + the free-tier verdict. Not on the periodic tick:
-    // both change only at seams the backend announces (`setup.ready` at boot)
-    // or that this window crosses (open, return from another app), so they
-    // run once per seam instead of every 60s.
+    // Inference readiness. Not on the periodic tick: it changes only at seams
+    // this window crosses (open, return from another app, an auth success), so
+    // it runs once per seam instead of every 60s.
     const refreshReadiness = async () => {
       if (gatewayState !== 'open') {
         return
       }
 
-      // The free-tier verdict is a local, zero-network read that writes
-      // straight to its own store and swallows its failures — nothing here
-      // waits on it or reads the result. Unlike the readiness publish below,
-      // its write happens inside the store, so hand it this run's liveness: a
-      // reply that lands after a source/profile switch must not repaint the
-      // shared atom the new run already answered.
-      const [inferenceResult] = await Promise.allSettled([
-        evaluateRuntimeReadiness(requestGateway),
-        refreshFreeTierStatus(requestGateway, () => !cancelled)
-      ])
+      const inference = await evaluateRuntimeReadiness(requestGateway)
 
-      if (cancelled || inferenceResult.status !== 'fulfilled') {
+      if (cancelled) {
         return
       }
-
-      const inference = inferenceResult.value
 
       if (inference.source !== 'fallback') {
         // runtime_check/setup_status returned an authoritative boolean.
@@ -118,7 +91,6 @@ export function useStatusSnapshot(
         // became unconfigured. Keep the last authoritative result instead
         // of flashing "Inference not ready" during a gateway flap.
         publishInferenceStatus(inference)
-        setFreeTierRoute(inference.freeTier)
       }
     }
 
@@ -176,12 +148,6 @@ export function useStatusSnapshot(
       }
     }
 
-    // `setup.ready` (routed by the gateway-event lifecycle handler for the
-    // active source only) says the boot bootstrap just settled the route: one
-    // readiness round now, so the chip/strip/onboarding move at once. Rides
-    // outside the status tick so it neither resets nor waits on the timer.
-    const unsubscribeSetupReady = $setupReadyTick.listen(() => void refreshReadiness())
-
     // An OAuth sign-in updates backend readiness, but ambient polling is
     // skipped while the window is unfocused — so a stale credential failure can
     // linger indefinitely if the user stays in the browser after completing the
@@ -212,7 +178,6 @@ export function useStatusSnapshot(
     return () => {
       cancelled = true
       unsubscribeOnboarding()
-      unsubscribeSetupReady()
       document.removeEventListener('visibilitychange', onReturn)
       window.removeEventListener('focus', onReturn)
 
@@ -224,7 +189,7 @@ export function useStatusSnapshot(
         window.clearTimeout(timer)
       }
     }
-  }, [gatewayScope, gatewayState, requestGateway, warningMessage])
+  }, [gatewayState, requestGateway, warningMessage])
 
   return { inferenceStatus, statusSnapshot }
 }

@@ -10,7 +10,6 @@ import { triggerHaptic } from '@/lib/haptics'
 import { billingCtaLabel, clearBillingBlock, runBillingRecovery, setBillingBlock } from '@/store/billing-block'
 import { clearSettledClarifyRequest } from '@/store/clarify'
 import { setSessionCompacting } from '@/store/compaction'
-import { noteFreeTierTurnComplete } from '@/store/free-tier-sign-in'
 import { notify } from '@/store/notifications'
 import { flashPetActivity, markPetUnread, setPetActivity } from '@/store/pet'
 import { clearAllPrompts } from '@/store/prompts'
@@ -387,10 +386,6 @@ export function handleMessageStreamEvent(ctx: GatewayEventContext): boolean {
       typeof payload?.status === 'string' ? payload.status : undefined,
       payload?.response_reused === true
     )
-
-    if (payload?.status === 'complete') {
-      noteFreeTierTurnComplete()
-    }
 
     // Structured billing wall forwarded by the gateway (out of credits /
     // payment required) — cache it + raise a billing-specific toast.

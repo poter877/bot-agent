@@ -77,9 +77,6 @@ export function toggleSimpleMode() {
 /** What a policy may look at when its answer depends on the install. */
 export interface ModeContext {
   connectionCount: number
-  /** A signed-out free-tier user with no setup in progress: the statusbar's
-   *  Sign in chip is their standing way to sign in. */
-  freeTierSignInOpen: boolean
   /** The first-run onboarding is open; its account and download progress live in the statusbar. */
   onboardingOpen: boolean
   profileCount: number
@@ -116,9 +113,8 @@ const SIMPLE_POLICY: PolicyTable = {
   reviewOpen: false,
   // What was said and when — cost, tokens, PR and profile chips are readouts.
   sidebarRowMeta: ['preview', 'updated'],
-  // The bar carries the free tier's Sign in chip, the one standing way in to a
-  // sign-in, and onboarding's account progress. It rests hidden otherwise.
-  statusbarVisible: context => context.freeTierSignInOpen || context.onboardingOpen,
+  // The bar carries onboarding's account progress. It rests hidden otherwise.
+  statusbarVisible: context => context.onboardingOpen,
   terminalOpen: false,
   // Product summaries; the technical payload view is the instrumentation itself.
   toolViewMode: 'product'
@@ -134,12 +130,11 @@ const POLICY: Record<InterfaceMode, PolicyTable> = {
 /** Does this mode have an opinion about the surface at all? */
 const shadows = (key: ModePolicyKey, mode: InterfaceMode) => key in POLICY[mode]
 
-// The install facts a policy may consult. Fed by the app shell (profiles, gateways, free tier),
+// The install facts a policy may consult. Fed by the app shell (profiles, gateways, onboarding),
 // kept off this module's imports so preference stores can depend on it without
 // dragging the session graph in.
 export const $modeContext = atom<ModeContext>({
   connectionCount: 1,
-  freeTierSignInOpen: false,
   onboardingOpen: false,
   profileCount: 1
 })

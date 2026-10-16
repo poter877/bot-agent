@@ -19,10 +19,10 @@ import {
 const CHOICES: readonly SharedMetricsChoice[] = ['share', 'local', 'off']
 
 /**
- * The first-run shared-metrics offer, in the composer status stack beside the
- * free-tier strip: it never blocks the composer or takes focus, and it stays
- * until one of the three equal answers is saved (the backend's `decided` is
- * the only latch). "Details" opens the full explainer the host paints.
+ * The first-run shared-metrics offer, in the composer status stack: it never
+ * blocks the composer or takes focus, and it stays until one of the three
+ * equal answers is saved (the backend's `decided` is the only latch).
+ * "Details" opens the full explainer the host paints.
  */
 export function SharedMetricsConsentStrip() {
   const { requestGateway } = useGatewayRequest()

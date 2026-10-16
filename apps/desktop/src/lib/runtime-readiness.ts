@@ -5,25 +5,13 @@ export interface SetupStatusSnapshot {
    *  ones). Carried for consumers that read the record — readiness itself
    *  still keys on `provider_configured` + `setup.runtime_check`. */
   ready?: boolean
-  free_tier_account?: boolean
-  free_tier_route?: boolean
   other_providers?: boolean
   inference_provider?: string
-  /** Present only when the boot bootstrap could not create the free-tier
-   *  identity: the failure code, its sentence, and whether / when a retry can
-   *  succeed. Same shape as `free_tier.status`. */
-  error?: string
-  error_code?: string
-  retryable?: boolean
-  retry_after?: number
 }
 
 export interface RuntimeCheckSnapshot {
   managed?: boolean
   error?: string
-  /** True when the resolved route is the free tier rather than a credential of
-   *  the user's own. Absent on older backends. */
-  free_tier_route?: boolean
   model?: string
   ok?: boolean
   provider?: string
@@ -45,10 +33,6 @@ export interface RuntimeReadinessOptions {
 export interface RuntimeReadinessResult {
   managed?: boolean
   checksDisagree: boolean
-  /** Passed through from `setup.runtime_check`: the resolved route is the free
-   *  tier. Undefined when the check did not answer (older backend, transport
-   *  fallback) — never read it as "not free tier". */
-  freeTier?: boolean
   /** Passed through from `setup.runtime_check`: the model the route resolved
    *  to. Undefined when the check did not answer. */
   model?: string
@@ -128,6 +112,7 @@ function companyReadiness(
   if (!signals.setup?.managed && !signals.runtime?.managed) {
     return null
   }
+
   return {
     managed: true,
     checksDisagree: false,
@@ -151,16 +136,16 @@ export function interpretRuntimeReadiness(
   const runtimeFailure = normalizeMessage(signals.runtime?.error) ?? normalizeMessage(signals.runtimeError)
   const setupFailure = normalizeMessage(signals.setupError)
 
-  // Route facts the check reported, carried through untouched so consumers
-  // (free-tier chrome) don't have to re-issue setup.runtime_check. Left
-  // undefined when the check said nothing — "absent" and "false" differ.
+  // Route fact the check reported, carried through untouched so consumers
+  // don't have to re-issue setup.runtime_check. Left undefined when the check
+  // said nothing.
   const route = {
-    freeTier: typeof signals.runtime?.free_tier_route === 'boolean' ? signals.runtime.free_tier_route : undefined,
     model: normalizeMessage(signals.runtime?.model) ?? undefined
   }
 
   const checksDisagree = readinessChecksDisagree(setupConfigured, runtimeOk)
   const company = companyReadiness(signals, runtimeOk, runtimeFailure ?? setupFailure)
+
   if (company) {
     return { ...route, ...company }
   }

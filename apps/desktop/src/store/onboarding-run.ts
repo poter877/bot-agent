@@ -4,7 +4,7 @@
  *
  * This module is the one writer of `$onboardingPhase` and of the `onboarding` presence surface. The
  * surface is open while a run is starting or its chat is on screen; in any other chat the app behaves
- * as it does outside onboarding (tips, the sign-in offer). The backend owns whether onboarding is due
+ * as it does outside onboarding. The backend owns whether onboarding is due
  * (`onboarding.state`) and writes the install-level flag when a run ends.
  */
 
@@ -20,10 +20,8 @@ import { atom, computed } from 'nanostores'
 import { getRuntimeI18nLocale } from '@/i18n/runtime'
 import type { GatewayRequester } from '@/lib/yolo-session'
 
-import { ackFreeTierNotice } from './free-tier'
 import { activeGatewayConnectionId } from './gateway'
 import { $gatewayReadyAt } from './live-sync'
-import { clearFreeTierIntro } from './onboarding'
 import { $decideExit } from './onboarding-intro'
 import { $onboardingPhase } from './onboarding-phase'
 import { markOnboardingDecided, ONBOARDING_DECIDE_OFFER_MS, setOnboardingSurfaceActive } from './onboarding-presence'
@@ -181,7 +179,6 @@ export async function startOnboarding(
 
     if (intro) {
       intro.opened(started)
-      ackFreeTierIntro(request)
     }
 
     return true
@@ -198,16 +195,6 @@ export async function startOnboarding(
   }
 }
 
-// The onboarding intro is the free-tier introduction, as on main: the ready screen must not follow it.
-function ackFreeTierIntro(request: OnboardingRequest): void {
-  clearFreeTierIntro()
-  void ackFreeTierNotice(request).then(acked => {
-    if (acked) {
-      clearFreeTierIntro()
-    }
-  })
-}
-
 // Skip setup's ending, like main's: the run is over and a fresh chat opens in the onboarding profile.
 function leaveSkipped(): void {
   endOnboarding('skipped')
@@ -218,7 +205,7 @@ let decision: null | Promise<void> = null
 
 /**
  * The main window's boot check, once per launch: open onboarding when the backend says it is due on
- * this install and the free tier can drive it. The launch starts the run over (`freshLaunch`); a
+ * this install. The launch starts the run over (`freshLaunch`); a
  * reconnect later in the launch only re-reads it (`watchRunEnd`). First-run surfaces wait until this has answered; the
  * presence surface is set before the answer is published, so they never see a clear moment in between.
  */

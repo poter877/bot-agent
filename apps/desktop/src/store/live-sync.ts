@@ -34,18 +34,10 @@ export interface PetChangeMeta {
 
 export const $petChange = atom<{ meta?: PetChangeMeta; tick: number }>({ tick: 0 })
 
-/** `setup.ready` — the boot bootstrap (free-tier identity + provider resolution)
- *  finished, so inference readiness and the free-tier verdict may have just
- *  changed. One-shot: the status snapshot re-reads both legs once instead of
- *  waiting for its next ambient tick. */
-export const $setupReadyTick = atom(0)
-
 /** Monotonic clock for "how fresh is this backend boot?" — bumped on every
- *  `setup.ready` from the active source and on every gateway switch/wipe, so
- *  onboarding can tell a round that answered inside the boot window (secrets
- *  may still be hydrating; a `runtime_check` ok:false is not yet evidence)
- *  from a steady-state one. Kept here, beside the tick, so both come from the
- *  same lifecycle seam. */
+ *  gateway switch/wipe, so onboarding can tell a round that answered inside
+ *  the boot window (secrets may still be hydrating; a `runtime_check` ok:false
+ *  is not yet evidence) from a steady-state one. */
 export const $gatewayBootGeneration = atom(0)
 
 /** When the active source's socket last said `gateway.ready` (the backend dispatches requests from
@@ -82,11 +74,6 @@ export function notifyProjectsChanged(): void {
 
 export function notifyPairingChanged(): void {
   $pairingChangeTick.set($pairingChangeTick.get() + 1)
-}
-
-export function notifySetupReady(): void {
-  $setupReadyTick.set($setupReadyTick.get() + 1)
-  $gatewayBootGeneration.set($gatewayBootGeneration.get() + 1)
 }
 
 /** Reset on gateway wipe/reconnect — a new backend re-advertises capability on

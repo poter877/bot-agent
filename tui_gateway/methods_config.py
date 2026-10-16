@@ -57,7 +57,7 @@ _READINESS_SHARE_WAIT_SECONDS = 4.0
 # the grace, so overlapping polls still cannot starve the pool (#65151).
 _READINESS_JOIN_GRACE_SECONDS = 0.5
 # setup.status's probe legitimately blocks on the boot bootstrap's record
-# (free_tier_bootstrap.SETUP_READY_WAIT_SECONDS = 8s): its join budget must
+# (the boot bootstrap's SETUP_READY_WAIT_SECONDS = 8s): its join budget must
 # cover that wait or every boot poll would answer the retryable error.
 _READINESS_STATUS_SHARE_WAIT_SECONDS = 12.0
 # Retryable-transient code for "the probe is still running / outlived its
@@ -383,43 +383,16 @@ def _readiness_check(rid, params, probe, *, probe_key, wait_seconds):
 
 @method("setup.status")
 def _(rid, params: dict) -> dict:
-    """Loose provider check; ``profile`` (optional) scopes it to that profile's home.
-
-    For the launch profile the answer is the boot bootstrap's record (``free_tier_bootstrap``):
-    the call blocks up to ``SETUP_READY_WAIT_SECONDS`` for it, so a client's first poll lands after
-    the free-tier identity exists (or has been refused) rather than racing the mint. A record that
-    says ``False`` is reconciled with the config files first (``reconcile_record``): a provider
-    added after boot — the Models page, a picker key, ``hermes setup`` from a shell — flips it
-    without a restart. If the record
-    is still missing after the wait, or a named profile is asked about, today's live probe answers.
-    The record's fields ride along additively (``ready``, ``free_tier_account``, ``free_tier_route``,
-    ``other_providers``)."""
+    """Loose provider check; ``profile`` (optional) scopes it to that profile's home."""
     try:
-        from hermes_cli.anon_auth import free_tier_route
         from hermes_cli.main import _has_any_provider_configured
-        from hermes_cli.free_tier_bootstrap import wait_for_record
 
         def probe(profile, scoped):
             from tui_gateway.company_models import company_setup_status
             if (managed := company_setup_status()) is not None:
                 return {**managed, **scoped}
-            record = None if profile else wait_for_record()
-            if record is None:
-                # ``ready`` = this process's boot bootstrap has settled (a named profile has no
-                # record of its own; the launch record says whether the free tier is minted).
-                # Since one host backend serves every profile (#118246), the desktop's
-                # named-profile probe lands here too.
-                launch = wait_for_record() if profile else None
-                return {"provider_configured": bool(_has_any_provider_configured(strict_profile_scope=bool(profile))),
-                        **({"ready": True, "free_tier_account": launch.free_tier_account,
-                            "free_tier_route": free_tier_route()} if launch is not None else {}),
-                        **scoped}
-            # ``failure_fields`` rides along only when the free-tier mint did not happen: the code,
-            # the sentence, and whether / when a retry can succeed (``free_tier.provision``).
-            return {"provider_configured": record.provider_configured, "ready": True,
-                    "free_tier_account": record.free_tier_account, "free_tier_route": record.free_tier_route,
-                    "other_providers": record.other_providers,
-                    "inference_provider": record.inference_provider, **record.failure_fields(), **scoped}
+            return {"provider_configured": bool(_has_any_provider_configured(strict_profile_scope=bool(profile))),
+                    **scoped}
         return _readiness_check(rid, params, probe, probe_key="status",
                                 wait_seconds=_READINESS_STATUS_SHARE_WAIT_SECONDS)
     except Exception as e:
@@ -476,13 +449,8 @@ def _(rid, params: dict) -> dict:
             if not (callable(api_key) or api_key_text in {"aws-sdk", "no-key-required"}
                     or has_usable_secret(api_key_text) or bool(runtime.get("command"))):
                 return fail(f"No usable credentials found for {blamed}.", runtime.get("source"))
-            from hermes_cli.anon_auth import route_is_welcome_host
-            # free_tier_route is keyed on the SELECTED route (the welcome host serves only nous/welcome), not
-            # on profile state: a paid Nous key beside a free-tier identity must not read as free.
             return {"ok": True, "provider": runtime.get("provider"), "model": model,
-                    "source": runtime.get("source"),
-                    "free_tier_route": provider == "nous" and route_is_welcome_host(runtime.get("base_url")),
-                    **scoped}
+                    "source": runtime.get("source"), **scoped}
         return _readiness_check(rid, params, probe, probe_key=f"runtime:{requested or ''}",
                                 wait_seconds=_READINESS_SHARE_WAIT_SECONDS)
     except Exception as e:

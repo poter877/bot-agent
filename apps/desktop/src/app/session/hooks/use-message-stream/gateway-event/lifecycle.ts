@@ -11,7 +11,6 @@ import {
   notifyPlatformsChanged,
   notifyProjectsChanged,
   notifySessionsChanged,
-  notifySetupReady,
   type PetChangeMeta,
   setChangeEventsAvailable
 } from '@/store/live-sync'
@@ -37,26 +36,12 @@ function onGatewayReady(ready: GatewayEvent<'gateway.ready'>['payload'], activeS
   }
 }
 
-/** gateway.ready / setup.ready / skin.changed / change-watcher broadcasts / session.reclaimed. */
+/** gateway.ready / skin.changed / change-watcher broadcasts / session.reclaimed. */
 export function handleLifecycleEvent(ctx: GatewayEventContext): boolean {
   const { deps, event, payload, fromActiveSource } = ctx
 
   if (event.type === 'gateway.ready') {
     onGatewayReady((event as GatewayEvent<'gateway.ready'>).payload, fromActiveSource())
-
-    return true
-  }
-
-  if (event.type === 'setup.ready') {
-    // The boot bootstrap (hermes_cli/free_tier_bootstrap.py) resolved the
-    // free-tier identity and the inference route, and broadcast once. The
-    // payload is only a hint — the status snapshot re-reads `setup.status` /
-    // `setup.runtime_check` / `free_tier.status` through its own scoped
-    // requester so the chip, strip and onboarding react now rather than on
-    // the next ambient tick. Only the active source's boot matters here.
-    if (fromActiveSource()) {
-      notifySetupReady()
-    }
 
     return true
   }

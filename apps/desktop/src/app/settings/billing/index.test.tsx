@@ -5,7 +5,6 @@ import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { type I18nContextValue, I18nProvider, useI18n } from '@/i18n'
-import { $freeTierSignIn } from '@/store/free-tier-sign-in'
 
 import { formatMoney } from './billing-amounts'
 import {
@@ -34,6 +33,12 @@ const apiMocks = vi.hoisted(() => ({
   stepUp: vi.fn(),
   updateAutoReload: vi.fn()
 }))
+
+const onboardingMocks = vi.hoisted(() => ({
+  startManualProviderOAuth: vi.fn()
+}))
+
+vi.mock('@/store/onboarding', () => onboardingMocks)
 
 vi.mock('./api', () => ({
   // Pass-through provider — the mocked useBillingApi ignores any override anyway.
@@ -596,18 +601,16 @@ describe('BillingSettings', () => {
     )
   })
 
-  it('renders logged-out as a connect card whose sign-in opens the shared dialog', async () => {
+  it('renders logged-out as a connect card whose sign-in opens the in-app OAuth flow', async () => {
     apiMocks.fetchBillingState.mockResolvedValue(okBilling(loggedOutBillingState))
     apiMocks.fetchSubscriptionState.mockResolvedValue(okSubscription(loggedOutSubscriptionState))
-    $freeTierSignIn.set({ status: 'closed' })
 
     renderBilling()
 
     expect(await screen.findByText('Connect your Nous account')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
-    expect($freeTierSignIn.get()).toEqual({ status: 'requested' })
+    expect(onboardingMocks.startManualProviderOAuth).toHaveBeenCalledWith('nous')
     expect(apiMocks.openExternal).not.toHaveBeenCalled()
-    $freeTierSignIn.set({ status: 'closed' })
     expect(screen.queryByText('Payment method')).toBeNull()
     expect(screen.queryByText('Usage')).toBeNull()
   })

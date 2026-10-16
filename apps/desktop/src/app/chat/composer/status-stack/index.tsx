@@ -1,5 +1,6 @@
 import { useStore } from '@nanostores/react'
-import { type ReactNode, useEffect, useMemo } from 'react'
+import { atom } from 'nanostores'
+import { type ReactNode, useEffect, useId, useMemo } from 'react'
 import { useNavigate } from 'react-router'
 
 import { blurComposerInput } from '@/app/chat/composer/focus'
@@ -10,7 +11,6 @@ import type { SubmitTextOptions } from '@/app/session/hooks/use-prompt-actions/u
 import { BillingBanner } from '@/components/billing-banner'
 import { composerDockCard } from '@/components/chat/composer-dock'
 import { StatusSection } from '@/components/chat/status-section'
-import { FreeTierNoticeStrip, useFreeTierNoticeOwner } from '@/components/free-tier/notice-strip'
 import { usePaneVisible } from '@/components/pane-shell/pane-visibility'
 import { SharedMetricsConsentStrip } from '@/components/shared-metrics/consent-strip'
 import { Button } from '@/components/ui/button'
@@ -31,7 +31,6 @@ import {
   type StatusGroup,
   stopBackgroundProcess
 } from '@/store/composer-status'
-import { $freeTierRoute, $freeTierStatus, freeTierStripPending } from '@/store/free-tier'
 import { $interfaceMode, shownInMode, type Tiered } from '@/store/interface-mode'
 import { $previewStatusBySession, dismissPreviewArtifact } from '@/store/preview-status'
 import { $sessionControlBySession, refreshSessionControl } from '@/store/session-control'
@@ -104,6 +103,31 @@ interface ComposerStatusStackProps {
   sessionId: null | string
 }
 
+// One claimed owner across every mounted composer, so a split view shows the
+// shared-metrics offer once — and a non-owning stack adds no empty row to its
+// card. When the owner unmounts it releases the claim; a composer still
+// mounted takes it over, so the offer does not vanish until some later mount.
+const $metricsOfferClaim = atom<null | string>(null)
+
+function useSharedMetricsOfferOwner(): boolean {
+  const id = useId()
+  const claim = useStore($metricsOfferClaim)
+
+  useEffect(() => {
+    if ($metricsOfferClaim.get() === null) {
+      $metricsOfferClaim.set(id)
+    }
+
+    return () => {
+      if ($metricsOfferClaim.get() === id) {
+        $metricsOfferClaim.set(null)
+      }
+    }
+  }, [claim, id])
+
+  return claim === id
+}
+
 /**
  * The status "sink" above the composer: one card (the queue's chrome) holding
  * every session-scoped status — subagents, background tasks, queue — grouped by
@@ -138,15 +162,10 @@ export function ComposerStatusStack({ onSubmit, queue, sessionId }: ComposerStat
   )
 
   const billing = useStore($billingBlock)
-  const freeTierStatus = useStore($freeTierStatus)
-  const freeTierRoute = useStore($freeTierRoute)
-  // One claimed owner across every mounted composer, so a split view shows the
-  // notice once — and a non-owning stack adds no empty row to its card.
-  const ownsFreeTierNotice = useFreeTierNoticeOwner()
-  const freeTierNotice = ownsFreeTierNotice && freeTierStripPending(freeTierStatus, freeTierRoute)
-  // Same single owner, one offer at a time: the metrics question waits for the free-tier notice.
+  // One claimed owner, one offer at a time.
+  const ownsMetricsOffer = useSharedMetricsOfferOwner()
   const sharedMetricsConsent = useStore($sharedMetricsConsent)
-  const sharedMetricsOffer = ownsFreeTierNotice && !freeTierNotice && sharedMetricsOfferPending(sharedMetricsConsent)
+  const sharedMetricsOffer = ownsMetricsOffer && sharedMetricsOfferPending(sharedMetricsConsent)
 
   const isStructuredSupported = controlEntry?.capability === 'supported'
 
@@ -230,12 +249,8 @@ export function ComposerStatusStack({ onSubmit, queue, sessionId }: ComposerStat
   }
 
   // Below the billing wall (a blocker outranks an offer), above everything the
-  // session itself is doing. The strip retires itself the moment any of its
-  // actions acks the notice.
-  if (freeTierNotice) {
-    sections.push({ key: 'free-tier', node: <FreeTierNoticeStrip /> })
-  }
-
+  // session itself is doing. The strip retires itself the moment its question
+  // is answered.
   if (sharedMetricsOffer) {
     sections.push({ key: 'shared-metrics', node: <SharedMetricsConsentStrip /> })
   }

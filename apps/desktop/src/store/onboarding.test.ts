@@ -34,7 +34,6 @@ function baseState(overrides: Partial<DesktopOnboardingState> = {}): DesktopOnbo
     firstRunSkipped: false,
     manual: false,
     localEndpoint: false,
-    freeTierReady: false,
     ...overrides
   }
 }
@@ -305,17 +304,17 @@ describe('refreshOnboarding', () => {
   })
 
   it('does not downgrade a configured install when the boot race answers ok:false', async () => {
-    const { notifySetupReady } = await import('@/store/live-sync')
+    const { resetLiveSync } = await import('@/store/live-sync')
 
     installApiMock(vi.fn())
-    // Fully configured install (durable cache present), backend just booted:
-    // setup.ready bumped the boot generation moments ago. The runtime_check
+    // Fully configured install (durable cache present), the gateway just came
+    // up: the boot generation was bumped moments ago. The runtime_check
     // answers ok:false because the external secret source (BWS) has not
     // hydrated yet — a hydration race, not a credential verdict (#124939).
     window.localStorage.setItem('hermes-desktop-onboarded-v1', '1')
     $desktopOnboarding.set(baseState({ configured: true, providers: null, requested: false }))
 
-    notifySetupReady()
+    resetLiveSync()
 
     const ready = await refreshOnboarding(onboardingContext(emptyOpenRouterGateway()))
 
@@ -325,7 +324,7 @@ describe('refreshOnboarding', () => {
   })
 
   it('still downgrades when the same ok:false arrives long after boot', async () => {
-    const { notifySetupReady } = await import('@/store/live-sync')
+    const { resetLiveSync } = await import('@/store/live-sync')
 
     installApiMock(vi.fn())
     window.localStorage.setItem('hermes-desktop-onboarded-v1', '1')
@@ -333,7 +332,7 @@ describe('refreshOnboarding', () => {
 
     // Boot happened, then the grace window elapsed: an ok:false now is a real
     // verdict (the secret source had its chance), so onboarding must surface.
-    notifySetupReady()
+    resetLiveSync()
     const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 60_000)
 
     try {
@@ -368,8 +367,8 @@ describe('refreshOnboarding', () => {
   })
 
   it('enters setup when the selected OpenRouter credential is genuinely empty', async () => {
-    // Outside the boot window: no setup.ready bump precedes the round, so an
-    // answered ok:false is a real verdict, not a hydration race.
+    // Outside the boot window: no boot-generation bump precedes the round, so
+    // an answered ok:false is a real verdict, not a hydration race.
     installApiMock(vi.fn())
     window.localStorage.setItem('hermes-desktop-onboarded-v1', '1')
     $desktopOnboarding.set(

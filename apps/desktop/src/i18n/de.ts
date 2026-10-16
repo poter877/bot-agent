@@ -5138,34 +5138,6 @@ export const deOverrides = {
         disk_full: {
           title: 'Festplatte voll',
           body: 'Ihre Festplatte ist voll, daher konnte Hermes dieses Gespräch nicht speichern. Geben Sie Speicherplatz frei und versuchen Sie es erneut.'
-        },
-        free_tier_disabled: {
-          title: 'Chatten ohne Anmeldung ist gerade abgeschaltet',
-          body: 'Melden Sie sich mit einem Nous-Konto an, um weiterzuschreiben – es ist kostenlos.'
-        },
-        free_tier_rate_limited: {
-          title: 'Sie haben das Kontingent für Chats ohne Anmeldung aufgebraucht',
-          body: 'Es wird bald wieder aufgefüllt. Melden Sie sich mit einem Nous-Konto an, um ein größeres Kontingent zu erhalten – es ist kostenlos.'
-        },
-        free_tier_at_capacity: {
-          title: 'Chatten ohne Anmeldung ist gerade sehr stark ausgelastet',
-          body: 'Melden Sie sich an, um die Warteschlange zu überspringen – es ist kostenlos –, oder versuchen Sie es später erneut.'
-        },
-        free_tier_model_not_free: {
-          title: 'Dieses Modell gibt es ohne Anmeldung nicht',
-          body: 'Hermes verwendet vorerst das kostenlose Modell. Melden Sie sich mit einem Nous-Konto an, um mehr Modelle zu nutzen – es ist kostenlos.'
-        },
-        free_tier_route: {
-          title: 'Hermes hat das kostenlose Modell über diese Route nicht erreicht',
-          body: 'Melden Sie sich mit einem Nous-Konto an – es ist kostenlos – oder prüfen Sie die Einstellung NOUS_INFERENCE_BASE_URL.'
-        },
-        free_tier_outage: {
-          title: 'Das kostenlose Modell antwortet gerade schlecht',
-          body: 'Versuchen Sie in einer Minute, Ihre Nachricht erneut zu senden.'
-        },
-        free_tier_refused: {
-          title: 'Hermes konnte das ohne Anmeldung nicht senden',
-          body: 'Eine Anmeldung mit einem Nous-Konto ist kostenlos.'
         }
       },
       errorAuthKinds: {

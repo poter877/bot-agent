@@ -90,7 +90,7 @@ function NoticeCard({ notice }: { notice: BillingNoticeView }) {
       </div>
       {notice.action &&
         (notice.action.onSelect ? (
-          // In-app action (free-tier sign-in): a plain button, no external-link
+          // In-app action (the sign-in): a plain button, no external-link
           // glyph — nothing leaves the app.
           <Button className="mt-3" onClick={notice.action.onSelect} size="sm" type="button" variant="outline">
             {notice.action.label}
@@ -540,11 +540,6 @@ function BillingSettingsContent({
       {view.plan && (
         <SettingsSection icon={Package} title={b.sections.plan}>
           <CurrentPlanCard onViewPlans={() => setSubView('plans')} plan={view.plan} />
-          {view.planFootnote && (
-            <div className="mt-1 text-[length:var(--conversation-caption-font-size)] text-(--ui-text-tertiary)">
-              {view.planFootnote}
-            </div>
-          )}
         </SettingsSection>
       )}
 

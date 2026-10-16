@@ -5132,34 +5132,6 @@ export const esOverrides = {
         disk_full: {
           title: 'Disco lleno',
           body: 'Tu disco está lleno, así que Hermes no pudo guardar esta conversación. Libera espacio y reinténtalo.'
-        },
-        free_tier_disabled: {
-          title: 'El uso de Hermes sin iniciar sesión está desactivado ahora mismo',
-          body: 'Inicia sesión con una cuenta de Nous para seguir chateando; es gratis.'
-        },
-        free_tier_rate_limited: {
-          title: 'Agotaste el cupo para chatear sin iniciar sesión',
-          body: 'Se renueva en breve. Inicia sesión con una cuenta de Nous para tener un cupo mayor; es gratis.'
-        },
-        free_tier_at_capacity: {
-          title: 'Chatear sin iniciar sesión está muy solicitado ahora mismo',
-          body: 'Inicia sesión para saltarte la cola (es gratis) o vuelve a intentarlo dentro de un rato.'
-        },
-        free_tier_model_not_free: {
-          title: 'Ese modelo no está disponible sin iniciar sesión',
-          body: 'Por ahora Hermes usa el modelo gratuito. Inicia sesión con una cuenta de Nous para tener más modelos; es gratis.'
-        },
-        free_tier_route: {
-          title: 'Hermes no pudo llegar al modelo gratuito por esta ruta',
-          body: 'Inicia sesión con una cuenta de Nous (es gratis) o revisa el ajuste NOUS_INFERENCE_BASE_URL.'
-        },
-        free_tier_outage: {
-          title: 'El modelo gratuito tiene problemas para responder ahora mismo',
-          body: 'Vuelve a enviar el mensaje dentro de un minuto.'
-        },
-        free_tier_refused: {
-          title: 'Hermes no pudo enviarlo sin iniciar sesión',
-          body: 'Iniciar sesión con una cuenta de Nous es gratis.'
         }
       },
       errorAuthKinds: {

@@ -14,17 +14,21 @@ afterEach(() => {
 
 it.each(['catalog error', 'runtime timeout'])('offers only company retry after %s and recovers', async failure => {
   let recovered = false
+
   const requestGateway: OnboardingContext['requestGateway'] = vi.fn(async method => {
     if (method === 'setup.status') {
       return { managed: true, provider_configured: true, ready: true, inference_provider: 'hono' } as never
     }
+
     if (method === 'setup.runtime_check') {
       if (recovered) {
         return { managed: true, ok: true, provider: 'hono', model: 'company-default' } as never
       }
+
       if (failure === 'runtime timeout') {
         throw new Error('readiness check still in progress; retrying next tick')
       }
+
       return {
         managed: true,
         ok: false,
@@ -32,11 +36,14 @@ it.each(['catalog error', 'runtime timeout'])('offers only company retry after %
         error: 'The company model directory is unavailable.'
       } as never
     }
+
     throw new Error(`Unexpected RPC: ${method}`)
   })
+
   const api = vi.fn(async () => {
     throw new Error('No vendor or free-tier setup is allowed')
   })
+
   Object.defineProperty(window, 'hermesDesktop', { configurable: true, value: { api } })
   markOnboardingDecided()
   $desktopOnboarding.set({
@@ -49,7 +56,6 @@ it.each(['catalog error', 'runtime timeout'])('offers only company retry after %
     firstRunSkipped: true,
     manual: false,
     localEndpoint: false,
-    freeTierReady: false
   })
   const onCompleted = vi.fn()
   render(<DesktopOnboardingOverlay enabled onCompleted={onCompleted} profile="" requestGateway={requestGateway} />)

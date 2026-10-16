@@ -3,8 +3,8 @@ import { useEffect, useState } from 'react'
 
 import type { ProfileScope } from '@/hermes'
 import { translateNow } from '@/i18n'
-import { openFreeTierSignIn } from '@/store/free-tier-sign-in'
 import { notify } from '@/store/notifications'
+import { startManualProviderOAuth } from '@/store/onboarding'
 
 import type { McpServersController } from '../mcp/use-mcp-servers'
 
@@ -135,7 +135,7 @@ export function HostedConnectorDialog({
       disabledTools={card.ways.hosted?.disabledTools}
       onDisconnect={onDisconnect}
       onRetryRules={hosted.retryRules}
-      onSignIn={() => openFreeTierSignIn()}
+      onSignIn={() => startManualProviderOAuth('nous', profile)}
       policy={hosted.policy}
       readOnly={hosted.rulesFailed}
       rulesSignedOut={hosted.rulesSignedOut}

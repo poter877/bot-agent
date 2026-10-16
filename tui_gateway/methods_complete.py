@@ -402,11 +402,6 @@ def _(rid, params: dict) -> dict:
     if api_key != previous:  # a same-key re-save connects nothing new
         from hermes_cli.observability.shared_metrics_setup import record_provider_setup_done
         record_provider_setup_done(_resolve_session_platform(), slug, background=True)
-    # The launch profile's boot record may still say "nothing configured"; the gated picker's own chat
-    # waits on setup.status, so the fresh key must move the record (+ setup.ready). reconcile_record
-    # leaves it alone when the bound home is another profile's.
-    from hermes_cli.free_tier_bootstrap import reconcile_record
-    reconcile_record()
     # Shared inventory builder (lock-step with model.options / dashboard); picker_hints carries `authenticated`.
     from hermes_cli.inventory import build_models_payload
     payload = build_models_payload(_model_picker_context(_session_agent(params)), picker_hints=True, max_models=50)

@@ -65,14 +65,10 @@ export function SharedMetricsConsentDialog({ enabled, profile, requestGateway }:
 
   const scopedRequest = useMemo(() => sharedMetricsProfileRequester(requestGateway, profile), [profile, requestGateway])
 
-  // Never over the provider picker, the free-tier welcome, onboarding or a tour on screen:
+  // Never over the provider picker, onboarding or a tour on screen:
   // the question belongs to the moment after setup.
   const onboardingSettled =
-    (onboarding.configured === true || onboarding.firstRunSkipped) &&
-    !onboarding.manual &&
-    !onboarding.freeTierReady &&
-    surfaceClear &&
-    !tourActive
+    (onboarding.configured === true || onboarding.firstRunSkipped) && !onboarding.manual && surfaceClear && !tourActive
 
   const ready = enabled && onboardingSettled
 

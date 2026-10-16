@@ -47,7 +47,6 @@ function resetStores() {
     firstRunSkipped: false,
     manual: false,
     localEndpoint: false,
-    freeTierReady: false
   })
 }
 

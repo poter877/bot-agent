@@ -29,7 +29,6 @@ import { connectorIconUrl } from '@/lib/connector-tools'
 import { Plug } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import type { ConnectionOwner } from '@/store/connection-request'
-import { $freeTierStatus } from '@/store/free-tier'
 
 /** Same shape as the `manage_connections` display result. */
 export interface ConnectorDirectoryResult {
@@ -108,7 +107,6 @@ function DirectoryBody({ onContinue, owner, returnRoute, suggested = NO_SUGGESTI
   const hosted = useHostedConnectors(owner)
   const abandoned = useStore($abandonedConnects)
   const operations = useStore($accountOperations)
-  const freeTier = useStore($freeTierStatus)
   const actions = useHostedActions(owner, hosted.accounts, { returnRoute })
   const [query, setQuery] = useState('')
 
@@ -215,7 +213,7 @@ function DirectoryBody({ onContinue, owner, returnRoute, suggested = NO_SUGGESTI
           <Plug aria-hidden className="mt-px size-4 shrink-0 text-(--ui-text-tertiary)" />
         </div>
 
-        <HostedNotice hasGuest={freeTier?.has_guest === true} phase={hosted.phase} />
+        <HostedNotice phase={hosted.phase} scope={owner} />
 
         {hosted.phase === 'failed' ? (
           <p className={cn('flex items-center gap-1.5', CARD_LABEL_CLASS)}>

@@ -1,10 +1,11 @@
 import { Button } from '@/components/ui/button'
+import type { ProfileScope } from '@/hermes'
 import { useI18n } from '@/i18n'
-import { openFreeTierSignIn } from '@/store/free-tier-sign-in'
+import { startManualProviderOAuth } from '@/store/onboarding'
 
 import type { HostedPhase } from './types'
 
-export function HostedNotice({ hasGuest, phase }: { hasGuest: boolean; phase: HostedPhase }) {
+export function HostedNotice({ phase, scope }: { phase: HostedPhase; scope: ProfileScope }) {
   const { t } = useI18n()
   const copy = t.connectorsPage.page
 
@@ -12,7 +13,9 @@ export function HostedNotice({ hasGuest, phase }: { hasGuest: boolean; phase: Ho
     return (
       <p className="flex shrink-0 items-center gap-1 text-[0.7rem] text-(--ui-text-tertiary)">
         {copy.signInLine}
-        <Button onClick={() => openFreeTierSignIn()} size="xs" variant="text">
+        {/* The hosted service rides the Nous account, so the sign-in is the
+            provider OAuth flow the Providers page drives. */}
+        <Button onClick={() => startManualProviderOAuth('nous', scope)} size="xs" variant="text">
           {copy.signIn}
         </Button>
       </p>
@@ -23,5 +26,5 @@ export function HostedNotice({ hasGuest, phase }: { hasGuest: boolean; phase: Ho
     return <p className="shrink-0 text-[0.7rem] text-(--ui-text-tertiary)">{copy.managedUnavailable}</p>
   }
 
-  return hasGuest ? <p className="shrink-0 text-[0.7rem] text-(--ui-text-tertiary)">{copy.freeTierNote}</p> : null
+  return null
 }

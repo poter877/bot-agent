@@ -6,8 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NotificationStack } from '@/components/notifications'
 import { getStatus } from '@/hermes'
 import { I18nProvider, type Locale, TRANSLATIONS, type Translations } from '@/i18n'
-import { $freeTierStatus } from '@/store/free-tier'
-import { $setupReadyTick, notifySetupReady } from '@/store/live-sync'
 import { clearNotifications } from '@/store/notifications'
 import { $desktopOnboarding } from '@/store/onboarding'
 
@@ -38,7 +36,6 @@ beforeEach(() => {
   vi.mocked(getStatus)
     .mockReset()
     .mockResolvedValue({} as never)
-  $setupReadyTick.set(0)
   $desktopOnboarding.set({ ...$desktopOnboarding.get(), flow: { status: 'idle' } })
   clearNotifications()
 })
@@ -67,11 +64,12 @@ describe('useStatusSnapshot', () => {
 
       render(createElement(NotificationStack), { wrapper })
 
-      const { rerender }: { rerender: (props: { scope: string }) => void } = renderHook(
-        ({ scope }: { scope: string }): ReturnType<typeof useStatusSnapshot> =>
-          useStatusSnapshot('open', requestGateway, scope),
+      const { rerender }: { rerender: (props: { requestGateway: GatewayRequester }) => void } = renderHook(
+        ({ requestGateway: hookGateway }: { requestGateway: GatewayRequester }): ReturnType<
+          typeof useStatusSnapshot
+        > => useStatusSnapshot('open', hookGateway),
         {
-          initialProps: { scope: 'local-default' },
+          initialProps: { requestGateway },
           wrapper
         }
       )
@@ -104,7 +102,9 @@ describe('useStatusSnapshot', () => {
       })
       expect(screen.getByText(warning)).toBeTruthy()
       vi.mocked(getStatus).mockResolvedValue({ shared_profile_warning: false } as never)
-      rerender({ scope: 'local-work' })
+      // A new backend identity re-runs the effect, so a stale warning does not
+      // survive a source switch.
+      rerender({ requestGateway: vi.fn().mockResolvedValue({}) as unknown as GatewayRequester })
       await flushAsync()
       await act(async (): Promise<void> => {
         await vi.advanceTimersByTimeAsync(100)
@@ -112,27 +112,6 @@ describe('useStatusSnapshot', () => {
       expect(screen.queryByText(warning)).toBeNull()
     }
   )
-
-  it('drops the free-tier verdict on a profile or source switch, not on a gateway flap', async () => {
-    const requestGateway = vi.fn().mockRejectedValue(new Error('offline')) as unknown as GatewayRequester
-    const signedOut = { available: true, enabled: true, has_guest: true, label: '', model: '', notice_pending: false }
-
-    const { rerender } = renderHook(
-      ({ gatewayState, scope }) => useStatusSnapshot(gatewayState, requestGateway, scope),
-      { initialProps: { gatewayState: 'open', scope: 'local\0work' } }
-    )
-
-    await flushAsync()
-    $freeTierStatus.set(signedOut)
-    rerender({ gatewayState: 'connecting', scope: 'local\0work' })
-    rerender({ gatewayState: 'open', scope: 'local\0work' })
-    await flushAsync()
-    expect($freeTierStatus.get()).toEqual(signedOut)
-
-    rerender({ gatewayState: 'open', scope: 'local\0home' })
-    await flushAsync()
-    expect($freeTierStatus.get()).toBeNull()
-  })
 
   it('pauses status RPCs while visible but unfocused, then catches up on focus', async () => {
     vi.mocked(document.hasFocus).mockReturnValue(false)
@@ -154,8 +133,8 @@ describe('useStatusSnapshot', () => {
     await flushAsync()
 
     expect(getStatus).toHaveBeenCalledOnce()
-    // One refresh round = setup.status + setup.runtime_check + free_tier.status.
-    expect(requestGateway).toHaveBeenCalledTimes(3)
+    // One refresh round = setup.status + setup.runtime_check.
+    expect(requestGateway).toHaveBeenCalledTimes(2)
   })
 
   it('keeps the last authoritative readiness through a transient RPC failure', async () => {
@@ -253,21 +232,24 @@ describe('useStatusSnapshot', () => {
     const homeSetup = deferred<unknown>()
     let source = 'work'
 
-    const requestGateway = vi.fn((method: string) => {
-      if (source === 'work') {
-        return method === 'setup.runtime_check' ? workRuntime.promise : workSetup.promise
-      }
+    const gatewayFor = (name: string): GatewayRequester =>
+      vi.fn((method: string) => {
+        if (name === 'work') {
+          return method === 'setup.runtime_check' ? workRuntime.promise : workSetup.promise
+        }
 
-      return method === 'setup.runtime_check' ? homeRuntime.promise : homeSetup.promise
-    }) as unknown as GatewayRequester
+        return method === 'setup.runtime_check' ? homeRuntime.promise : homeSetup.promise
+      }) as unknown as GatewayRequester
 
-    const { rerender, result } = renderHook(({ scope }) => useStatusSnapshot('open', requestGateway, scope), {
-      initialProps: { scope: 'work\0default' }
-    })
+    const { rerender, result } = renderHook(
+      ({ requestGateway }) => useStatusSnapshot('open', requestGateway),
+      { initialProps: { requestGateway: gatewayFor('work') } }
+    )
 
     await flushAsync()
-    source = 'home'
-    rerender({ scope: 'home\0default' })
+    // A new backend identity re-runs the effect; the old source's late answer
+    // must not repaint the new one's readiness.
+    rerender({ requestGateway: gatewayFor('home') })
     await flushAsync()
 
     expect(result.current.inferenceStatus).toBeNull()
@@ -300,16 +282,16 @@ describe('useStatusSnapshot', () => {
     renderHook(() => useStatusSnapshot('open', requestGateway))
     await flushAsync()
 
-    // Open runs the readiness legs once: setup.status, setup.runtime_check, free_tier.status.
+    // Open runs the readiness legs once: setup.status, setup.runtime_check.
     expect(getStatus).toHaveBeenCalledOnce()
-    expect(requestGatewayMock).toHaveBeenCalledTimes(3)
+    expect(requestGatewayMock).toHaveBeenCalledTimes(2)
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(60_000)
     })
 
     expect(getStatus).toHaveBeenCalledOnce()
-    expect(requestGatewayMock).toHaveBeenCalledTimes(3)
+    expect(requestGatewayMock).toHaveBeenCalledTimes(2)
 
     await act(async () => {
       setup.resolve({ provider_configured: true })
@@ -326,10 +308,10 @@ describe('useStatusSnapshot', () => {
       await vi.advanceTimersByTimeAsync(1)
     })
 
-    // The periodic tick is status-only: readiness and the free-tier verdict
-    // arrive by `setup.ready` push plus the one-shots on open and on return.
+    // The periodic tick is status-only once a verdict exists: readiness
+    // arrives at the seams (open, focus return, auth success), not on it.
     expect(getStatus).toHaveBeenCalledTimes(2)
-    expect(requestGatewayMock).toHaveBeenCalledTimes(3)
+    expect(requestGatewayMock).toHaveBeenCalledTimes(2)
   })
 
   it('retries readiness on the 60s tick while no authoritative verdict exists yet', async () => {
@@ -404,46 +386,6 @@ describe('useStatusSnapshot', () => {
     expect(methods.filter(method => method === 'setup.runtime_check')).toHaveLength(0)
     expect(getStatus).toHaveBeenCalledTimes(3)
     expect(result.current.inferenceStatus).toMatchObject({ ready: true, source: 'runtime_check' })
-  })
-
-  it('re-reads readiness and the free-tier verdict once per setup.ready, off the status tick', async () => {
-    const requestGatewayMock = vi.fn(
-      async (method: string) =>
-        (method === 'setup.runtime_check' ? { ok: true } : { provider_configured: true }) as never
-    )
-
-    const requestGateway = requestGatewayMock as unknown as GatewayRequester
-
-    renderHook(() => useStatusSnapshot('open', requestGateway))
-    await flushAsync()
-    requestGatewayMock.mockClear()
-    vi.mocked(getStatus).mockClear()
-
-    await act(async () => {
-      notifySetupReady()
-      await vi.advanceTimersByTimeAsync(0)
-    })
-
-    const methods = requestGatewayMock.mock.calls.map(([method]) => method)
-    expect(methods.filter(method => method === 'free_tier.status')).toHaveLength(1)
-    expect(methods.filter(method => method === 'setup.runtime_check')).toHaveLength(1)
-    expect(methods.filter(method => method === 'setup.status')).toHaveLength(1)
-    expect(getStatus).not.toHaveBeenCalled()
-  })
-
-  it('ignores setup.ready while the gateway is not open', async () => {
-    const requestGatewayMock = vi.fn(async () => ({}) as never)
-    const requestGateway = requestGatewayMock as unknown as GatewayRequester
-
-    renderHook(() => useStatusSnapshot('connecting', requestGateway))
-    await flushAsync()
-
-    await act(async () => {
-      notifySetupReady()
-      await vi.advanceTimersByTimeAsync(0)
-    })
-
-    expect(requestGatewayMock).not.toHaveBeenCalled()
   })
 
   it('keeps the same snapshot reference across a content-equal 60s re-read; a real change publishes', async () => {

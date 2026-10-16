@@ -1539,14 +1539,15 @@ def _openrouter_auto_detected(scoped_key_env: Callable[[str], str]) -> bool:
         return False
 
 
-def _logged_in_oauth_active_provider(*, skip_free_tier: bool = False) -> Optional[str]:
+def _logged_in_oauth_active_provider() -> Optional[str]:
     """auth.json ``active_provider`` when it is a registry provider that reports logged in."""
     try:
         _maybe = _load_auth_store().get("active_provider")
         if _maybe == "nous":
-            from hermes_cli.anon_auth import free_inference_active, has_guest
-            if has_guest() and (skip_free_tier or not free_inference_active()):
-                return None  # this guest carries no inference here (or is being discounted): not a login
+            from hermes_cli.anon_auth import current_nous_state, is_guest_state
+            state = current_nous_state()
+            if state is None or is_guest_state(state):
+                return None  # no nous identity, or a legacy guest: not a login
         if _maybe and _maybe in PROVIDER_REGISTRY and get_auth_status(_maybe).get("logged_in"):
             return _maybe
     except Exception as e:
@@ -1631,21 +1632,16 @@ def resolve_provider(
     *,
     explicit_api_key: Optional[str] = None,
     explicit_base_url: Optional[str] = None,
-    skip_free_tier: bool = False) -> str:
+    ) -> str:
     """Determine which inference provider to use.
 
     "auto" priority (explicit intent beats a stale OAuth login): 1. CLI api_key/base_url ->
     "openrouter"; 2. config.yaml ``model.provider``; 3. OPENROUTER_API_KEY (or an sk-or- key in
     OPENAI_API_KEY) -> "openrouter"; 4. OpenRouter pool; 5. provider env keys; 6. auth.json ``active_provider``;
-    7. Nous free tier when a claimed guest exists on the desktop's local backend (never created here);
     8. AWS Bedrock chain; 9. AuthError(no_provider_configured).
 
-    ``skip_free_tier`` hides rungs 6-for-a-free-tier-identity and 7: the boot bootstrap asks
-    "what would carry inference if the free tier did not exist?" to decide whether a fresh identity
-    may become ``active_provider``.
-
-    1. 3. 4. 5. Provider-specific API keys (GLM, Kimi, MiniMax, ...) -> that provider 7. 8. Error (no
-    provider configured) See #29285.
+    1. 3. 4. 5. Provider-specific API keys (GLM, Kimi, MiniMax, ...) -> that provider 8. Error (no
+    provider configured) See #29285. The Nous free tier is gone: 公司模式外也不再有来宾凭据。
     """
     normalized = (requested or "auto").strip().lower()
     normalized = _plugin_aliases().get(normalized, normalized)
@@ -1672,7 +1668,7 @@ def resolve_provider(
 
     # Determined up front so the env-key tier can warn when an exported key preempts it; the actual
     # OAuth fallback still happens after the env-key tier.
-    _oauth_active = _logged_in_oauth_active_provider(skip_free_tier=skip_free_tier)
+    _oauth_active = _logged_in_oauth_active_provider()
     env_pid = _env_key_auto_detected(_scoped_key_env, _oauth_active)
     if env_pid:
         return env_pid
@@ -1690,25 +1686,11 @@ def resolve_provider(
                 _oauth_active)
         return _oauth_active
 
-    # Nous free tier, when this guest claimed the welcome trial and this is the desktop's local
-    # backend (``anon_auth.free_inference_active``). This rung sits ABOVE the Bedrock
-    # chain on purpose: every rung above this line is explicit user intent (CLI creds, config, env
-    # keys, a sign-in); the boto chain below is implicit host state, and a leftover ~/.aws profile
-    # used to win the first turn of a fresh install (NS-829). The rung never CREATES the identity:
-    # only the desktop's trial claim does (welcome_trial), so provider resolution stays free of network.
-    if not skip_free_tier:
-        try:
-            from hermes_cli.anon_auth import free_inference_active
-            if free_inference_active():
-                return "nous"
-        except Exception as exc:
-            logger.debug("free tier check during provider resolution skipped: %s", exc)
     # AWS Bedrock via the boto3 credential chain (IAM roles, SSO, env vars): implicit host state,
-    # below explicit keys and below the free tier.
+    # below explicit keys and sign-ins.
     try:
         from agent.bedrock_adapter import has_aws_credentials
-        from hermes_cli.anon_auth import on_local_desktop_backend  # a laptop: no EC2 metadata lookup
-        if has_aws_credentials(instance_metadata=not on_local_desktop_backend()):
+        if has_aws_credentials(instance_metadata=True):
             return "bedrock"
     except ImportError:
         pass  # boto3 not installed

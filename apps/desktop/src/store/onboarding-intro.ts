@@ -24,5 +24,5 @@ export const $decideExit = atom<(() => void) | null>(null)
  *  free of layout imports, so the shell can read it; onboarding/first-run/assembly.ts owns the switch. */
 export const $chatOnboardingSolo = atom(false)
 
-// While the intro runs, the provider picker, the free-tier ready screen and the tips wait for it.
+// While the intro runs, the provider picker and the tips wait for it.
 $introView.subscribe(view => setOnboardingSurfaceActive('intro', view === 'starting' || view === 'intro'))

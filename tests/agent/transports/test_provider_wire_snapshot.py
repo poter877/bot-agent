@@ -125,7 +125,8 @@ def _cells() -> list[tuple[str, str, str]]:
 def offline(monkeypatch):
     """No network and no ambient AWS profile. Capability probes (Ollama ``/api/show``, LM Studio,
     catalogs) must take their offline answer, or the recorded wire depends on a live server.
-    Name resolution is blocked too: some clients connect through paths ``socket.connect`` misses."""
+    Name resolution is blocked too: some clients connect through paths ``socket.connect`` misses.
+    The company backend endpoint is pinned so the hono registry rung resolves without one."""
     real_connect = socket.socket.connect
 
     def guarded(sock, address, *args, **kwargs):
@@ -141,6 +142,14 @@ def offline(monkeypatch):
     monkeypatch.setenv("AWS_REGION", "us-east-1")
     monkeypatch.setenv("AWS_CONFIG_FILE", os.devnull)
     monkeypatch.setenv("AWS_SHARED_CREDENTIALS_FILE", os.devnull)
+    monkeypatch.setenv("HERMES_BOT_BACKEND_URL", "https://company.test")
+    # The hono cell resolves its model against the company directory over HTTP;
+    # offline, the wire records the first catalog entry from a fixed stub instead.
+    def _stub_catalog(requested, task=None):
+        return {"id": requested or "company-default",
+                "capabilities": {"tools": True, "vision": True, "video": False, "reasoning": False}}
+
+    monkeypatch.setattr("account_backend_models.resolve_company_model", _stub_catalog)
 
 
 def _wire(provider: str, model: str, base_url: str) -> dict[str, Any]:

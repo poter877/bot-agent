@@ -5,7 +5,6 @@ import { useLocation, useNavigate } from 'react-router'
 import { Button } from '@/components/ui/button'
 import type { HermesGateway, ProfileScope } from '@/hermes'
 import { useI18n } from '@/i18n'
-import { $freeTierStatus } from '@/store/free-tier'
 import { notifyError } from '@/store/notifications'
 
 import { installBundledEntry } from '../mcp/install-catalog-entry'
@@ -52,7 +51,6 @@ export function ConnectorsTab({ gateway, profile }: ConnectorsTabProps) {
   const hosted = useHostedConnectors(profile)
   const mcp = useMcpServers({ gateway, profile })
   const abandoned = useStore($abandonedConnects)
-  const freeTier = useStore($freeTierStatus)
 
   const [filter, setFilter] = useState<ConnectorsFilter>(EMPTY_CONNECTORS_FILTER)
   const [openKey, setOpenKey] = useState<null | string>(null)
@@ -189,7 +187,7 @@ export function ConnectorsTab({ gateway, profile }: ConnectorsTabProps) {
         filter={filter}
         hostedFailed={hosted.phase === 'failed'}
         loading={(hosted.phase === 'loading' || mcp.configLoading || mcp.catalogLoading) && cards.length === 0}
-        notices={<HostedNotice hasGuest={freeTier?.has_guest === true} phase={hosted.phase} />}
+        notices={<HostedNotice phase={hosted.phase} scope={profile} />}
         onFilterChange={setFilter}
         onOpen={card => setOpenKey(cardKey(card))}
         onPrefetch={card => prefetchConnectorTools(profile, card)}

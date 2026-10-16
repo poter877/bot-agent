@@ -758,54 +758,6 @@ export interface DiagnosticsShareNousResult {
   expires_at?: string | null
   error?: string | null
 }
-/** ``available`` = an identity exists AND the tier is on; whether inference runs on it is ``setup.runtime_check.free_tier_route``'s question. */
-export interface FreeTierStatusResult {
-  has_guest: boolean
-  enabled: boolean
-  available: boolean
-  notice_pending: boolean
-  model: string
-  label: string
-  error?: string | null
-  error_code?: string | null
-  retryable?: boolean | null
-  retry_after?: number | null
-  challenge?: FreeTierChallengePayload | null
-  nudge_due_in?: number | null
-}
-/** ``hermes_cli/anon_challenge.py::BrowserChallenge.as_payload``: the ``free_tier.challenge`` event, and ``free_tier.status``'s ``challenge`` field for a client that connected after it. */
-export interface FreeTierChallengePayload {
-  type: 'browser'
-  url: string
-  required: boolean
-  expires_in: number
-  message: string
-  attempt?: number
-  [key: string]: unknown
-}
-export interface FreeTierChallengeResultParams {
-  profile?: string | null
-  url: string
-  attempt?: number
-  outcome: 'done' | 'failed' | 'closed' | 'timeout' | 'refused' | 'error' | 'unsupported'
-}
-export interface FreeTierChallengeResult {
-  accepted: boolean
-}
-export interface FreeTierProvisionResult {
-  has_guest: boolean
-  enabled: boolean
-  error?: string | null
-  error_code?: string | null
-  retryable?: boolean | null
-  retry_after?: number | null
-}
-export interface FreeTierAckNoticeResult {
-  acked: boolean
-}
-export interface FreeTierClaimNudgeResult {
-  claimed: boolean
-}
 /** The focused profile's ``telemetry.shared_metrics`` opt-ins. ``send`` is never true while ``enabled`` is false; ``decided`` = either key is written in config.yaml (the shipped defaults are not an answer) and it is not a ``reask``: an "off" from before the type-ahead fix, offered once more with the reason. */
 export interface SharedMetricsConsentResult {
   enabled: boolean
@@ -4897,21 +4849,6 @@ export interface OnboardingEndedPayload {
   outcome: OnboardingOutcome
 }
 export type OnboardingOutcome = 'done' | 'skipped' | 'replaced' | 'deleted'
-/** ``hermes_cli/free_tier_bootstrap.py::SetupRecord.as_payload``. */
-export interface SetupReadyPayload {
-  provider_configured: boolean
-  inference_provider: string
-  free_tier_account: boolean
-  free_tier_route: boolean
-  has_identity: boolean
-  other_providers: boolean
-  error?: string
-  error_code?: string | null
-  retryable?: boolean | null
-  retry_after?: number | null
-  finished_at: number
-  [key: string]: unknown
-}
 /** Every ``_emit("error", …)`` site sets exactly ``message``. */
 export interface ErrorPayload {
   message: string
@@ -5395,16 +5332,6 @@ export interface RpcMethods {
   'display.thumbnail': { params: ProfileParams; result: DisplayThumbnailResult }
   /** Stage a non-image file into the session workspace and hand back its @file: ref. */
   'file.attach': { params: FileAttachParams; result: FileAttachResult }
-  /** Mark the one-time availability notice as shown on the free-tier identity. */
-  'free_tier.ack_notice': { params: ProfileParams; result: FreeTierAckNoticeResult }
-  /** Report a browser window outcome for the matching pending attempt; mint remains authoritative. */
-  'free_tier.challenge_result': { params: FreeTierChallengeResultParams; result: FreeTierChallengeResult }
-  /** Claim the due sign-in offer; true for exactly one caller each time an offer comes due. */
-  'free_tier.claim_nudge': { params: ProfileParams; result: FreeTierClaimNudgeResult }
-  /** Explicit retry of the free-tier identity mint when the boot bootstrap could not create it. */
-  'free_tier.provision': { params: ProfileParams; result: FreeTierProvisionResult }
-  /** Pure read of the focused profile's free-tier identity state (no network, no side effects). */
-  'free_tier.status': { params: ProfileParams; result: FreeTierStatusResult }
   /** What THIS build enforces (a client withholds a feature unless advertised). */
   'gateway.capabilities': { params: PingParams; result: GatewayCapabilitiesResult }
   /** Resolve one exact pending approval raised by a local or peer room member. */
@@ -5869,11 +5796,6 @@ export const RPC_METHODS = [
   'display.switchSandboxImage',
   'display.thumbnail',
   'file.attach',
-  'free_tier.ack_notice',
-  'free_tier.challenge_result',
-  'free_tier.claim_nudge',
-  'free_tier.provision',
-  'free_tier.status',
   'gateway.capabilities',
   'groups.approve',
   'groups.capabilities',
@@ -6165,8 +6087,6 @@ export interface BackendGatewayEventMap {
   'display.status': DisplayStatusPayload
   /** A session-level failure outside a turn (agent init, model switch, compression, resume). */
   error: ErrorPayload
-  /** The account service wants a browser challenge cleared before the free-tier token exchange (broadcast); the desktop loads ``url`` in a hidden window. */
-  'free_tier.challenge': FreeTierChallengePayload
   /** First frame of a connection: the resolved skin, the change-event capability and the replay epoch. */
   'gateway.ready': GatewayReadyPayload
   /** The turn ended: final text, usage and outcome. */
@@ -6241,8 +6161,6 @@ export interface BackendGatewayEventMap {
   'session.usage': SessionUsagePayload
   /** state.db moved; refetch the session list. */
   'sessions.changed': ChangeSignalPayload
-  /** The free-tier bootstrap finished (broadcast); the desktop's setup gate reads the record. */
-  'setup.ready': SetupReadyPayload
   /** The active skin moved (name switch or live colour edit); repaint from this palette. */
   'skin.changed': SkinPayload
   /** Transient status line (kind: status, lifecycle, compacting, goal, loop, heartbeat, process, …). */
@@ -6306,7 +6224,6 @@ export const GATEWAY_EVENT_TYPES = [
   'display.lease',
   'display.status',
   'error',
-  'free_tier.challenge',
   'gateway.ready',
   'message.complete',
   'message.delta',
@@ -6344,7 +6261,6 @@ export const GATEWAY_EVENT_TYPES = [
   'session.title',
   'session.usage',
   'sessions.changed',
-  'setup.ready',
   'skin.changed',
   'status.update',
   'subagent.complete',

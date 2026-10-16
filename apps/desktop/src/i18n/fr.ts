@@ -5146,34 +5146,6 @@ export const frOverrides = {
         disk_full: {
           title: 'Disque plein',
           body: "Votre disque est plein ; Hermes n'a pas pu enregistrer cette conversation. Libérez de l'espace puis réessayez."
-        },
-        free_tier_disabled: {
-          title: "L'utilisation de Hermes sans connexion est désactivée pour le moment",
-          body: 'Connectez-vous avec un compte Nous gratuit pour continuer.'
-        },
-        free_tier_rate_limited: {
-          title: 'Vous avez épuisé le quota sans connexion',
-          body: 'Il sera bientôt renouvelé. Connectez-vous avec un compte Nous gratuit pour obtenir un quota plus élevé.'
-        },
-        free_tier_at_capacity: {
-          title: 'Le service sans connexion est très sollicité',
-          body: 'Connectez-vous gratuitement pour éviter la file, ou réessayez un peu plus tard.'
-        },
-        free_tier_model_not_free: {
-          title: "Ce modèle n'est pas disponible sans connexion",
-          body: 'Hermes utilise le modèle gratuit pour le moment. Connectez-vous avec un compte Nous gratuit pour accéder à plus de modèles.'
-        },
-        free_tier_route: {
-          title: "Hermes n'a pas pu joindre le modèle gratuit par cette route",
-          body: 'Connectez-vous avec un compte Nous gratuit ou vérifiez le paramètre NOUS_INFERENCE_BASE_URL.'
-        },
-        free_tier_outage: {
-          title: 'Le modèle gratuit rencontre des difficultés',
-          body: 'Renvoyez votre message dans une minute.'
-        },
-        free_tier_refused: {
-          title: "Hermes n'a pas pu envoyer ce message sans connexion",
-          body: 'La connexion avec un compte Nous est gratuite.'
         }
       },
       errorAuthKinds: {

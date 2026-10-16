@@ -1,7 +1,6 @@
 import { type ProfileScope, profileScopeKey } from '@/hermes'
 import { queryClient } from '@/lib/query-client'
 import { readJson, writeJson } from '@/lib/storage'
-import { $freeTierStatus } from '@/store/free-tier'
 
 import { MCP_CATALOG_KEY } from '../../mcp/mcp-status'
 import type { LocalServerInput } from '../types'
@@ -15,11 +14,7 @@ const persists = (read: PersistedRead): boolean =>
 
 const STORAGE_PREFIX = 'hermes.connectors.v4.'
 
-const IDENTITY_KEY = 'hermes.connectors.identity.v4'
-
 const PERSIST_MAX_BYTES = 256 * 1024
-
-type PersistedIdentity = 'guest' | 'signed-in'
 
 interface PersistedEntry {
   at: number
@@ -31,21 +26,12 @@ type PersistedValue = PersistedEntry['data']
 interface PersistedBlob {
   bundled?: PersistedEntry
   catalog?: PersistedEntry
-  identity: PersistedIdentity
   list?: PersistedEntry
   servers?: PersistedEntry
   tools?: Record<string, PersistedEntry>
 }
 
 const keyFor = (scopeKey: string) => `${STORAGE_PREFIX}${scopeKey}`
-
-const identityOf = (hasGuest: boolean): PersistedIdentity => (hasGuest ? 'guest' : 'signed-in')
-
-function currentIdentity(): PersistedIdentity | null {
-  const status = $freeTierStatus.get()
-
-  return status ? identityOf(status.has_guest) : readJson<PersistedIdentity>(IDENTITY_KEY)
-}
 
 const READS: ReadonlySet<PersistedValue> = new Set(Object.keys(CONNECTOR_LIFETIMES))
 
@@ -64,7 +50,7 @@ function readBlob(scopeKey: string): PersistedBlob | null {
     return null
   }
 
-  return blob.identity === currentIdentity() ? blob : null
+  return blob
 }
 
 const SLOTS = {
@@ -99,10 +85,6 @@ export interface QuerySeed<T> {
 }
 
 export function seedOptions<T>(scopeKey: ProfileScope, read: PersistedRead, slug?: string): QuerySeed<T> {
-  if (currentIdentity() === null) {
-    return {}
-  }
-
   const blob = readBlob(profileScopeKey(scopeKey))
   const entry = blob ? entryOf(blob, read, slug) : undefined
 
@@ -133,13 +115,11 @@ function trimmed(blob: PersistedBlob): PersistedBlob {
 }
 
 function store(scopeKey: string, read: PersistedRead, slug: string | undefined, entry: PersistedEntry): void {
-  const identity = currentIdentity()
-
-  if (identity === null || !persists(read) || size(entry) > PERSIST_MAX_BYTES) {
+  if (!persists(read) || size(entry) > PERSIST_MAX_BYTES) {
     return
   }
 
-  const blob = readBlob(scopeKey) ?? { identity }
+  const blob = readBlob(scopeKey) ?? {}
 
   if (read === 'tools') {
     if (!slug) {
@@ -152,7 +132,7 @@ function store(scopeKey: string, read: PersistedRead, slug: string | undefined, 
     blob[SLOTS[read as SlotRead]] = entry
   }
 
-  writeJson(keyFor(scopeKey), trimmed({ ...blob, identity }))
+  writeJson(keyFor(scopeKey), trimmed(blob))
 }
 
 interface ReadTarget {
@@ -226,17 +206,8 @@ export function startConnectorPersistence(): () => void {
     timer ??= setTimeout(flush, WRITE_DELAY_MS)
   })
 
-  const stopIdentity = $freeTierStatus.listen(status => {
-    const identity = status ? identityOf(status.has_guest) : null
-
-    if (identity !== null && identity !== readJson<PersistedIdentity>(IDENTITY_KEY)) {
-      writeJson(IDENTITY_KEY, identity)
-    }
-  })
-
   return () => {
     stopCache()
-    stopIdentity()
 
     if (timer !== null) {
       clearTimeout(timer)

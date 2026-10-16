@@ -1,4 +1,4 @@
-import type { ConnectionRequestPayload, FreeTierChallengePayload, ToolLabel } from '@hermes/shared'
+import type { ConnectionRequestPayload, ToolLabel } from '@hermes/shared'
 
 import type { ToolResultMetadata } from '@/lib/tool-result-metadata'
 
@@ -78,13 +78,14 @@ export interface ElevenLabsVoicesResponse {
 
 export interface OAuthProviderStatus {
   /** Nous only: the tier name the token resolves to, when the backend knows
-   *  one. Null for a free-tier identity and for older backends. */
+   *  one. Null for a pre-free-tier guest identity and for older backends. */
   account_tier?: null | string
   error?: string
   expires_at?: null | string
-  /** Nous only: true when the stored token belongs to a free-tier identity
-   *  rather than a signed-in account. `logged_in` stays true either way — a
-   *  token exists — so this is the only way to tell the two apart. */
+  /** Nous only: true when the stored token is a pre-free-tier guest identity
+   *  rather than a signed-in account (legacy installs only — guests are no
+   *  longer minted). `logged_in` stays true either way — a token exists — so
+   *  this is the only way to tell the two apart. */
   free_tier?: boolean
   has_refresh_token?: boolean
   last_refresh?: null | string
@@ -149,42 +150,13 @@ export interface OAuthPollResponse {
    *  `account_not_anonymous` / `account_busy` / `timeout` (status `error`).
    *  `error_message` carries the matching user-facing text. */
   reason?: null | string
-  /** Failed sign-ins over a free-tier identity: the seconds the account service
-   *  asked the client to wait before trying again (0 or absent when none). */
+  /** Failed sign-ins: the seconds the account service asked the client to wait
+   *  before trying again (0 or absent when none). */
   retry_after?: null | number
-  /** Failed sign-ins over a free-tier identity: whether a later attempt can succeed. */
+  /** Failed sign-ins: whether a later attempt can succeed. */
   retryable?: boolean | null
   session_id: string
   status: 'approved' | 'denied' | 'error' | 'expired' | 'pending'
-}
-
-/** Result of the `free_tier.status` RPC. Pull-only: it reads local auth state
- *  and makes no network call, so it is safe to refresh on the ambient status
- *  cadence. */
-export interface FreeTierStatus {
-  /** An identity exists AND the free tier is on: connectors ride on it, and so
-   *  does inference when nothing else carries it. Whether inference actually
-   *  runs on it is the ROUTE's answer (`setup.runtime_check.free_tier_route`). */
-  available: boolean
-  enabled: boolean
-  has_guest: boolean
-  /** Display name for the route, e.g. "Nous · free tier". */
-  label: string
-  model: string
-  /** True until the one-time introduction has been acknowledged. */
-  notice_pending: boolean
-  /** Present only while `enabled` and no identity exists: why the last attempt
-   *  to create one failed. `error_code` is one of the backend's `anon_*` codes
-   *  (`hermes_cli/anon_auth.py`), `error` its sentence, `retryable` whether a
-   *  later attempt can succeed, `retry_after` the seconds still to wait. */
-  error?: string
-  error_code?: string
-  retryable?: boolean
-  retry_after?: number
-  /** Present while the backend is waiting on a browser challenge. */
-  challenge?: FreeTierChallengePayload | null
-  /** Seconds until the one-time first-task sign-in offer is due (0 = now); null when none is owed. */
-  nudge_due_in?: number | null
 }
 
 export interface MemoryProviderOAuthStatus {

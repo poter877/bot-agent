@@ -126,8 +126,6 @@ import {
   readBundleSwapStamp,
   relaunchIntoSwappedBundle
 } from './bundle-swap'
-import { CHALLENGE_PARTITION } from './challenge-window'
-import { registerChallengeWindowIpc } from './challenge-window-ipc'
 import { provisionCliLinks } from './cli-provision'
 import { closeStopFailureMessage, finishWindowsCloseStop, type RuntimeLock } from './close-stop-kill'
 import { shouldAttemptCloudBootCascade } from './cloud-boot-cascade'
@@ -18416,15 +18414,6 @@ ipcMain.on('hermes:devtools:disable-f12', (_event, on) => {
   } catch (error) {
     rememberLog(`[disable-f12] write failed: ${error.message}`)
   }
-})
-
-// Free-tier browser challenge: a hidden portal window (electron/challenge-window.ts).
-registerChallengeWindowIpc({
-  isReady: () => app.isReady(),
-  getSession: () => session.fromPartition(CHALLENGE_PARTITION),
-  resolvePortalBaseUrl,
-  createWindow: options => new BrowserWindow(options),
-  rememberLog
 })
 
 ipcMain.handle('hermes:openExternal', async (_event, url) => {

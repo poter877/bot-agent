@@ -68,7 +68,6 @@ import { useEnterAnimation } from '@/lib/use-enter-animation'
 import { cn } from '@/lib/utils'
 import { playSpeechText, stopVoicePlayback } from '@/lib/voice-playback'
 import { DESKTOP_BUTTON_ACTIONS, recordAction } from '@/store/desktop-metrics'
-import { openFreeTierSignIn } from '@/store/free-tier-sign-in'
 import { notifyError } from '@/store/notifications'
 import { startManualProviderOAuth } from '@/store/onboarding'
 import { $activeGatewayProfile, normalizeProfileKey, requestFreshSession } from '@/store/profile'
@@ -859,13 +858,6 @@ const ErrorRecoveryActions: FC = () => {
     startManualProviderOAuth(surface.provider, key === 'default' ? undefined : key)
   }, [gatewayProfile, surface])
 
-  // The free tier's door: the same dialog the status-bar chip and the first-launch
-  // intro open. Signing in is free and lifts every free-tier refusal.
-  const signInFreeTier = useCallback(() => {
-    triggerHaptic('submit')
-    openFreeTierSignIn()
-  }, [])
-
   // Reveal a local folder through Electron; `logsRoot` is the profile's
   // HERMES_HOME/logs, and its parent is the Hermes data folder itself (what
   // the user needs to see to free space after a disk-full failure). Resolved
@@ -949,12 +941,6 @@ const ErrorRecoveryActions: FC = () => {
         <button className="aui-error-action" onClick={signInAgain} type="button">
           <KeyRound className="size-3" />
           {copy.errorSignInAgain(surface.providerLabel || surface.provider)}
-        </button>
-      )}
-      {plan.signInFreeTier && (
-        <button className="aui-error-action" onClick={signInFreeTier} type="button">
-          <KeyRound className="size-3" />
-          {copy.errorSignInFreeTier}
         </button>
       )}
       {plan.updateApiKey && inRouter && (

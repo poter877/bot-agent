@@ -33,6 +33,6 @@ def test_the_desktop_backends_auto_detect_skips_instance_metadata(chain, monkeyp
 
     as_local_desktop_backend(monkeypatch)
     with pytest.raises(AuthError):
-        resolve_provider("auto", skip_free_tier=True)
+        resolve_provider("auto")
 
     assert chain and all(walk.get("instance_metadata") is False for walk in chain)

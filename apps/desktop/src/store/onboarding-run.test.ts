@@ -196,16 +196,6 @@ describe('onboarding run', () => {
     expect($newChatProfile.get()).toBe('default')
   })
 
-  it('acks the free-tier notice when the onboarding intro opens', async () => {
-    const { calls, request } = backend({ eligible: true, run: true })
-    const intro = { failed: vi.fn(), opened: vi.fn(), started: vi.fn(), starting: vi.fn() }
-
-    await startOnboarding(request, resume, { ensureProfile, intro })
-
-    expect(intro.opened).toHaveBeenCalled()
-    expect(calls).toContain('free_tier.ack_notice')
-  })
-
   it('releases the boot hold when the user takes the way out while the start is still pending', async () => {
     let exit: () => void = () => undefined
 
