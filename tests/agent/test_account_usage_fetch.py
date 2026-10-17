@@ -243,9 +243,6 @@ def test_fetch_account_usage_openrouter_omits_quota_window_when_key_has_no_limit
 def test_plugin_usage_hook_is_bounded_and_fails_open(monkeypatch):
     """A plugin hook that overruns the shared deadline yields None within deadline+1 s on every surface
     (gateway/TUI call ``fetch_account_usage`` with no bound of their own); built-in fetchers are untouched."""
-    import threading
-    import time
-
     from agent import account_usage
 
     started = threading.Event()
@@ -272,8 +269,6 @@ def test_plugin_usage_hook_is_bounded_and_fails_open(monkeypatch):
 def test_plugin_usage_hook_failure_never_reaches_threading_excepthook(monkeypatch):
     """A raising hook fails open in the caller — it must not die on a worker thread, where
     ``threading.excepthook`` prints a traceback into every ``/usage`` surface."""
-    import threading
-
     from agent import account_usage
 
     class _Boom(ProviderProfile):
