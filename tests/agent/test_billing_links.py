@@ -18,5 +18,5 @@ def test_known_provider_by_slug_resolves_label_and_url():
 
 def test_unknown_provider_gets_a_readable_label_and_no_url():
     block = build_billing_block(provider="acme", base_url="https://api.acme.example/v1", model="m")
-    assert block.provider_label == "acme"
+    assert block.provider_label == "Acme"
     assert block.billing_url is None
