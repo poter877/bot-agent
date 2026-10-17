@@ -15,6 +15,8 @@ from typing import Any, Optional
 from fastapi import APIRouter, HTTPException
 
 from hermes_cli.web_deps import late
+
+logger = logging.getLogger("hermes_cli.web_server")
 from hermes_cli.web_server_profiles import _plugin_terminal_backend_rows
 from starlette.concurrency import run_in_threadpool
 from hermes_cli.web_models import (
@@ -403,7 +405,7 @@ async def get_toolset_config(name: str, profile: Optional[str] = None):
                     payload["active_search_backend"] = _get_search_backend()
                     payload["active_extract_backend"] = _get_extract_backend()
                 except Exception as probe_error:
-                    logger.debug("active web backend probe skipped: %s", probe_error)
+                    logger.debug("active web backend probe skipped: %s", probe_error, exc_info=True)
         return payload
 
     return await asyncio.to_thread(_read)

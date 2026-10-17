@@ -79,4 +79,6 @@ def generate_media(kind: str, payload: dict) -> dict:
     raise :class:`AccountBackendError` (the tools surface them as copy)."""
     if kind not in ("image", "video"):
         raise ValueError(f"unknown media kind {kind!r}")
+    from account_backend_session import request_account_backend
+
     return request_account_backend(f"/api/media/{kind}", payload=payload, timeout=_MEDIA_TIMEOUT_SECONDS)

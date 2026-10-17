@@ -387,6 +387,7 @@ def settle_unrecovered_error(
                 retry_count = 0
             return _verdict(_ladder["action"], _ladder.get("result"))
         _delivered = settle_delivered_partial(agent, messages, current_turn_user_idx)
+        attempts_made = min(retry_count, max_retries)
         return _verdict("return", max_retries_exhausted_result(
             agent, api_error, classified, attempts=attempts_made, is_rate_limited=is_rate_limited,
             error_msg=error_msg, api_kwargs=api_kwargs, api_messages=api_messages,
