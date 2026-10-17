@@ -938,15 +938,15 @@ class TestRuntimeModelConfigDropsStaleKeys:
         row = {
             "model": "deepseek/deepseek-v4-flash-0731",
             "model_config": json.dumps(config),
-            "billing_provider": "nous",
+            "billing_provider": "anthropic",
         }
         overrides = _stored_session_runtime_overrides(row)
 
         assert overrides["model_override"]["model"] == "deepseek/deepseek-v4-flash-0731"
         # The stale endpoint identity is gone; resume routes through the
         # billing fallback to the profile's real provider.
-        assert overrides["model_override"]["provider"] == "nous"
-        assert overrides["provider_override"] == "nous"
+        assert overrides["model_override"]["provider"] == "anthropic"
+        assert overrides["provider_override"] == "anthropic"
 
 
     def test_existing_none_returns_only_agent_identity(self):
