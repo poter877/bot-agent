@@ -16,9 +16,8 @@
  *
  * Detection is backend-only (`agent/error_classifier.py` →
  * `FailoverReason.billing`), so every surface renders from this one signal and
- * never re-classifies free-form error text. `is_nous` routes recovery: Nous is
- * the managed route with in-app billing (desktop Settings → Billing, TUI
- * `/topup`), while third-party providers deep-link to `billing_url`.
+ * never re-classifies free-form error text. Recovery deep-links to
+ * `billing_url` on the provider that hit the wall.
  */
 export type { BillingBlock } from './gateway-contract.generated.js'
 
@@ -64,7 +63,6 @@ export type KnownBillingRefusalCode =
   | 'endpoint_unavailable'
   | 'idempotency_conflict'
   | 'idempotency_key_required'
-  | 'insufficient_scope'
   | 'internal_error'
   | 'invalid_charge_id'
   | 'invalid_request'
@@ -311,7 +309,8 @@ export interface SubscriptionStateResponse {
 
 // A chargeless quote (POST /subscription/preview) of what a change would do.
 // `effect` drives the confirm copy; a failed preview reuses the typed-error
-// envelope fields (same as the mutations) so a 403 still triggers the step-up.
+// envelope fields (same as the mutations) so a 403 still renders its typed
+// refusal inline.
 export interface SubscriptionPreviewResponse {
   ok: boolean
   effect?: 'charge_now' | 'scheduled' | 'no_op' | 'blocked'

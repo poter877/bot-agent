@@ -2048,16 +2048,6 @@ export const frOverrides = {
         minimum: (label: string, amount: string) => `${label} : le minimum est de ${amount}.`,
         maximum: (label: string, amount: string) => `${label} : le maximum est de ${amount}.`
       },
-      stepUp: {
-        openVerification: 'Ouvrir la page de vérification',
-        dismiss: 'Ignorer',
-        waiting: 'En attente du lien de vérification…',
-        verify: 'Vérifier pour continuer',
-        deniedTitle: 'La vérification n’a pas été approuvée',
-        deniedBody: 'La vérification s’est terminée sans autoriser les dépenses à distance pour ce terminal.',
-        successTitle: 'Vérification terminée',
-        successBody: 'Les dépenses à distance sont autorisées pour ce terminal.'
-      },
       charge: {
         added: (amount?: string) => (amount ? `${amount} $ ajoutés.` : 'Crédits ajoutés.'),
         failedTitle: 'Échec du paiement',
@@ -2220,11 +2210,6 @@ export const frOverrides = {
         consentRequired: {
           title: 'Confirmation de la carte requise',
           message: 'Confirmez cette carte pour les débits du terminal dans le portail'
-        },
-        insufficientScope: {
-          title: 'Les dépenses à distance doivent être approuvées',
-          message:
-            'Cette action nécessite l’autorisation des dépenses à distance. Lancez une recharge pour l’autoriser, puis réessayez.'
         },
         remoteSpendingRevoked: {
           title: 'Les dépenses à distance ont été arrêtées',

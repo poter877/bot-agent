@@ -550,7 +550,7 @@ gateway:
     unknown_subcommand: "Ismeretlen /usage alparancs: `{args}`. Próbáld: `/usage` vagy `/usage reset [--force]`."
     reset_wrong_provider: "A félretett limit-visszaállítások csak az openai-codex szolgáltatónál érhetők el. Válts először a `/model` paranccsal."
   credits:
-    not_logged_in: "Nincs bejelentkezve a Nous Portalra. Jelentkezz be a kreditegyenleg megtekintéséhez és feltöltéséhez."
+    not_logged_in: "Nincs bejelentkezve a portálra. Jelentkezz be a kreditegyenleg megtekintéséhez és feltöltéséhez."
   verbose:
     not_enabled: "A `/verbose` parancs nincs engedélyezve az üzenetküldő platformokon.\n\nEngedélyezd a `config.yaml` fájlban:\n```yaml\ndisplay:\n  tool_progress_command: true\n```"
     mode_off: "⚙️ Eszközfolyamat: **OFF** — nem jelenik meg eszközaktivitás."
@@ -952,7 +952,7 @@ gateway:
   codex_runtime:
     config_load_failed: "❌ Nem sikerült betölteni a konfigurációt: {error}"
   topup:
-    header: "💳 **Nous-egyenleg**"
+    header: "💳 **Egyenleg**"
     portal_link: "Számlázás kezelése a portálon: {url}"
     hint: "Feltöltés és számlázás a böngészőben — az egyenleged utána itt is frissül."
   login:
@@ -1676,11 +1676,11 @@ slash:
   usage:
     description: "Tokenhasználat és sebességkorlátok megjelenítése; a `reset` beváltja a félretett Codex limit-visszaállítást"
   subscription:
-    description: "A Nous csomagod megtekintése és módosítása a böngészőben"
+    description: "A csomagod megtekintése és módosítása a böngészőben"
   login:
-    description: "Bejelentkezés Nous fiókkal (a csatlakoztatott appjaid megmaradnak)"
+    description: "Bejelentkezés szolgáltatói fiókkal (a csatlakoztatott appjaid megmaradnak)"
   topup:
-    description: "A Nous egyenleged megjelenítése és a számlázás kezelése a portálon"
+    description: "Az egyenleged megjelenítése és a számlázás kezelése a portálon"
   platforms:
     description: "Az átjáró/üzenetküldő platformok állapotának megjelenítése"
   platform:
@@ -1701,7 +1701,7 @@ cli:
   billing:
     load_failed: "{label}: {error}"
     load_failed_label: "Nem sikerült betölteni a számlázást"
-    not_logged_in: "Nincs bejelentkezve a Nous Portalra."
+    not_logged_in: "Nincs bejelentkezve a portálra."
     run_portal_then: "Jelentkezz be a `hermes portal` paranccsal, majd: {cmd}."
     org_line: "Szervezet: {org}"
     org_line_role: "Szervezet: {org} · {role}"
@@ -1791,7 +1791,7 @@ cli:
     confirm_purchase: "Vásárlás megerősítése"
     total_line: "Összesen: {amount}"
     portal_card_will_be_charged: "A portálon mentett kártyádat terheljük meg."
-    consent_charge: "A megerősítéssel engedélyezed, hogy a Nous Research megterhelje a kártyádat."
+    consent_charge: "A megerősítéssel engedélyezed a kártyád megterhelését."
     choice_pay_now: "{amount} fizetése most"
     desc_submit_charge: "a terhelés elküldése"
     desc_manage_card_billing: "kártya / számlázás kezelése a böngészőben"
@@ -1852,7 +1852,7 @@ cli:
     threshold_label: "Ha az egyenleg ez alá esik"
     reload_to_label: "Egyenleg feltöltése erre"
     reload_must_exceed_threshold: "🔴 A feltöltési célösszegnek nagyobbnak kell lennie a küszöbnél."
-    auto_reload_consent: "A megerősítéssel engedélyezed, hogy a Nous Research megterhelje a(z) {card} kártyát, amikor az egyenleged eléri a(z) {threshold} összeget. Bármikor kikapcsolhatod itt vagy a portálon."
+    auto_reload_consent: "A megerősítéssel engedélyezed, hogy a(z) {card} kártya megterhelésre kerüljön, amikor az egyenleged eléri a(z) {threshold} összeget. Bármikor kikapcsolhatod itt vagy a portálon."
     turn_on_auto_reload_question: "Bekapcsolod az automatikus feltöltést?"
     auto_reload_enabled: "✅ Automatikus feltöltés be: {threshold} alatt → feltöltés erre: {reload_to}."
     auto_reload_disabled: "✅ Automatikus feltöltés kikapcsolva."
@@ -2438,7 +2438,7 @@ cli:
     empty_base_url: "⚠️  A szolgáltatófeloldó üres alap-URL-t adott vissza. Ellenőrizd a szolgáltató konfigurációját, vagy futtasd: hermes setup"
     switching_to_fallback: "⚠️  {reason} — átváltás tartalékra: {provider} / {model}"
     first_run_no_provider: "☤ Még nincs beállítva inferencia-szolgáltató — pótoljuk."
-    first_run_pick_provider: "Választasz egy szolgáltatót (a Nous Portal OAuth a leggyorsabb; nem kell API-kulcs) és egy modellt."
+    first_run_pick_provider: "Választasz egy szolgáltatót (a szolgáltatói OAuth a leggyorsabb; nem kell API-kulcs) és egy modellt."
     first_run_prompt: "Beállítasz most egy szolgáltatót? [Y/n]:"
     first_run_skipped: "Kihagyva. Bármikor futtathatod a 'hermes model' vagy a 'hermes setup' parancsot."
     first_run_cancelled: "Beállítás megszakítva. Bármikor futtathatod a 'hermes model' parancsot."
@@ -3677,8 +3677,8 @@ tips:
   t181: "A Camofox felismerés elleni böngésző – Firefox-fork C++ alapú ujjlenyomat-hamisítással."
   t182: "A browser_navigate automatikusan visszaad egy oldal-pillanatképet – nem kell utána browser_snapshot hívás."
   t183: "A browser_vision annotate=true beállítással számozott címkéket helyez az interaktív elemekre."
-  t184: "A hermes mcp interaktív választót nyit a Nous által jóváhagyott MCP-kből, amelyeket egy billentyűnyomással telepíthetsz."
-  t185: "A hermes mcp catalog kilistázza a repóval szállított, Nous által jóváhagyott MCP-szervereket."
+  t184: "A hermes mcp interaktív választót nyit válogatott MCP-kből, amelyeket egy billentyűnyomással telepíthetsz."
+  t185: "A hermes mcp catalog kilistázza a repóval szállított válogatott MCP-szervereket."
   t186: "A hermes mcp install <name> telepít egy katalógusbejegyzést, bekéri a hitelesítő adatokat, és kiválaszthatod, mely eszközeit engedélyezed."
   t187: "Az MCP-szerverek a config.yaml fájlban konfigurálhatók – a stdio és a HTTP transport is támogatott."
   t188: "Szerverenkénti eszközszűrés: a tools.include engedélyezi, a tools.exclude kizárja a megadott eszközöket."
@@ -3775,7 +3775,7 @@ tips:
   t279: "A HERMES_DEV=1 kikapcsolja a konténermód-felismerést helyi fejlesztéshez."
   t280: "Minden MCP-szerver saját eszközkészletet kap (mcp-szervernév), amely a hermes tools paranccsal külön ki-be kapcsolható."
   t281: "Az MCP ${ENV_VAR} helyőrzők a konfigban a szerver indításakor oldódnak fel — a ~/.hermes/.env változóival együtt."
-  t282: "A megbízható tárolókból (NousResearch) származó skillek 'trusted' biztonsági szintet kapnak; a közösségi skilleket extra vizsgálat várja."
+  t282: "A megbízható tárolókból (openai, anthropics, huggingface, NVIDIA) származó skillek 'trusted' biztonsági szintet kapnak; a közösségi skilleket extra vizsgálat várja."
   t283: "A ~/.hermes/skills/.hub/quarantine/ alatti skill-karantén a biztonsági felülvizsgálatra váró skilleket tárolja."
   t284: "A /steer <prompt> a következő eszközhívás után beszúr egy megjegyzést — így menet közben terelheted az irányt megszakítás nélkül."
   t285: "A /goal <text> állandó Ralph-loop célt állít be — a Hermes körről körre automatikusan folytatja, amíg egy bíráló késznek nem ítéli."
@@ -3801,7 +3801,7 @@ tips:
   t305: "A hermes curator rollback egy futás előtti pillanatképből állítja vissza a skilleket — a mentések a skills/.curator_backups/ alatt vannak."
   t306: "A hermes auth reset <provider> [target] törli a várakozási időket és a kimerülési jelzőket egy teljes hitelesítőadat-készleten, vagy egyetlen elemen index, azonosító vagy címke alapján."
   t307: "credential_pool_strategies.<provider>: a round_robin egyenletesen váltogatja a kulcsokat az alapértelmezett fill_first helyett."
-  t308: "Az eszközönkénti use_gateway: true a web-, kép-, TTS- vagy böngészőeszközt a Nous-előfizetéseden át irányítja — külön kulcsok nélkül."
+  t308: "Az eszközönkénti use_gateway: true a web-, kép-, TTS- vagy böngészőeszközt a szolgáltatói előfizetéseden át irányítja — külön kulcsok nélkül."
   t309: "A provider_routing.data_collection: deny kizárja az adatokat tároló szolgáltatókat az OpenRouteren."
   t310: "A provider_routing.require_parameters: true csak olyan szolgáltatókhoz irányít, amelyek a kérésed minden paraméterét támogatják."
   t311: "A HERMES_TUI_RESUME=1 indításkor automatikusan visszacsatlakozik a legutóbbi TUI-munkamenethez — jól jön, ha megszakad az SSH."

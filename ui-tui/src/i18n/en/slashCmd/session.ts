@@ -85,7 +85,6 @@ export const slashCmdSessionEn = {
       lowBalanceFallback: 'under $5',
       lowNote: (left: string) => `! Low balance · ${left} left. Run /topup or /subscription.`,
       noCalls: 'no API calls yet',
-      nousBalanceTitle: 'Nous balance',
       plan: (plan: string) => `Plan: ${plan}`,
       // {0}=plan name, {1}=renewal date display
       planRenews: (plan: string, renews: string) => `Plan: ${plan} · renews ${renews}`,
@@ -122,9 +121,8 @@ export const slashCmdSessionEn = {
     }
   },
   subscription: {
-    billingUnreachable: 'Could not reach the billing service — check your connection, then retry.',
     manageUrlFailed: 'Could not build manage URL — is your portal configured?',
-    notLoggedIn: 'Not logged into Nous Portal — run /portal to log in, then /subscription.',
+    notLoggedIn: 'Not logged in — run /portal to log in, then /subscription.',
     openBrowserFailedManage: (url: string) =>
       `Could not open browser — visit your subscription page manually at ${url}`,
     openBrowserFailedPortal: (url: string) => `Could not open browser — visit ${url} to finish.`,
@@ -156,7 +154,6 @@ export const slashCmdSessionEn = {
       generic: (message: string) => `🔴 ${message}`,
       genericFallback: 'Billing request failed.',
       idempotencyConflict: '🔴 That charge key was already used for a different amount. Start a fresh top-up.',
-      insufficientScope: 'This needs Remote Spending allowed. Start a top-up to allow it, then retry.',
       monthlyCapExceeded: '🔴 Monthly spend cap reached.',
       // {0}=remaining USD headroom (number as sent by the server)
       monthlyCapExceededRemaining: (remaining: string) => `🔴 Monthly spend cap reached — $${remaining} headroom left.`,
@@ -184,7 +181,7 @@ export const slashCmdSessionEn = {
       upgradeCapExceeded:
         '🔴 Daily plan-change limit reached (5 per org) — try again tomorrow, or manage this on the portal.'
     },
-    notLoggedIn: '💳 Not logged into Nous Portal — run /portal to log in, then /topup.',
+    notLoggedIn: '💳 Not logged in — run /portal to log in, then /topup.',
     openingPortal: (url: string) => `Opening portal: ${url}`,
     validate: {
       invalid: 'Enter a dollar amount, e.g. 100 (max 2 decimal places).',

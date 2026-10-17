@@ -1716,16 +1716,6 @@ export const zhOverrides = {
         minimum: (label, amount) => `${label}：最低金额为 ${amount}。`,
         maximum: (label, amount) => `${label}：最高金额为 ${amount}。`
       },
-      stepUp: {
-        openVerification: '打开验证页面',
-        dismiss: '关闭',
-        waiting: '正在等待验证链接…',
-        verify: '验证以继续',
-        deniedTitle: '验证未获批准',
-        deniedBody: '验证已结束，但未允许此终端进行远程支出。',
-        successTitle: '验证完成',
-        successBody: '此终端已获准进行远程支出。'
-      },
       charge: {
         added: amount => (amount ? `已添加 $${amount}。` : '已添加额度。'),
         failedTitle: '扣款失败',
@@ -1868,10 +1858,6 @@ export const zhOverrides = {
       },
       errors: {
         consentRequired: { title: '需要确认银行卡', message: '请在门户中确认此卡可用于终端扣款' },
-        insufficientScope: {
-          title: '需要批准远程支出',
-          message: '此操作需要远程支出权限。请发起一次充值以授权，然后重试。'
-        },
         remoteSpendingRevoked: {
           title: '远程支出已停止',
           messageByAdmin: '管理员已停止此终端的远程支出。',

@@ -152,12 +152,6 @@ describe('desktop slash command curation', () => {
     expect(isDesktopSlashCommand('/my-skill')).toBe(true)
   })
 
-  it('does not run /login on desktop before the catalog is loaded', () => {
-    rememberDesktopCommandsCatalog(undefined)
-    expect(isDesktopSlashCommand('/login')).toBe(false)
-    expect(desktopSlashUnavailableMessage('/login')).not.toBeNull()
-  })
-
   it('routes /compress through the session-compression action', () => {
     // /compress must be an action (session.compress RPC), not exec: the slash
     // worker route times out on large sessions (#44456).

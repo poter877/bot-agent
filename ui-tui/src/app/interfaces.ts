@@ -117,15 +117,9 @@ export interface GatewayProviderProps {
 // fetches `billing.state` and opens this overlay.  The overlay is a small
 // state machine (overview → buy|autoreload|limit → confirm) that performs
 // the SAME RPCs as the old slash flows (billing.charge / charge_status /
-// auto_reload / step_up).  Backend is unchanged & shared with the CLI.
+// auto_reload).  Backend is unchanged & shared with the CLI.
 
-export type BillingScreen = 'autoreload' | 'buy' | 'confirm' | 'limit' | 'overview' | 'stepup'
-
-/** Outcome of a charge attempt — lets the overlay route without tearing down. */
-export type BillingChargeOutcome =
-  | 'submitted' // 202 accepted; settlement is reported via transcript lines
-  | 'needs_remote_spending' // insufficient_scope → route to the stepup screen
-  | 'error' // any other failure (already surfaced via sys)
+export type BillingScreen = 'autoreload' | 'buy' | 'confirm' | 'limit' | 'overview'
 
 /**
  * The functions the overlay needs to talk to the gateway and emit
@@ -138,18 +132,11 @@ export interface BillingOverlayCtx {
   /** Run `billing.auto_reload` (enabled/threshold/top_up) → resolve ok/false. */
   applyAutoReload: (enabled: boolean, threshold?: number, topUp?: number) => Promise<boolean>
   /**
-   * Submit `billing.charge` for `amount` and poll to settlement. Resolves a
-   * discriminated outcome so the overlay can route to the resumable step-up on
-   * `needs_remote_spending` instead of tearing down. Settlement/most errors are
-   * still reported via transcript lines (the poll is non-blocking).
+   * Submit `billing.charge` for `amount` and poll to settlement. Settlement and
+   * every failure are reported via transcript lines (the poll and the error
+   * mapping are non-blocking); the overlay just closes either way.
    */
-  charge: (amount: string, idempotencyKey?: string) => Promise<BillingChargeOutcome>
-  /**
-   * Run the `billing.step_up` device flow (allow Remote Spending). Resolves
-   * `true` when the grant lands. The browser opens via the gateway's
-   * out-of-band `billing.step_up.verification` event — the overlay just awaits.
-   */
-  requestRemoteSpending: () => Promise<boolean>
+  charge: (amount: string, idempotencyKey?: string) => Promise<void>
   /** Open the portal in the browser + echo a transcript line. */
   openPortal: (url: string) => void
   /**
@@ -168,9 +155,8 @@ export interface BillingOverlayCtx {
 export interface BillingPendingCharge {
   amount: string
   /**
-   * Stable idempotency key for THIS purchase, minted when the amount is chosen.
-   * Reused across the step-up replay so a re-charge after the grant dedups
-   * server-side (and a double-submit collapses to one charge).
+   * Stable idempotency key for THIS purchase, minted when the amount is chosen,
+   * so a re-submit collapses to one charge server-side.
    */
   idempotencyKey?: string
 }
@@ -185,8 +171,7 @@ export interface BillingOverlayState {
 
 // ── Subscription overlay (in-terminal plan change, V3) ──
 
-// A small state machine: overview → picker → confirm → result, with a stepup
-// screen spliced in on demand.
+// A small state machine: overview → picker → confirm → result.
 //   overview — plan + status, entry to the picker / resume / manage-on-portal.
 //   picker   — the tier catalog (up/down direction hints; current tier shown,
 //              not selectable).
@@ -194,20 +179,7 @@ export interface BillingOverlayState {
 //              scheduled at date / no-op / blocked) + the apply action.
 //   result   — the outcome, including an SCA/decline upgrade handed off to the
 //              portal.
-//   stepup   — reached when a mutation returns insufficient_scope: allows remote
-//              spending in place, then auto-replays the held action.
-export type SubscriptionScreen = 'confirm' | 'overview' | 'picker' | 'result' | 'stepup'
-
-// The action held while the stepup screen allows remote spending, replayed after
-// approval: re-preview a tier, re-apply the confirmed pending change, or re-resume.
-export type SubscriptionStepUpRetry = { kind: 'apply' } | { kind: 'preview'; tierId: string } | { kind: 'resume' }
-
-/** Outcome of a remote-spending step-up: granted, plus the typed denial (for copy). */
-export interface StepUpResult {
-  granted: boolean
-  error?: string
-  message?: string
-}
+export type SubscriptionScreen = 'confirm' | 'overview' | 'picker' | 'result'
 
 export interface SubscriptionOverlayCtx {
   /**
@@ -235,13 +207,6 @@ export interface SubscriptionOverlayCtx {
   resume: () => Promise<BillingMutationResponse | null>
   /** POST /upgrade: charge the card on the subscription + flip the plan now. */
   upgrade: (tierId: string, idempotencyKey?: string) => Promise<SubscriptionUpgradeResponse | null>
-  /**
-   * Run the `billing.step_up` device flow (allow remote spending / "Remote
-   * Spending"). Resolves `{granted}` plus the typed denial (`error`/`message`) so
-   * the stepup screen shows the right recovery. The browser opens via the
-   * gateway's out-of-band verification event — the stepup screen just awaits.
-   */
-  requestRemoteSpending: () => Promise<StepUpResult>
   /** Emit a transcript system line. */
   sys: (text: string) => void
 }
@@ -279,8 +244,6 @@ export interface SubscriptionOverlayState {
   result?: null | SubscriptionResult
   screen: SubscriptionScreen
   state: SubscriptionStateResponse
-  /** Held while on the 'stepup' screen: the action to replay once the grant lands. */
-  stepUpRetry?: null | SubscriptionStepUpRetry
 }
 
 export interface ConnectionOverlayState {

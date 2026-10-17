@@ -3,12 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { Box, Text, useInput } from '@hermes/ink'
 import { useEffect, useRef, useState } from 'react'
 
-import type {
-  SubscriptionOverlayState,
-  SubscriptionPendingChange,
-  SubscriptionResult,
-  SubscriptionStepUpRetry
-} from '../app/interfaces.js'
+import type { SubscriptionOverlayState, SubscriptionPendingChange, SubscriptionResult } from '../app/interfaces.js'
 import type { SubscriptionStateResponse, SubscriptionTierOption, SubscriptionUpgradeResponse } from '../gatewayTypes.js'
 import { messages } from '../i18n/runtime.js'
 import { useT } from '../i18n/useT.js'
@@ -30,11 +25,11 @@ interface SubscriptionOverlayProps {
 
 /**
  * The /subscription modal — an in-terminal plan-change flow (V3). A small state
- * machine: overview → picker → confirm → result, with a stepup screen spliced in
- * when a mutation needs remote spending. Downgrades / cancellations / resume are
- * chargeless; an upgrade charges the card on the subscription, and an SCA/decline
- * is handed off to the portal. Starting a NEW subscription still deep-links (needs
- * a fresh card). All RPCs live in subscription.ts, reached via `overlay.ctx`.
+ * machine: overview → picker → confirm → result. Downgrades / cancellations /
+ * resume are chargeless; an upgrade charges the card on the subscription, and an
+ * SCA/decline is handed off to the portal. Starting a NEW subscription still
+ * deep-links (needs a fresh card). All RPCs live in subscription.ts, reached via
+ * `overlay.ctx`.
  */
 export function SubscriptionOverlay({ onClose, onPatch, overlay, t }: SubscriptionOverlayProps) {
   const { screen, state: s } = overlay
@@ -53,7 +48,6 @@ export function SubscriptionOverlay({ onClose, onPatch, overlay, t }: Subscripti
       {screen === 'picker' && <PickerScreen onClose={onClose} onPatch={onPatch} overlay={overlay} t={t} />}
       {screen === 'confirm' && <ConfirmScreen onClose={onClose} onPatch={onPatch} overlay={overlay} t={t} />}
       {screen === 'result' && <ResultScreen onClose={onClose} overlay={overlay} t={t} />}
-      {screen === 'stepup' && <StepUpScreen onClose={onClose} onPatch={onPatch} overlay={overlay} t={t} />}
       {screen === 'overview' && <OverviewScreen onClose={onClose} onPatch={onPatch} overlay={overlay} t={t} />}
     </Box>
   )
@@ -78,15 +72,7 @@ function centsDisplay(cents?: null | number): null | string {
   return typeof cents === 'number' ? `$${(cents / 100).toFixed(2)}` : null
 }
 
-/** True when a response is the insufficient_scope denial (route to step-up). */
-function isScopeDenial(r: { error?: string; ok?: boolean } | null): boolean {
-  return !!r && !r.ok && r.error === 'insufficient_scope'
-}
-
-/**
- * Map a failed RPC envelope to a result. (insufficient_scope is intercepted
- * earlier and routed to the step-up screen, so it should not reach here.)
- */
+/** Map a failed RPC envelope to a result. */
 function errorResult(r: { error?: string; message?: string; portal_url?: null | string } | null): SubscriptionResult {
   return {
     message: r?.message || r?.error || messages().subscription.result.genericError,
@@ -165,49 +151,11 @@ function upgradeResult(r: null | SubscriptionUpgradeResponse, pendingTierId?: nu
   return errorResult(r)
 }
 
-/** Map a failed remote-spending step-up to the right recovery copy (typed). */
-function stepUpDenialResult(res: { error?: string; message?: string }): SubscriptionResult {
-  const T = messages().subscription.stepUpDenial
-
-  if (res.error === 'session_revoked') {
-    return { message: T.sessionRevoked, ok: false }
-  }
-
-  if (res.error === 'remote_spending_revoked') {
-    return {
-      message: res.message || T.remoteSpendingRevoked,
-      ok: false
-    }
-  }
-
-  if (res.error === 'rate_limited') {
-    return { message: T.rateLimited, ok: false }
-  }
-
-  return {
-    message: res.message || T.notAllowed,
-    ok: false
-  }
-}
-
-// ── Scope-aware routing (shared by the picker, confirm, overview + step-up) ──
-
-// A REPEAT scope denial during a post-grant replay must NOT route back to the
-// stepup screen: we're already mounted there (in the 'resuming' phase), so an
-// onPatch({screen:'stepup'}) is a no-op that never remounts → the screen freezes.
-// Post-grant replays pass allowStepUp=false and surface this instead (mirrors the
-// CLI's allow_stepup=False cap). Resolved per call so a locale swap is observed.
-const scopeStillDeniedResult = (): SubscriptionResult => ({
-  message: messages().subscription.result.scopeStillDenied,
-  ok: false
-})
-
-/** Preview a tier and route: confirm (ok), stepup (scope), or result (other error). */
+/** Preview a tier and route: confirm (ok) or result (error). */
 function previewAndRoute(
   ctx: SubscriptionOverlayState['ctx'],
   tierId: string,
-  onPatch: ScreenProps['onPatch'],
-  allowStepUp = true
+  onPatch: ScreenProps['onPatch']
 ): Promise<void> {
   return ctx.preview(tierId).then(p => {
     if (!p) {
@@ -218,12 +166,6 @@ function previewAndRoute(
     }
 
     if (!p.ok) {
-      if (isScopeDenial(p)) {
-        return allowStepUp
-          ? onPatch({ screen: 'stepup', stepUpRetry: { kind: 'preview', tierId } })
-          : onPatch({ result: scopeStillDeniedResult(), screen: 'result' })
-      }
-
       return onPatch({ result: errorResult(p), screen: 'result' })
     }
 
@@ -231,9 +173,9 @@ function previewAndRoute(
     // end. blocked/no_op still go to confirm, which shows why + no apply.
     const kind = p.effect === 'charge_now' ? 'upgrade' : 'tier_change'
 
-    // Mint the upgrade idempotency key HERE so it rides `pending` into confirm AND
-    // the step-up replay — a re-submit / post-grant replay dedups server-side
-    // (mirrors billingOverlay's pendingCharge.idempotencyKey).
+    // Mint the upgrade idempotency key HERE so it rides `pending` into confirm —
+    // a re-submit dedups server-side (mirrors billingOverlay's
+    // pendingCharge.idempotencyKey).
     const pending: SubscriptionPendingChange =
       kind === 'upgrade'
         ? { idempotencyKey: randomUUID(), kind, preview: p, targetTierId: tierId }
@@ -243,12 +185,11 @@ function previewAndRoute(
   })
 }
 
-/** Apply the confirmed pending change and route: result (ok/err) or stepup (scope). */
+/** Apply the confirmed pending change and route to the result screen. */
 function applyPendingAndRoute(
   ctx: SubscriptionOverlayState['ctx'],
   pending: null | SubscriptionPendingChange,
-  onPatch: ScreenProps['onPatch'],
-  allowStepUp = true
+  onPatch: ScreenProps['onPatch']
 ): Promise<void> {
   if (!pending) {
     // Nothing to apply (defensive) — return to the overview rather than stranding.
@@ -257,52 +198,29 @@ function applyPendingAndRoute(
     return Promise.resolve()
   }
 
-  const toStepUp = () =>
-    allowStepUp
-      ? onPatch({ screen: 'stepup', stepUpRetry: { kind: 'apply' } })
-      : onPatch({ result: scopeStillDeniedResult(), screen: 'result' })
-
   const finish = (result: SubscriptionResult) => onPatch({ result, screen: 'result' })
 
   if (pending.kind === 'cancellation') {
-    return ctx
-      .scheduleCancellation()
-      .then(r =>
-        isScopeDenial(r) ? toStepUp() : finish(mutationResult(r, messages().subscription.result.cancellationScheduled))
-      )
+    return ctx.scheduleCancellation().then(r => finish(mutationResult(r, messages().subscription.result.cancellationScheduled)))
   }
 
   if (pending.kind === 'upgrade') {
-    return ctx
-      .upgrade(pending.targetTierId ?? '', pending.idempotencyKey)
-      .then(r => (isScopeDenial(r) ? toStepUp() : finish(upgradeResult(r, pending.targetTierId))))
+    return ctx.upgrade(pending.targetTierId ?? '', pending.idempotencyKey).then(r => finish(upgradeResult(r, pending.targetTierId)))
   }
 
   return ctx
     .scheduleChange(pending.targetTierId ?? '')
-    .then(r =>
-      isScopeDenial(r) ? toStepUp() : finish(mutationResult(r, messages().subscription.result.changeScheduled))
-    )
+    .then(r => finish(mutationResult(r, messages().subscription.result.changeScheduled)))
 }
 
-/** Resume (undo the pending change) and route: result (ok/err) or stepup (scope). */
-function resumeAndRoute(
-  ctx: SubscriptionOverlayState['ctx'],
-  onPatch: ScreenProps['onPatch'],
-  allowStepUp = true
-): Promise<void> {
-  return ctx.resume().then(r => {
-    if (isScopeDenial(r)) {
-      return allowStepUp
-        ? onPatch({ screen: 'stepup', stepUpRetry: { kind: 'resume' } })
-        : onPatch({ result: scopeStillDeniedResult(), screen: 'result' })
-    }
-
-    return onPatch({
+/** Resume (undo the pending change) and route to the result screen. */
+function resumeAndRoute(ctx: SubscriptionOverlayState['ctx'], onPatch: ScreenProps['onPatch']): Promise<void> {
+  return ctx.resume().then(r =>
+    onPatch({
       result: mutationResult(r, messages().subscription.result.resumed),
       screen: 'result'
     })
-  })
+  )
 }
 
 // ── The pending scheduled change (drives the banner + status echo) ──
@@ -831,135 +749,6 @@ function ResultScreen({ onClose, overlay, t }: Omit<ScreenProps, 'onPatch'>) {
       ))}
       <Text />
       {footer(T.resultScreen.hint, t)}
-    </Box>
-  )
-}
-
-// ── Screen: Step-up (allow remote spending inline, then replay) ───────
-
-function StepUpScreen({ onPatch, overlay, t }: ScreenProps) {
-  const T = useT().subscription
-  const { ctx } = overlay
-  const retry: null | SubscriptionStepUpRetry = overlay.stepUpRetry ?? null
-  const [phase, setPhase] = useState<'granted' | 'prompt' | 'resuming' | 'waiting'>('prompt')
-  const startedRef = useRef(false)
-  // Set when the user cancels while the browser grant is still in flight. The
-  // grant's late `.then` MUST NOT fire the held change after a cancel — otherwise
-  // a cancel-then-approve charges the card the user just declined.
-  const abortedRef = useRef(false)
-  // Guards the post-grant replay from double-firing (double-Enter on the default
-  // 'Continue' row) — mirrors billingOverlay.resume()'s phase flip.
-  const resumingRef = useRef(false)
-
-  const enable = () => {
-    if (startedRef.current) {
-      return
-    }
-
-    startedRef.current = true
-    setPhase('waiting')
-    void ctx.requestRemoteSpending().then(res => {
-      if (abortedRef.current) {
-        return
-      }
-
-      if (res.granted) {
-        // HOLD — do not auto-fire the held change. Require an explicit Continue so
-        // a cancelled/late grant can never charge (mirrors billingOverlay's
-        // 'granted' phase). The user already consented at confirm; this reconfirms.
-        return setPhase('granted')
-      }
-
-      // Typed denial (session_revoked / remote_spending_revoked / rate_limited /
-      // admin-approval) → the right recovery copy, not a flat "admin must allow".
-      onPatch({ result: stepUpDenialResult(res), screen: 'result', stepUpRetry: null })
-    })
-  }
-
-  const resume = () => {
-    // Fire the held replay at most once. Without this, a double-Enter on the
-    // default 'Continue' row sends two mutations (the upgrade dedups on the shared
-    // idempotency key, but schedule/cancel/resume replays carry none).
-    if (resumingRef.current || phase !== 'granted') {
-      return
-    }
-
-    resumingRef.current = true
-    setPhase('resuming')
-    onPatch({ stepUpRetry: null })
-
-    if (!retry) {
-      return onPatch({ screen: 'overview' })
-    }
-
-    // allowStepUp=false: a repeat scope denial surfaces a result, never a frozen
-    // re-entry into this (already-mounted) stepup screen.
-    if (retry.kind === 'preview') {
-      return void previewAndRoute(ctx, retry.tierId, onPatch, false)
-    }
-
-    if (retry.kind === 'resume') {
-      return void resumeAndRoute(ctx, onPatch, false)
-    }
-
-    return void applyPendingAndRoute(ctx, overlay.pending ?? null, onPatch, false)
-  }
-
-  const back = () => {
-    // Once a replay is firing, block abandon — the mutation/charge is in flight and
-    // re-mounting confirm would let a second submit through.
-    if (resumingRef.current) {
-      return
-    }
-
-    // Abandon. If a grant is in flight, mark it aborted so its .then no-ops (no
-    // un-consented charge); if already granted, just leave without replaying.
-    abortedRef.current = true
-    onPatch({ screen: retry?.kind === 'apply' ? 'confirm' : 'overview', stepUpRetry: null })
-  }
-
-  const rows: MenuRowSpec[] =
-    phase === 'granted'
-      ? [
-          {
-            color: t.color.ok,
-            label: retry?.kind === 'apply' ? T.stepUp.continueChange : T.stepUp.continue,
-            run: resume
-          },
-          { label: T.shared.cancel, run: back }
-        ]
-      : phase === 'prompt'
-        ? [
-            { color: t.color.ok, label: T.stepUp.allow, run: enable },
-            { label: T.shared.cancel, run: back }
-          ]
-        : []
-
-  const sel = useMenu(rows, back)
-
-  return (
-    <Box flexDirection="column">
-      <Text bold color={t.color.accent}>
-        {T.stepUp.title}
-      </Text>
-      {phase === 'prompt' && (
-        <>
-          <Text color={t.color.text}>{T.stepUp.promptBody}</Text>
-          <Text color={t.color.muted}>{T.stepUp.promptNote}</Text>
-        </>
-      )}
-      {phase === 'waiting' && <Text color={t.color.muted}>{T.stepUp.waiting}</Text>}
-      {phase === 'granted' && <Text color={t.color.ok}>{T.stepUp.granted}</Text>}
-      {phase === 'resuming' && <Text color={t.color.muted}>{T.stepUp.resuming}</Text>}
-      <Text />
-      {rows.map((row, i) => (
-        <ActionRow active={sel === i} color={row.color} key={row.label} label={row.label} t={t} />
-      ))}
-      <Text />
-      {footer(
-        phase === 'waiting' ? T.stepUp.hintWaiting : phase === 'resuming' ? T.stepUp.hintWorking : T.stepUp.hint,
-        t
-      )}
     </Box>
   )
 }

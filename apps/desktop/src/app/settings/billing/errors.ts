@@ -4,7 +4,7 @@ import { en } from '@/i18n/en'
 import type { BillingRefusal } from './api'
 
 export interface BillingRefusalPresentation {
-  action: { type: 'none' } | { type: 'portal'; url?: string } | { type: 'retry' } | { type: 'step_up' }
+  action: { type: 'none' } | { type: 'portal'; url?: string } | { type: 'retry' }
   message: string
   title: string
 }
@@ -33,13 +33,6 @@ export const resolveRefusal = (
         action: portalAction(refusal.portalUrl),
         message: copy.consentRequired.message,
         title: copy.consentRequired.title
-      }
-
-    case 'insufficient_scope':
-      return {
-        action: { type: 'step_up' },
-        message: copy.insufficientScope.message,
-        title: copy.insufficientScope.title
       }
     case 'remote_spending_revoked': {
       const who =

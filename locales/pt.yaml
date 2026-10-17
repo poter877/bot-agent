@@ -547,7 +547,7 @@ gateway:
     unknown_subcommand: "Subcomando /usage desconhecido: `{args}`. Tente `/usage` ou `/usage reset [--force]`."
     reset_wrong_provider: "Os resets de limite acumulados só estão disponíveis no provedor openai-codex. Troque primeiro com `/model`."
   credits:
-    not_logged_in: "Você não está conectado ao Nous Portal. Faça login para ver seu saldo de créditos e recarregar."
+    not_logged_in: "Você não está conectado ao portal. Faça login para ver seu saldo de créditos e recarregar."
   verbose:
     not_enabled: "O comando `/verbose` não está ativado para plataformas de mensagens.\n\nAtiva-o em `config.yaml`:\n```yaml\ndisplay:\n  tool_progress_command: true\n```"
     mode_off: "⚙️ Progresso de ferramentas: **OFF** — não é mostrada qualquer atividade de ferramentas."
@@ -938,7 +938,7 @@ gateway:
   codex_runtime:
     config_load_failed: "❌ Não foi possível carregar a configuração: {error}"
   topup:
-    header: "💳 **Saldo Nous**"
+    header: "💳 **Saldo**"
     portal_link: "Gerencie o faturamento no portal: {url}"
     hint: "Recarregue e gerencie o faturamento no navegador — seu saldo é atualizado aqui depois."
   login:
@@ -1659,11 +1659,11 @@ slash:
   usage:
     description: "Mostrar uso de tokens e limites de taxa; `reset` resgata um reset de limite do Codex acumulado"
   subscription:
-    description: "Ver seu plano Nous e alterá-lo no navegador"
+    description: "Ver seu plano e alterá-lo no navegador"
   login:
-    description: "Entrar com uma conta Nous (mantém seus conectores)"
+    description: "Entrar com uma conta de provedor (mantém seus conectores)"
   topup:
-    description: "Mostrar seu saldo Nous e gerenciar a cobrança no portal"
+    description: "Mostrar seu saldo e gerenciar a cobrança no portal"
   platforms:
     description: "Mostrar o status do gateway/plataformas de mensagens"
   platform:
@@ -1684,7 +1684,7 @@ cli:
   billing:
     load_failed: "{label}: {error}"
     load_failed_label: "Não foi possível carregar a cobrança"
-    not_logged_in: "Não conectado ao Nous Portal."
+    not_logged_in: "Não conectado ao portal."
     run_portal_then: "Execute `hermes portal` para entrar e, em seguida, {cmd}."
     org_line: "Org: {org}"
     org_line_role: "Org: {org} · {role}"
@@ -1774,7 +1774,7 @@ cli:
     confirm_purchase: "Confirmar compra"
     total_line: "Total: {amount}"
     portal_card_will_be_charged: "Seu cartão salvo no portal será cobrado."
-    consent_charge: "Ao confirmar, você permite que a Nous Research cobre seu cartão."
+    consent_charge: "Ao confirmar, você permite a cobrança no seu cartão."
     choice_pay_now: "Pagar {amount} agora"
     desc_submit_charge: "enviar a cobrança"
     desc_manage_card_billing: "gerenciar seu cartão / cobrança no navegador"
@@ -1835,7 +1835,7 @@ cli:
     threshold_label: "Quando o saldo cair abaixo de"
     reload_to_label: "Recarregar o saldo até"
     reload_must_exceed_threshold: "🔴 O valor de recarga deve ser maior que o limite."
-    auto_reload_consent: "Ao confirmar, você autoriza a Nous Research a cobrar {card} sempre que seu saldo atingir {threshold}. Desative a qualquer momento aqui ou no portal."
+    auto_reload_consent: "Ao confirmar, você autoriza a cobrança de {card} sempre que seu saldo atingir {threshold}. Desative a qualquer momento aqui ou no portal."
     turn_on_auto_reload_question: "Ativar a recarga automática?"
     auto_reload_enabled: "✅ Recarga automática ativada: abaixo de {threshold} → recarregar até {reload_to}."
     auto_reload_disabled: "✅ Recarga automática desativada."
@@ -2421,7 +2421,7 @@ cli:
     empty_base_url: "⚠️  O resolvedor de fornecedores retornou uma URL base vazia. Verifique a configuração do fornecedor ou execute: hermes setup"
     switching_to_fallback: "⚠️  {reason} — alternando para o fallback: {provider} / {model}"
     first_run_no_provider: "☤ Nenhum fornecedor de inferência configurado ainda — vamos resolver isso."
-    first_run_pick_provider: "Você escolherá um fornecedor (o OAuth do Nous Portal é o mais rápido; não precisa de chave de API) e um modelo."
+    first_run_pick_provider: "Você escolherá um fornecedor (o OAuth do provedor é o mais rápido; não precisa de chave de API) e um modelo."
     first_run_prompt: "Configurar um fornecedor agora? [Y/n]:"
     first_run_skipped: "Ignorado. Execute 'hermes model' ou 'hermes setup' a qualquer momento."
     first_run_cancelled: "Configuração cancelada. Execute 'hermes model' a qualquer momento."
@@ -3660,8 +3660,8 @@ tips:
   t181: "O Camofox é um navegador antidetecção — um fork do Firefox com falsificação de fingerprint em C++."
   t182: "browser_navigate retorna um instantâneo da página automaticamente — não é preciso chamar browser_snapshot depois."
   t183: "browser_vision com annotate=true sobrepõe rótulos numerados aos elementos interativos."
-  t184: "hermes mcp abre um seletor interativo de MCPs aprovados pela Nous que você instala com uma tecla."
-  t185: "hermes mcp catalog lista os servidores MCP aprovados pela Nous que acompanham o repositório."
+  t184: "hermes mcp abre um seletor interativo de MCPs curados que você instala com uma tecla."
+  t185: "hermes mcp catalog lista os servidores MCP curados que acompanham o repositório."
   t186: "hermes mcp install <name> instala uma entrada do catálogo, pede as credenciais e permite escolher quais ferramentas ativar."
   t187: "Servidores MCP são configurados no config.yaml — transportes stdio e HTTP suportados."
   t188: "Filtragem de ferramentas por servidor: tools.include permite e tools.exclude bloqueia ferramentas específicas."
@@ -3758,7 +3758,7 @@ tips:
   t279: "HERMES_DEV=1 ignora a detecção de modo contêiner para desenvolvimento local."
   t280: "Cada servidor MCP recebe seu próprio conjunto de ferramentas (mcp-servername), que pode ser alternado de forma independente via hermes tools."
   t281: "Placeholders ${ENV_VAR} de MCP na configuração são resolvidos ao iniciar o servidor — incluindo variáveis de ~/.hermes/.env."
-  t282: "Skills de repositórios confiáveis (NousResearch) recebem o nível de segurança 'trusted'; skills da comunidade passam por varredura extra."
+  t282: "Skills de repositórios confiáveis (openai, anthropics, huggingface, NVIDIA) recebem o nível de segurança 'trusted'; skills da comunidade passam por varredura extra."
   t283: "A quarentena de skills em ~/.hermes/skills/.hub/quarantine/ guarda skills aguardando revisão de segurança."
   t284: "/steer <prompt> injeta uma nota após a próxima chamada de ferramenta — ajuste a direção no meio da tarefa sem interromper."
   t285: "/goal <text> define um objetivo permanente em loop Ralph — o Hermes continua turno após turno até um juiz declarar concluído."
@@ -3784,7 +3784,7 @@ tips:
   t305: "hermes curator rollback restaura skills a partir de um instantâneo anterior à execução — os backups ficam em skills/.curator_backups/."
   t306: "hermes auth reset <provider> [target] limpa os tempos de espera e as marcações de esgotamento de um pool inteiro de credenciais, ou de uma única credencial por índice, id ou rótulo."
   t307: "credential_pool_strategies.<provider>: round_robin alterna as chaves de forma uniforme em vez do padrão fill_first."
-  t308: "use_gateway: true por ferramenta roteia web, image, tts ou browser pela sua assinatura Nous — sem chaves extras."
+  t308: "use_gateway: true por ferramenta roteia web, image, tts ou browser pela sua assinatura de provedor — sem chaves extras."
   t309: "provider_routing.data_collection: deny exclui fornecedores que armazenam dados no OpenRouter."
   t310: "provider_routing.require_parameters: true roteia apenas para fornecedores que suportam todos os parâmetros da sua solicitação."
   t311: "HERMES_TUI_RESUME=1 reanexa automaticamente à sessão mais recente da TUI ao iniciar — útil depois de quedas de SSH."

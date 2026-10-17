@@ -55,7 +55,6 @@ export interface BillingApi {
   resumeSubscription: () => Promise<BillingResult<BillingMutationResponse>>
   /** Schedule a chargeless downgrade at period end (PUT pending-change). */
   scheduleSubscriptionChange: (tierId: string) => Promise<BillingResult<BillingMutationResponse>>
-  stepUp: (sessionId?: string) => Promise<BillingResult<BillingMutationResponse>>
   updateAutoReload: (input: UpdateAutoReloadInput) => Promise<BillingResult<BillingMutationResponse>>
 }
 
@@ -164,10 +163,6 @@ export const createBillingApi = (requestGateway: BillingRequestGateway): Billing
   scheduleSubscriptionChange: tierId =>
     callBilling<BillingMutationResponse>(requestGateway, 'subscription.change', {
       subscription_type_id: tierId
-    }),
-  stepUp: sessionId =>
-    callBilling<BillingMutationResponse>(requestGateway, 'billing.step_up', {
-      ...(sessionId !== undefined ? { session_id: sessionId } : {})
     }),
   updateAutoReload: input =>
     callBilling<BillingMutationResponse>(requestGateway, 'billing.auto_reload', {

@@ -37,8 +37,7 @@ function invalidateBilling(queryClient: ReturnType<typeof useQueryClient>) {
 
 /**
  * The in-app downgrade flow: preview (chargeless quote) → confirm → schedule at
- * period end. Typed refusals surface via the shared BillingRefusalInline (which
- * drives the step-up for insufficient_scope, exactly like the auto-reload save);
+ * period end. Typed refusals surface via the shared BillingRefusalInline;
  * the caller retries by clicking the same button after verifying. On a scheduled
  * success it refetches billing + subscription and calls `onScheduled`.
  *
@@ -105,10 +104,9 @@ export function useDowngradeFlow({ onScheduled }: { onScheduled: () => void }) {
     }
 
     if (!result.ok) {
-      // A refusal (e.g. insufficient_scope → step-up) leaves the panel open in
-      // scheduleFailed, so the same button becomes a manual "Try again" AFTER the
-      // user elevates. We deliberately do NOT auto-replay the mutation on step-up
-      // success — this matches the auto-reload save's manual-retry pattern.
+      // A refusal leaves the panel open in scheduleFailed, so the same button
+      // becomes a manual "Try again". This matches the auto-reload save's
+      // manual-retry pattern.
       setActive({ phase: { kind: 'scheduleFailed', preview, refusal: result.refusal }, target })
 
       return
@@ -136,7 +134,7 @@ export function useDowngradeFlow({ onScheduled }: { onScheduled: () => void }) {
 /**
  * The undo for a scheduled downgrade / cancellation: a chargeless
  * `subscription.resume` (no confirm step) that refetches on success. A refusal
- * (e.g. insufficient_scope → step-up) surfaces via `refusal`. The api (real or the
+ * surfaces via `refusal`. The api (real or the
  * DEV-fixture simulation) comes from `useBillingApi`.
  */
 export function useResumeFlow() {

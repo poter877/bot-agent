@@ -93,7 +93,6 @@ describe('deriveBillingView', () => {
 
       const kinds: BillingRefusal['kind'][] = [
         'consent_required',
-        'insufficient_scope',
         'remote_spending_revoked',
         'session_revoked',
         'cli_billing_disabled',

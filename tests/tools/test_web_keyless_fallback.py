@@ -35,7 +35,6 @@ def _no_web_env(monkeypatch):
     )
     monkeypatch.setattr(web_tools, "_env_value", lambda name: "", raising=True)
     monkeypatch.setattr(web_tools, "_load_web_config", dict, raising=True)
-    monkeypatch.setattr(web_tools, "_is_tool_gateway_ready", lambda: False, raising=True)
     monkeypatch.setattr(web_tools, "_ddgs_package_importable", lambda: False, raising=True)
     yield
 
@@ -288,12 +287,14 @@ class TestProviderRouting:
         keyless.assert_not_called()
         assert out["success"] is True
 
-    def test_keyless_disabled_falls_through_to_key_error(self, monkeypatch):
+    def test_keyless_disabled_falls_through_to_keyed_failure(self, monkeypatch):
         monkeypatch.setattr(registry, "_keyless_tier_enabled", lambda: False)
         provider = ParallelWebSearchProvider()
-        out = provider.search("q")
+        with patch("plugins.web.parallel.provider._get_sync_client",
+                   side_effect=ImportError("parallel-web not installed")):
+            out = provider.search("q")
         assert out["success"] is False
-        assert "PARALLEL_API_KEY" in out["error"]
+        assert out["error"]
 
     def test_is_available_stays_false_keyless(self):
         # Keyless tier must NOT leak into is_available() (legacy walk order).
@@ -320,11 +321,13 @@ class TestProviderRouting:
     def test_tier_paid_forces_keyed_without_key(self, monkeypatch):
         monkeypatch.setattr(keyless_mcp, "provider_tier", lambda name: "paid")
         provider = ParallelWebSearchProvider()
-        with patch.object(keyless_mcp, "parallel_search_keyless") as keyless:
+        with patch.object(keyless_mcp, "parallel_search_keyless") as keyless, \
+                patch("plugins.web.parallel.provider._get_sync_client",
+                      side_effect=ImportError("parallel-web not installed")):
             out = provider.search("q")
         keyless.assert_not_called()
         assert out["success"] is False
-        assert "PARALLEL_API_KEY" in out["error"]
+        assert out["error"]
 
     def test_tier_paid_disables_keyless_availability(self, monkeypatch):
         monkeypatch.setattr(keyless_mcp, "provider_tier", lambda name: "paid")
@@ -489,13 +492,12 @@ class TestPickerTierRows:
         _write_provider_config(
             {"web_backend": "exa", "web_tier": "free", "env_vars": []},
             config,
-            managed_feature=None,
         )
         assert config["web"]["backend"] == "exa"
         assert config["web"]["provider_tier"]["exa"] == "free"
         # Re-selecting a tier-agnostic row clears the stale tier.
         _write_provider_config(
-            {"web_backend": "exa", "env_vars": []}, config, managed_feature=None
+            {"web_backend": "exa", "env_vars": []}, config
         )
         assert "exa" not in config["web"]["provider_tier"]
 

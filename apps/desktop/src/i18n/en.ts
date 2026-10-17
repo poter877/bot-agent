@@ -1680,16 +1680,6 @@ export const en: Translations = {
         minimum: (label, amount) => `${label}: minimum is ${amount}.`,
         maximum: (label, amount) => `${label}: maximum is ${amount}.`
       },
-      stepUp: {
-        openVerification: 'Open verification page',
-        dismiss: 'Dismiss',
-        waiting: 'Waiting for verification link…',
-        verify: 'Verify to continue',
-        deniedTitle: 'Verification was not approved',
-        deniedBody: 'Verification finished without allowing Remote Spending for this terminal.',
-        successTitle: 'Verification complete',
-        successBody: 'Remote Spending is allowed for this terminal.'
-      },
       charge: {
         added: amount => (amount ? `$${amount} added.` : 'Credits added.'),
         failedTitle: 'Charge failed',
@@ -1850,10 +1840,6 @@ export const en: Translations = {
         consentRequired: {
           title: 'Card confirmation needed',
           message: 'Confirm this card for terminal charges in the portal'
-        },
-        insufficientScope: {
-          title: 'Remote Spending needs approval',
-          message: 'This needs Remote Spending allowed. Start a top-up to allow it, then retry.'
         },
         remoteSpendingRevoked: {
           title: 'Remote spending was stopped',

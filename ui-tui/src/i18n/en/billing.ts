@@ -1,6 +1,7 @@
-// Billing overlay (`/topup`, credit purchases, card step-up). Owned namespace: `billing`.
-// Leaves are strings or `(...args) => string`; packs supply `{0}`, `{1}` positional
-// placeholders, so keep argument order stable and comment it when >1 arg.
+// Billing overlay (`/topup`, credit purchases, auto-reload, limits). Owned
+// namespace: `billing`. Leaves are strings or `(...args) => string`; packs
+// supply `{0}`, `{1}` positional placeholders, so keep argument order stable and
+// comment it when >1 arg.
 //
 // Amounts passed in are already formatted (`$25`, `$12.00`) — currency formatting
 // is a value, not a translatable literal. Hotkey chords (Enter/Esc/↑/↓) and
@@ -56,35 +57,9 @@ export const billingEn = {
       title: 'Confirm purchase',
       total: (amount: string) => `Total: ${amount}`,
       portalCardCharged: 'Your card saved on the portal will be charged.',
-      authorization: 'By confirming, you allow Nous Research to charge your card.',
+      authorization: 'By confirming, you allow the charge to your card.',
       payNow: (amount: string) => `Pay ${amount} now`,
       hint: '↑/↓ select · Enter confirm · Y/N quick · Esc back'
-    },
-    stepUp: {
-      openingBrowser: 'Opening your browser to allow Remote Spending…',
-      notAllowed:
-        "! Couldn't allow Remote Spending — someone with billing permissions (owner, admin, or finance admin) has to approve it. Your card was not charged.",
-      allowedResuming: '✓ Remote Spending allowed — resuming your purchase.',
-      stillNeedsApproval:
-        '! Remote Spending still needs approval — run /topup to try again. Your card was not charged.',
-      declined: 'No charge made. Run /topup when you want to allow Remote Spending.',
-      title: 'Allow Remote Spending',
-      waitingForBrowser: 'Waiting for your browser…',
-      approveInPage: 'Approve in the page that just opened.',
-      heldHere: (amount: string) => `Your ${amount} top-up is held here and resumes when you're done.`,
-      escCancel: 'Esc cancel',
-      grantedTitle: 'Remote Spending allowed',
-      readyToFinish: (amount: string) => `Your ${amount} top-up is ready to finish.`,
-      pressEnterToResume: 'Press Enter to resume',
-      grantedHint: 'Enter resume · Esc cancel',
-      resuming: (amount: string) => `Resuming your ${amount} top-up…`,
-      promptTitle: 'One-time setup',
-      promptBody: 'To charge from this terminal, allow Remote Spending once.',
-      promptDetail: (amount: string) =>
-        `It opens your browser to authorize, then your ${amount} top-up picks up right here.`,
-      allow: 'Allow Remote Spending',
-      notNow: 'Not now',
-      promptHint: '↑/↓ select · Enter confirm · Y/N quick · Esc cancel'
     },
     autoReload: {
       title: 'Auto-reload',
@@ -107,7 +82,7 @@ export const billingEn = {
       thresholdLabel: 'When balance falls below:',
       reloadToLabel: 'Reload balance to:',
       authorization: (card: string) =>
-        `By confirming, you authorize Nous Research to charge ${card} whenever your balance falls below the threshold. Turn off any time here or on the portal.`,
+        `By confirming, you authorize charging ${card} whenever your balance falls below the threshold. Turn off any time here or on the portal.`,
       hint: '↑/↓ move · Tab switch field · Enter next/confirm · Esc back'
     },
     limit: {

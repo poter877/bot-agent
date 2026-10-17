@@ -1,5 +1,5 @@
-// Subscription overlay (`/subscription`: plans, scheduled changes, remote spending).
-// Owned namespace: `subscription`. Leaves are strings or `(...args) => string`; packs
+// Subscription overlay (`/subscription`: plans, scheduled changes). Owned
+// namespace: `subscription`. Leaves are strings or `(...args) => string`; packs
 // supply `{0}`, `{1}` positional placeholders, so keep argument order stable and
 // comment it when >1 arg.
 
@@ -30,22 +30,12 @@ export const subscriptionEn = {
       upgraded: (plan: string) => `Upgraded to ${plan}. Your new monthly credits land in a moment.`,
       requiresAction: 'This upgrade needs extra verification (3DS). Finish it on the portal.',
       paymentFailed: 'Your card was declined. Update your payment method on the portal and try again.',
-      scopeStillDenied:
-        'Remote Spending still isn’t active for this terminal — the authorization didn’t take. Retry, or make this change on the portal.',
       couldNotPreview: 'Could not preview that change.',
       cancellationScheduled:
         'Scheduled — your plan stays active until the end of the billing period, then it cancels. Nothing changes today.',
       changeScheduled:
         'Scheduled — your plan doesn’t change today. You keep your current plan until the end of the billing period, then it switches.',
       resumed: 'Your pending change was undone — you stay on your current plan.'
-    },
-    // Typed denials from the remote-spending step-up.
-    stepUpDenial: {
-      sessionRevoked: 'Your session expired — run /portal to log in again, then retry the change.',
-      remoteSpendingRevoked: 'Remote spending was stopped for this terminal — reconnect from the portal, then retry.',
-      rateLimited: 'Too many attempts — wait a moment, then try again.',
-      notAllowed:
-        'Remote Spending was not allowed — someone with billing permissions (owner, admin, or finance admin) must approve it. You can also make this change on the portal.'
     },
     // The one-line plan status at the top of the overview.
     status: {
@@ -64,7 +54,7 @@ export const subscriptionEn = {
       freeNudge: 'Paid models need a subscription. Start one to reach them.',
       lowNudge: (amount: string) => `Low balance · ${amount} left. Top up or upgrade before a mid-run cutoff.`,
       lowNudgeAmountFallback: 'under $5',
-      noPortalUrl: '🔴 No portal URL available — manage your subscription on the Nous portal.',
+      noPortalUrl: '🔴 No portal URL available — manage your subscription on the portal.',
       keepPlanUndo: (plan: string) => `Keep ${plan} (undo this change)`,
       changePlan: 'Change plan',
       cancelSubscription: 'Cancel subscription',
@@ -120,20 +110,6 @@ export const subscriptionEn = {
       rerunHint: 'Re-run /subscription anytime to review it.',
       openPortalToFinish: 'Open the portal to finish',
       hint: '↑/↓ select · Enter · Esc close'
-    },
-    stepUp: {
-      title: 'Remote Spending',
-      promptBody: 'Changing your plan needs Remote Spending allowed for this terminal. Allow it here, then continue.',
-      promptNote: 'Someone with billing permissions (owner, admin, or finance admin) approves it once in the browser.',
-      waiting: 'Opening your browser to approve… finish there, then come back — nothing is charged until you continue.',
-      granted: 'Remote Spending allowed. Continue to finish your change.',
-      resuming: 'Applying your change…',
-      allow: 'Allow Remote Spending',
-      continue: 'Continue',
-      continueChange: 'Continue the change',
-      hintWaiting: 'Waiting for approval… · Esc to cancel',
-      hintWorking: 'Working…',
-      hint: '↑/↓ select · Enter · Esc back'
     },
     team: {
       title: 'Team subscription',

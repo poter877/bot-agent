@@ -1555,16 +1555,6 @@ export interface Translations extends NoticeTranslations {
         minimum: (label: string, amount: string) => string
         maximum: (label: string, amount: string) => string
       }
-      stepUp: {
-        openVerification: string
-        dismiss: string
-        waiting: string
-        verify: string
-        deniedTitle: string
-        deniedBody: string
-        successTitle: string
-        successBody: string
-      }
       charge: {
         added: (amount: string) => string
         failedTitle: string
@@ -1710,7 +1700,7 @@ export interface Translations extends NoticeTranslations {
       }
       errors: {
         consentRequired: { title: string; message: string }
-        insufficientScope: { title: string; message: string }
+
         remoteSpendingRevoked: {
           title: string
           messageByAdmin: string

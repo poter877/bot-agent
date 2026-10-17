@@ -57,22 +57,12 @@ export function BillingOverlay({ onClose, onPatch, overlay, t }: BillingOverlayP
           idempotencyKey={overlay.pendingCharge?.idempotencyKey}
           onBack={() => onPatch({ pendingCharge: null, screen: 'buy' })}
           onClose={onClose}
-          onPatch={onPatch}
           s={s}
           t={t}
         />
       )}
       {screen === 'autoreload' && <AutoReloadScreen ctx={ctx} onClose={onClose} onPatch={onPatch} s={s} t={t} />}
       {screen === 'limit' && <LimitScreen ctx={ctx} onClose={onClose} onPatch={onPatch} s={s} t={t} />}
-      {screen === 'stepup' && (
-        <StepUpScreen
-          amount={overlay.pendingCharge?.amount ?? ''}
-          ctx={ctx}
-          idempotencyKey={overlay.pendingCharge?.idempotencyKey}
-          onClose={onClose}
-          t={t}
-        />
-      )}
     </Box>
   )
 }
@@ -91,10 +81,8 @@ function OverviewScreen({ ctx, onClose, onPatch, s, t }: ScreenProps) {
   const B = useT().billing
   // Full charge menu only for an admin with the org kill-switch on; otherwise it
   // collapses to Manage-on-portal / Close + a one-line note. NOTE: this is the
-  // ORG-level gate (cli_billing_enabled), NOT the per-terminal remote spending scope —
-  // that's discovered reactively at pay time (a charge 403s insufficient_scope
-  // and the confirm screen routes into the resumable step-up). We deliberately
-  // do NOT preflight the scope here.
+  // ORG-level gate (cli_billing_enabled), NOT any per-terminal permission —
+  // those surface reactively at pay time via the typed billing errors.
   const full = s.is_admin && s.cli_billing_enabled
 
   const note = !s.is_admin
@@ -241,9 +229,9 @@ function BuyScreen({ ctx, onPatch, s, t }: ScreenProps) {
   }
 
   const toConfirm = (amount: string) => {
-    // Mint the idempotency key here (purchase identity = this amount). It rides
-    // pendingCharge into Confirm AND the step-up replay, so a retried charge
-    // dedups server-side; a fresh amount selection gets a fresh key.
+    // Mint the idempotency key here (purchase identity = this amount) so a
+    // double-submit collapses to one charge server-side; a fresh amount
+    // selection gets a fresh key.
     onPatch({ pendingCharge: { amount, idempotencyKey: randomUUID() }, screen: 'confirm' })
   }
 
@@ -400,7 +388,6 @@ function ConfirmScreen({
   idempotencyKey,
   onBack,
   onClose,
-  onPatch,
   s,
   t
 }: {
@@ -409,7 +396,6 @@ function ConfirmScreen({
   idempotencyKey?: string
   onBack: () => void
   onClose: () => void
-  onPatch: (next: Partial<BillingOverlayState>) => void
   s: BillingStateResponse
   t: Theme
 }) {
@@ -429,19 +415,9 @@ function ConfirmScreen({
 
     submittingRef.current = true
     setSubmitting(true)
-    void ctx.charge(amount, idempotencyKey).then(outcome => {
-      if (outcome === 'needs_remote_spending') {
-        // Resumable step-up: keep the modal MOUNTED, switch to the stepup
-        // screen (which holds pendingCharge.amount for the post-grant replay).
-        onPatch({ screen: 'stepup' })
-
-        return
-      }
-
-      // submitted (settlement reported via transcript) or error (already
-      // surfaced) → close the overlay. The transcript carries the outcome.
-      onClose()
-    })
+    // submitted (settlement reported via transcript) or error (already
+    // surfaced) → close the overlay. The transcript carries the outcome.
+    void ctx.charge(amount, idempotencyKey).then(() => onClose())
   }
 
   const back = () => onBack()
@@ -492,188 +468,6 @@ function ConfirmScreen({
       <ActionRow active={sel === 1} label={B.common.cancel} t={t} />
       <Text />
       {footer(B.confirm.hint, t)}
-    </Box>
-  )
-}
-
-// ── Screen: Step-up (resumable "Allow Remote Spending") ─────────────
-// Reached ONLY when a charge returns insufficient_scope — there is no preflight
-// or scope check anywhere; the buy path discovers it reactively. The modal stays
-// MOUNTED through the browser device-flow:
-//   prompt (heads-up) → waiting (browser authorize) → granted (press Enter to
-//   resume) → replay the held charge (pendingCharge.amount) → settle → close.
-// Never leaks the raw billing:manage scope — the user-facing concept is
-// "Remote Spending".
-
-function StepUpScreen({
-  amount,
-  ctx,
-  idempotencyKey,
-  onClose,
-  t
-}: {
-  amount: string
-  ctx: BillingOverlayState['ctx']
-  idempotencyKey?: string
-  onClose: () => void
-  t: Theme
-}) {
-  const B = useT().billing
-  const [sel, setSel] = useState(0)
-  const [phase, setPhase] = useState<'granted' | 'prompt' | 'resuming' | 'waiting'>('prompt')
-
-  const allow = () => {
-    if (phase !== 'prompt') {
-      return
-    }
-
-    setPhase('waiting')
-    ctx.sys(B.stepUp.openingBrowser)
-
-    void ctx.requestRemoteSpending().then(granted => {
-      if (!granted) {
-        ctx.sys(B.stepUp.notAllowed)
-        onClose()
-
-        return
-      }
-
-      // Granted → hold here and wait for an explicit Enter to resume the held
-      // purchase (the reassuring "you're back, press Enter" beat).
-      setPhase('granted')
-    })
-  }
-
-  const resume = () => {
-    if (phase !== 'granted') {
-      return
-    }
-
-    setPhase('resuming')
-    ctx.sys(B.stepUp.allowedResuming)
-    void ctx.charge(amount, idempotencyKey).then(outcome => {
-      // If the replay STILL can't spend (grant raced/expired or downscoped),
-      // say so — don't close on a reassuring line with no charge made.
-      if (outcome === 'needs_remote_spending') {
-        ctx.sys(B.stepUp.stillNeedsApproval)
-      }
-
-      onClose()
-    })
-  }
-
-  const decline = () => {
-    ctx.sys(B.stepUp.declined)
-    onClose()
-  }
-
-  useInput((ch, key) => {
-    if (phase === 'waiting' || phase === 'resuming') {
-      // While the device flow / replay runs, only Esc (give up) is live.
-      if (key.escape) {
-        onClose()
-      }
-
-      return
-    }
-
-    if (phase === 'granted') {
-      // Back from the browser — Enter resumes, Esc abandons.
-      if (key.escape) {
-        return onClose()
-      }
-
-      if (key.return) {
-        return resume()
-      }
-
-      return
-    }
-
-    // phase === 'prompt'
-    if (key.escape) {
-      return decline()
-    }
-
-    const lower = ch.toLowerCase()
-
-    if (lower === 'y') {
-      return allow()
-    }
-
-    if (lower === 'n') {
-      return decline()
-    }
-
-    if (key.upArrow) {
-      setSel(0)
-    }
-
-    if (key.downArrow) {
-      setSel(1)
-    }
-
-    if (key.return) {
-      return sel === 0 ? allow() : decline()
-    }
-  })
-
-  if (phase === 'waiting') {
-    return (
-      <Box flexDirection="column">
-        <Text bold color={t.color.accent}>
-          {B.stepUp.title}
-        </Text>
-        <Text color={t.color.warn}>{B.stepUp.waitingForBrowser}</Text>
-        <Text color={t.color.muted}>{B.stepUp.approveInPage}</Text>
-        <Text color={t.color.muted}>{B.stepUp.heldHere(usd(amount))}</Text>
-        <Text />
-        {footer(B.stepUp.escCancel, t)}
-      </Box>
-    )
-  }
-
-  if (phase === 'granted') {
-    return (
-      <Box flexDirection="column">
-        <Text bold color={t.color.ok}>
-          {B.stepUp.grantedTitle}
-        </Text>
-        <Text color={t.color.text}>{B.stepUp.readyToFinish(usd(amount))}</Text>
-        <Text />
-        <ActionRow active color={t.color.ok} label={B.stepUp.pressEnterToResume} t={t} />
-        <Text />
-        {footer(B.stepUp.grantedHint, t)}
-      </Box>
-    )
-  }
-
-  if (phase === 'resuming') {
-    return (
-      <Box flexDirection="column">
-        <Text bold color={t.color.accent}>
-          {B.stepUp.title}
-        </Text>
-        <Text color={t.color.muted}>{B.stepUp.resuming(usd(amount))}</Text>
-        <Text />
-        {footer(B.stepUp.escCancel, t)}
-      </Box>
-    )
-  }
-
-  // phase === 'prompt' — the one heads-up, triggered only by the 403.
-  return (
-    <Box flexDirection="column">
-      <Text bold color={t.color.warn}>
-        {B.stepUp.promptTitle}
-      </Text>
-      <Text color={t.color.text}>{B.stepUp.promptBody}</Text>
-      <Text color={t.color.muted}>{B.stepUp.promptDetail(usd(amount))}</Text>
-      <Text />
-      <ActionRow active={sel === 0} color={t.color.ok} label={B.stepUp.allow} t={t} />
-      <ActionRow active={sel === 1} label={B.stepUp.notNow} t={t} />
-      <Text />
-      {footer(B.stepUp.promptHint, t)}
     </Box>
   )
 }

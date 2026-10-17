@@ -25,7 +25,7 @@ vi.mock('@hermes/ink', async importOriginal => {
 import type { SubscriptionOverlayState } from '../app/interfaces.js'
 import { SubscriptionOverlay } from '../components/subscriptionOverlay.js'
 import type { SubscriptionStateResponse } from '../gatewayTypes.js'
-import { applyLocale, messages, resetLocale } from '../i18n/runtime.js'
+import { messages } from '../i18n/runtime.js'
 import { DEFAULT_THEME } from '../theme.js'
 
 const t = DEFAULT_THEME
@@ -127,7 +127,6 @@ const ctx = {
   openPortal: vi.fn(),
   preview: vi.fn(() => Promise.resolve(null)),
   refreshState: vi.fn(() => Promise.resolve(null)),
-  requestRemoteSpending: vi.fn(() => Promise.resolve({ granted: true })),
   resume: vi.fn(() => Promise.resolve(null)),
   scheduleCancellation: vi.fn(() => Promise.resolve(null)),
   scheduleChange: vi.fn(() => Promise.resolve(null)),
@@ -381,52 +380,6 @@ describe('SubscriptionOverlay — overview actions', () => {
     expect(out).toContain('Keep Plus (undo this change)')
     expect(out).toContain('cancels')
     expect(out).not.toContain('Cancel subscription')
-  })
-})
-
-describe('SubscriptionOverlay — step-up', () => {
-  it('prompts to allow Remote Spending (never leaks the raw scope)', () => {
-    const out = render(at('stepup', subscriber(), { stepUpRetry: { kind: 'preview', tierId: 'ultra' } }))
-
-    expect(out).toContain('Remote Spending')
-    expect(out).toContain('Allow Remote Spending')
-    expect(out).not.toContain('billing:manage')
-  })
-
-  it('repeat scope denial after the grant resolves its message from the active locale', async () => {
-    // The post-grant replay result used to be a module-level constant; a pack
-    // installed after import must still be observed.
-    applyLocale('xx', {
-      lang: 'xx',
-      messages: { 'subscription.result.scopeStillDenied': 'STILL-DENIED-XX' },
-      surface: 'tui'
-    })
-
-    try {
-      const onPatch = vi.fn()
-      const preview = vi.fn(() => Promise.resolve({ ok: false, error: 'insufficient_scope' }))
-
-      const mounted = mount(
-        at('stepup', subscriber(), {
-          ctx: { ...ctx, preview } as SubscriptionOverlayState['ctx'],
-          stepUpRetry: { kind: 'preview', tierId: 'ultra' }
-        }),
-        onPatch
-      )
-
-      inputHarness.handler?.('', { return: true }) // Allow Remote Spending → granted
-      await vi.waitFor(() => expect(mounted.output()).toContain(messages().subscription.stepUp.granted))
-      inputHarness.handler?.('', { return: true }) // Continue → replay with allowStepUp=false
-      await vi.waitFor(() => expect(preview).toHaveBeenCalled())
-      await vi.waitFor(() => expect(onPatch).toHaveBeenCalledWith(expect.objectContaining({ screen: 'result' })))
-      mounted.cleanup()
-
-      const patch = onPatch.mock.calls.at(-1)?.[0] as Partial<SubscriptionOverlayState>
-
-      expect(patch.result).toMatchObject({ message: 'STILL-DENIED-XX', ok: false })
-    } finally {
-      resetLocale()
-    }
   })
 })
 

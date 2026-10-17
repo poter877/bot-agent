@@ -547,7 +547,7 @@ gateway:
     unknown_subcommand: "Onbekende /usage subopdrag: `{args}`. Probeer `/usage` of `/usage reset [--force]`."
     reset_wrong_provider: "Gebankte gebruikslimiet-terugstellings is slegs beskikbaar op die openai-codex verskaffer. Skakel eers oor met `/model`."
   credits:
-    not_logged_in: "Nie by Nous Portal aangemeld nie. Meld aan om jou kredietsaldo te sien en op te laai."
+    not_logged_in: "Nie by die portaal aangemeld nie. Meld aan om jou kredietsaldo te sien en op te laai."
   verbose:
     not_enabled: "Die `/verbose`-opdrag is nie vir boodskapplatforms geaktiveer nie.\n\nAktiveer dit in `config.yaml`:\n```yaml\ndisplay:\n  tool_progress_command: true\n```"
     mode_off: "⚙️ Gereedskap-vordering: **AF** — geen gereedskap-aktiwiteit word vertoon nie."
@@ -938,7 +938,7 @@ gateway:
   codex_runtime:
     config_load_failed: "❌ Kon nie konfigurasie laai nie: {error}"
   topup:
-    header: "💳 **Nous-saldo**"
+    header: "💳 **Saldo**"
     portal_link: "Bestuur fakturering op die portaal: {url}"
     hint: "Laai op en bestuur fakturering in die blaaier — jou saldo word daarna hier opgedateer."
   login:
@@ -1659,11 +1659,11 @@ slash:
   usage:
     description: "Wys tokengebruik en tariefperke; `reset` los 'n gebankte Codex-limiet-terugstelling in"
   subscription:
-    description: "Bekyk jou Nous-plan en verander dit in die blaaier"
+    description: "Bekyk jou plan en verander dit in die blaaier"
   login:
-    description: "Meld aan met 'n Nous-rekening (behou jou koppelaars)"
+    description: "Meld aan met 'n verskafferrekening (behou jou koppelaars)"
   topup:
-    description: "Wys jou Nous-saldo en bestuur fakturering op die portaal"
+    description: "Wys jou saldo en bestuur fakturering op die portaal"
   platforms:
     description: "Wys gateway-/boodskapplatform-status"
   platform:
@@ -1684,7 +1684,7 @@ cli:
   billing:
     load_failed: "{label}: {error}"
     load_failed_label: "Kon nie faktureringsinligting laai nie"
-    not_logged_in: "Nie by Nous Portal aangemeld nie."
+    not_logged_in: "Nie by die portaal aangemeld nie."
     run_portal_then: "Voer `hermes portal` uit om aan te meld, en dan {cmd}."
     org_line: "Org: {org}"
     org_line_role: "Org: {org} · {role}"
@@ -1774,7 +1774,7 @@ cli:
     confirm_purchase: "Bevestig aankoop"
     total_line: "Totaal: {amount}"
     portal_card_will_be_charged: "Jou kaart wat op die portaal gestoor is, sal afgeskryf word."
-    consent_charge: "Deur te bevestig, laat jy Nous Research toe om jou kaart af te skryf."
+    consent_charge: "Deur te bevestig, laat jy toe dat jou kaart afgeskryf word."
     choice_pay_now: "Betaal nou {amount}"
     desc_submit_charge: "dien die afskrywing in"
     desc_manage_card_billing: "bestuur jou kaart / fakturering in die blaaier"
@@ -1835,7 +1835,7 @@ cli:
     threshold_label: "Wanneer saldo daal onder"
     reload_to_label: "Herlaai saldo tot"
     reload_must_exceed_threshold: "🔴 Die herlaai-tot-bedrag moet groter as die drempel wees."
-    auto_reload_consent: "Deur te bevestig, magtig jy Nous Research om {card} af te skryf wanneer jou saldo {threshold} bereik. Skakel dit enige tyd hier of op die portaal af."
+    auto_reload_consent: "Deur te bevestig, magtig jy dat {card} afgeskryf word wanneer jou saldo {threshold} bereik. Skakel dit enige tyd hier of op die portaal af."
     turn_on_auto_reload_question: "Skakel outo-herlaai aan?"
     auto_reload_enabled: "✅ Outo-herlaai aan: onder {threshold} → herlaai tot {reload_to}."
     auto_reload_disabled: "✅ Outo-herlaai afgeskakel."
@@ -2421,7 +2421,7 @@ cli:
     empty_base_url: "⚠️  Verskaffer-oplosser het 'n leë basis-URL teruggegee. Gaan jou verskaffer-konfigurasie na of voer uit: hermes setup"
     switching_to_fallback: "⚠️  {reason} — skakel oor na terugval: {provider} / {model}"
     first_run_no_provider: "☤ Geen inferensie-verskaffer is nog opgestel nie — kom ons stel dit reg."
-    first_run_pick_provider: "Jy sal 'n verskaffer kies (Nous Portal OAuth is die vinnigste; geen API-sleutel nodig) en 'n model."
+    first_run_pick_provider: "Jy sal 'n verskaffer kies (Verskaffer-OAuth is die vinnigste; geen API-sleutel nodig) en 'n model."
     first_run_prompt: "Stel nou 'n verskaffer op? [J/n]:"
     first_run_skipped: "Oorgeslaan. Voer enige tyd 'hermes model' of 'hermes setup' uit."
     first_run_cancelled: "Opstelling gekanselleer. Voer enige tyd 'hermes model' uit."
@@ -3660,8 +3660,8 @@ tips:
   t181: "Camofox is 'n anti-opsporingsblaaier — 'n Firefox-vurk met C++-vingerafdrukvervalsing."
   t182: "browser_navigate gee outomaties 'n bladsy-momentopname terug — geen browser_snapshot-oproep daarna nodig nie."
   t183: "browser_vision met annotate=true plaas genommerde etikette oor interaktiewe elemente."
-  t184: "hermes mcp maak 'n interaktiewe kieser van Nous-goedgekeurde MCP's oop wat jy met een toetsdruk kan installeer."
-  t185: "hermes mcp catalog lys Nous-goedgekeurde MCP-bedieners wat saam met die bewaarplek verskeep word."
+  t184: "hermes mcp maak 'n interaktiewe kieser van uitgesoekte MCP's oop wat jy met een toetsdruk kan installeer."
+  t185: "hermes mcp catalog lys uitgesoekte MCP-bedieners wat saam met die bewaarplek verskeep word."
   t186: "hermes mcp install <name> installeer 'n katalogus-inskrywing, vra vir geloofsbriewe en laat jou kies watter van sy gereedskap om te aktiveer."
   t187: "MCP-bedieners word in config.yaml opgestel — beide stdio- en HTTP-vervoer word ondersteun."
   t188: "Gereedskapfiltrering per bediener: tools.include witlys en tools.exclude swartlys spesifieke gereedskap."
@@ -3758,7 +3758,7 @@ tips:
   t279: "HERMES_DEV=1 omseil houermodus-bespeuring vir plaaslike ontwikkeling."
   t280: "Elke MCP-bediener kry sy eie gereedskapstel (mcp-servername) wat onafhanklik via hermes tools aan- of afgeskakel kan word."
   t281: "MCP ${ENV_VAR}-plekhouers in die konfigurasie word by bedienerbegin opgelos — insluitend veranderlikes uit ~/.hermes/.env."
-  t282: "Vaardighede uit vertroude bewaarplekke (NousResearch) kry 'n 'trusted'-sekuriteitsvlak; gemeenskapsvaardighede kry ekstra skandering."
+  t282: "Vaardighede uit vertroude bewaarplekke (openai, anthropics, huggingface, NVIDIA) kry 'n 'trusted'-sekuriteitsvlak; gemeenskapsvaardighede kry ekstra skandering."
   t283: "Die vaardigheidskwarantyn by ~/.hermes/skills/.hub/quarantine/ hou vaardighede wat op sekuriteitshersiening wag."
   t284: "/steer <prompt> voeg 'n nota na die volgende gereedskapsoproep in — stuur die rigting middel in 'n taak sonder om te onderbreek."
   t285: "/goal <text> stel 'n staande Ralph-lus-doelwit — Hermes gaan outomaties beurt na beurt voort totdat 'n beoordelaar sê dit is klaar."
@@ -3784,7 +3784,7 @@ tips:
   t305: "hermes curator rollback herstel vaardighede vanaf 'n momentopname van voor die lopie — rugsteune woon onder skills/.curator_backups/."
   t306: "hermes auth reset <provider> [target] vee afkoeltye en uitputtingsvlae op 'n hele geloofsbriewe-poel uit, of op een geloofsbrief volgens indeks, id of etiket."
   t307: "credential_pool_strategies.<provider>: round_robin roteer sleutels eweredig in plaas van die fill_first-verstek."
-  t308: "use_gateway: true per gereedskap stuur web, image, tts of browser deur jou Nous-subskripsie — geen ekstra sleutels nodig nie."
+  t308: "use_gateway: true per gereedskap stuur web, image, tts of browser deur jou verskaffer-subskripsie — geen ekstra sleutels nodig nie."
   t309: "provider_routing.data_collection: deny sluit verskaffers op OpenRouter uit wat data stoor."
   t310: "provider_routing.require_parameters: true stuur net na verskaffers wat elke parameter in jou versoek ondersteun."
   t311: "HERMES_TUI_RESUME=1 herkoppel by die begin outomaties aan die mees onlangse TUI-sessie — handig nadat SSH afgebreek het."

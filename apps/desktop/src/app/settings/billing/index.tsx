@@ -27,7 +27,6 @@ import { AutoReloadRow } from './auto-reload-row'
 import { clampAmount, formatMoney } from './billing-amounts'
 import { CurrentPlanCard } from './current-plan-card'
 import { type BillingDevFixtureName, billingDevFixtures } from './dev-fixtures'
-import { StepUpInlineAction } from './inline-feedback'
 import { openExternal } from './open-external'
 import { BillingPlansView } from './plans-view'
 import { createSimulatedBillingApi } from './simulated-api'
@@ -41,7 +40,6 @@ import {
   useSubscriptionState
 } from './use-billing-state'
 import { useChargeFlow } from './use-charge-poller'
-import { useStepUpFlow } from './use-step-up'
 
 // `bview` mirrors the settings pview/kview sub-view pattern (deep-linkable, replace
 // navigation). `overview` is the default landing; `plans` is the in-app catalog.
@@ -263,7 +261,6 @@ function BuyCreditsOutcome({
 }) {
   const { t } = useI18n()
   const b = t.settings.billing
-  const stepUp = useStepUpFlow()
 
   if (busy) {
     return (
@@ -313,7 +310,6 @@ function BuyCreditsOutcome({
           {b.buyCredits.retry}
         </Button>
       )}
-      {outcome.action?.type === 'step_up' && <StepUpInlineAction flow={stepUp} />}
       {portalUrl && (
         <Button onClick={() => onPortal(portalUrl)} size="sm" type="button" variant="outline">
           {b.buyCredits.openPortal}

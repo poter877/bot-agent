@@ -9,7 +9,7 @@ import type {
 } from '../../../gatewayTypes.js'
 import { t } from '../../../i18n/runtime.js'
 import { openExternalUrl } from '../../../lib/openExternalUrl.js'
-import type { BillingChargeOutcome, BillingOverlayCtx } from '../../interfaces.js'
+import type { BillingOverlayCtx } from '../../interfaces.js'
 import { patchOverlayState } from '../../overlayStore.js'
 import type { SlashCommand, SlashRunCtx } from '../types.js'
 
@@ -37,13 +37,6 @@ const renderBillingError = (
   const portal = env.portal_url
 
   switch (env.error) {
-    case 'insufficient_scope':
-      // Reached by non-charge mutations (e.g. auto-reload config) that need
-      // Remote Spending allowed. The resumable step-up lives on the buy/charge
-      // path; point the user there rather than leaking the raw scope name.
-      sys(t('slashCmd.topup.error.insufficientScope'))
-
-      break
     case 'remote_spending_revoked': {
       // CF-4: this terminal's spend was revoked. Kill the spend UI NOW (don't
       // wait for the token refresh ~15 min away) and tell the user who did it.
@@ -142,24 +135,6 @@ const renderBillingError = (
     sys(t('slashCmd.topup.error.portal', portal))
   }
 }
-
-/**
- * Run the Remote-Spending device flow and resolve whether the grant landed.
- *
- * The browser opens via the gateway's out-of-band `billing.step_up.verification`
- * event (handled globally in createGatewayEventHandler), so this just kicks the
- * blocking `billing.step_up` RPC and awaits its result. A reject (the device
- * flow can outlive the RPC's timeout while the user is still authorizing) is
- * treated as "not yet granted" — non-fatal; the grant persists gateway-side.
- *
- * NOTE: never surface the raw `billing:manage` scope — the user-facing concept
- * is "Remote Spending".
- */
-const requestRemoteSpending = (ctx: SlashRunCtx): Promise<boolean> =>
-  ctx.gateway
-    .rpc<BillingMutationResponse>('billing.step_up', { session_id: ctx.sid ?? undefined })
-    .then(r => !!(r && r.ok && r.granted))
-    .catch(() => false)
 
 /** Poll a charge to a terminal state (settled/failed/timeout). Non-blocking. */
 const pollCharge = (sys: Sys, ctx: SlashRunCtx, chargeId: string, portalUrl?: string | null): void => {
@@ -334,7 +309,7 @@ const buildOverlayCtx = (ctx: SlashRunCtx, sys: Sys, s: BillingStateResponse): B
 
         return false
       }),
-  charge: (amount: string, idempotencyKey?: string): Promise<BillingChargeOutcome> => {
+  charge: (amount: string, idempotencyKey?: string): Promise<void> => {
     sys(t('slashCmd.topup.charge.submitted'))
 
     return ctx.gateway
@@ -342,34 +317,23 @@ const buildOverlayCtx = (ctx: SlashRunCtx, sys: Sys, s: BillingStateResponse): B
         amount_usd: amount,
         ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {})
       })
-      .then((r): BillingChargeOutcome => {
+      .then(r => {
         if (!r) {
-          return 'error'
+          return
         }
 
         if (r.ok && r.charge_id) {
           pollCharge(sys, ctx, r.charge_id, s.portal_url)
 
-          return 'submitted'
-        }
-
-        // insufficient_scope → the overlay routes to the resumable step-up
-        // (no error line here; the stepup screen owns that UX).
-        if (r.error === 'insufficient_scope') {
-          return 'needs_remote_spending'
+          return
         }
 
         renderBillingError(sys, ctx, r)
-
-        return 'error'
       })
-      .catch((e): BillingChargeOutcome => {
+      .catch(e => {
         ctx.guardedErr(e)
-
-        return 'error'
       })
   },
-  requestRemoteSpending: () => requestRemoteSpending(ctx),
   openPortal: (url: string) => {
     openExternalUrl(url)
     sys(t('slashCmd.topup.openingPortal', url))

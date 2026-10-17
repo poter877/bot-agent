@@ -30,7 +30,6 @@ const apiMocks = vi.hoisted(() => ({
   previewSubscriptionChange: vi.fn(),
   resumeSubscription: vi.fn(),
   scheduleSubscriptionChange: vi.fn(),
-  stepUp: vi.fn(),
   updateAutoReload: vi.fn()
 }))
 
@@ -46,7 +45,6 @@ vi.mock('./api', () => ({
     previewSubscriptionChange: apiMocks.previewSubscriptionChange,
     resumeSubscription: apiMocks.resumeSubscription,
     scheduleSubscriptionChange: apiMocks.scheduleSubscriptionChange,
-    stepUp: apiMocks.stepUp,
     updateAutoReload: apiMocks.updateAutoReload
   })
 }))
@@ -349,7 +347,7 @@ describe('BillingSettings', () => {
     expect(screen.queryByText('Plans')).toBeNull()
   })
 
-  it('surfaces the step-up affordance when scheduling a downgrade needs approval', async () => {
+  it('surfaces a scheduling refusal inline with a retry when a downgrade is denied', async () => {
     const fixture = billingDevFixtures['subscriber-personal']
 
     apiMocks.fetchBillingState.mockResolvedValue(fixture.billing)
@@ -360,7 +358,7 @@ describe('BillingSettings', () => {
     })
     apiMocks.scheduleSubscriptionChange.mockResolvedValue({
       ok: false,
-      refusal: { kind: 'insufficient_scope', message: 'billing:manage required' }
+      refusal: { kind: 'role_required', message: 'billing:manage required' }
     })
 
     renderBilling(['/settings?tab=billing&bview=plans'])
@@ -368,8 +366,7 @@ describe('BillingSettings', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Downgrade' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Confirm downgrade' }))
 
-    expect(await screen.findByText('Remote Spending needs approval:')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Verify to continue' })).toBeTruthy()
+    expect(await screen.findByText('Admin role required:')).toBeTruthy()
     // The failed schedule offers a retry in place.
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
     expect(apiMocks.scheduleSubscriptionChange).toHaveBeenCalledTimes(1)
@@ -515,13 +512,13 @@ describe('BillingSettings', () => {
     expect(panel).toBe(panel.ownerDocument.activeElement)
   })
 
-  it('renders auto-refill mutation refusals and step-up affordance', async () => {
+  it('renders auto-refill mutation refusals inline', async () => {
     renderBilling()
 
     apiMocks.updateAutoReload.mockResolvedValue({
       ok: false,
       refusal: {
-        kind: 'insufficient_scope',
+        kind: 'role_required',
         message: 'billing:manage required'
       }
     })
@@ -535,8 +532,7 @@ describe('BillingSettings', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
-    expect(await screen.findByText('Remote Spending needs approval:')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Verify to continue' })).toBeTruthy()
+    expect(await screen.findByText('Admin role required:')).toBeTruthy()
   })
 
   it('keeps disabled auto-refill portal-only with no enable control', async () => {

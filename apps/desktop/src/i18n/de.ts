@@ -2042,16 +2042,6 @@ export const deOverrides = {
         minimum: (label: string, amount: string) => `${label}: Minimum ist ${amount}.`,
         maximum: (label: string, amount: string) => `${label}: Maximum ist ${amount}.`
       },
-      stepUp: {
-        openVerification: 'Verifizierungsseite öffnen',
-        dismiss: 'Schließen',
-        waiting: 'Warten auf Verifizierungslink…',
-        verify: 'Zum Fortfahren verifizieren',
-        deniedTitle: 'Die Verifizierung wurde nicht genehmigt',
-        deniedBody: 'Die Verifizierung wurde abgeschlossen, ohne Remote-Ausgaben für dieses Terminal zu erlauben.',
-        successTitle: 'Verifizierung abgeschlossen',
-        successBody: 'Remote-Ausgaben sind für dieses Terminal erlaubt.'
-      },
       charge: {
         added: (amount?: string) => (amount ? `${amount} $ hinzugefügt.` : 'Credits hinzugefügt.'),
         failedTitle: 'Abbuchung fehlgeschlagen',
@@ -2214,11 +2204,6 @@ export const deOverrides = {
         consentRequired: {
           title: 'Kartenbestätigung erforderlich',
           message: 'Bestätigen Sie diese Karte im Portal für Terminal-Abbuchungen'
-        },
-        insufficientScope: {
-          title: 'Remote-Ausgaben müssen genehmigt werden',
-          message:
-            'Dafür müssen Remote-Ausgaben erlaubt sein. Starten Sie eine Aufladung, um sie zu erlauben, und versuchen Sie es erneut.'
         },
         remoteSpendingRevoked: {
           title: 'Remote-Ausgaben wurden gestoppt',

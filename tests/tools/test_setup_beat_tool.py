@@ -31,12 +31,9 @@ def db(tmp_path, monkeypatch):
 @pytest.fixture(autouse=True)
 def machine(monkeypatch):
     """What this machine has connected and installed right now, read when a card closes without its answer."""
-    present = {"connected": ["slack"], "installed": ["blender"]}
+    present = {"installed": ["blender"]}
     monkeypatch.setattr("tools.setup_beat_tool._PRESENT", {
-        "connectors": lambda: {"connected": present["connected"]},
         "plugins": lambda: {"installed": present["installed"]}})
-    # No connector list unless a test gives one: suggestions are not checked.
-    monkeypatch.setattr("tools.setup_beat_tool._connector_slugs", lambda: None)
     return present
 
 
@@ -100,16 +97,15 @@ def test_a_message_sent_while_a_card_waits_closes_it_unanswered_and_ends_the_tur
     assert record["waiting"] is None and record["beats"]["layout"] == "shown"
 
 
-def test_a_card_closed_by_words_a_value_or_the_deadline_reports_what_is_connected_and_installed(db, desktop):
+def test_a_card_closed_by_words_a_value_or_the_deadline_reports_what_is_installed(db, desktop):
     onboarding_record.start(db, SID, FACTS)
     timed_out = call(db, desktop, beat="plugins")
-    call(db, desktop, beat="connectors", call_id="call_2")  # refused once: the look-around offer
+    call(db, desktop, beat="connectors", call_id="call_2", suggest=["slack"])  # offer, then the card waits
     desktop.replies.append({"wrote_instead": True})
-    wrote = call(db, desktop, beat="connectors", call_id="call_3")
-    continued = call(db, desktop, beat="connectors", value="continue")
+    call(db, desktop, beat="connectors", call_id="call_3")
+    call(db, desktop, beat="connectors", value="continue")
 
-    assert timed_out["installed"] == ["blender"] and wrote["connected"] == ["slack"]
-    assert continued["connected"] == ["slack"] and "Connected: slack" in continued["reminder"]
+    assert timed_out["installed"] == ["blender"]
     assert onboarding_record.load(db, SID)["picks"]["installed"] == ["blender"]
 
 
@@ -124,22 +120,6 @@ def test_suggest_pins_connectors_and_value_or_skip_records_without_a_card(db, de
     assert recorded["recorded"] == "tour" and "No tour" in recorded["reminder"]
     assert skipped["skipped"] is True
 
-
-def test_the_offer_lists_the_real_connectors_and_an_unlisted_suggestion_shows_no_card(db, desktop, monkeypatch):
-    # The model guessed GitHub from the gh CLI; this account cannot connect it, and the card showed nothing.
-    monkeypatch.setattr("tools.setup_beat_tool._connector_slugs", lambda: {"slack", "linear"})
-    onboarding_record.start(db, SID, FACTS)
-    for beat in ("name", "theme", "layout"):
-        call(db, desktop, beat=beat, skip=True)
-
-    offer = call(db, desktop, beat="next")
-    refused = call(db, desktop, beat="connectors", suggest=["github", "slack"], call_id="call_2")
-    desktop.replies.append({"answer": {"connected": [], "newly_connected": []}})
-    call(db, desktop, beat="connectors", suggest=["slack"], call_id="call_3")
-
-    assert "by these slugs: linear, slack." in offer["reminder"]
-    assert refused["error"] == "not connectors here" and "No card shown: github cannot" in refused["reminder"]
-    assert [card["card"] for card in desktop.shown] == [{"suggested": ["slack"]}]
 
 
 def test_next_to_the_connectors_card_before_the_offer_is_refused_without_a_card(db, desktop):

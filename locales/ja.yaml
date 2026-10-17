@@ -547,7 +547,7 @@ gateway:
     unknown_subcommand: "不明な /usage サブコマンド: `{args}`。`/usage` または `/usage reset [--force]` をお試しください。"
     reset_wrong_provider: "バンクされた使用制限リセットは openai-codex プロバイダーでのみ利用できます。まず `/model` で切り替えてください。"
   credits:
-    not_logged_in: "Nous Portal にログインしていません。ログインすると残高の確認とチャージができます。"
+    not_logged_in: "ポータルにログインしていません。ログインすると残高の確認とチャージができます。"
   verbose:
     not_enabled: "`/verbose` コマンドはメッセージングプラットフォームで有効になっていません。\n\n`config.yaml` で有効にしてください:\n```yaml\ndisplay:\n  tool_progress_command: true\n```"
     mode_off: "⚙️ ツール進捗: **OFF** — ツールの動作は表示されません。"
@@ -938,7 +938,7 @@ gateway:
   codex_runtime:
     config_load_failed: "❌ 設定を読み込めませんでした: {error}"
   topup:
-    header: "💳 **Nous 残高**"
+    header: "💳 **残高**"
     portal_link: "請求はポータルで管理してください: {url}"
     hint: "チャージと請求の管理はブラウザで行ってください — 完了後、ここの残高が更新されます。"
   login:
@@ -1659,11 +1659,11 @@ slash:
   usage:
     description: "トークン使用量とレート制限を表示。`reset` で蓄えた Codex の制限リセットを適用"
   subscription:
-    description: "Nous プランを確認し、ブラウザで変更"
+    description: "プランを確認し、ブラウザで変更"
   login:
-    description: "Nous アカウントでサインイン（コネクターは維持）"
+    description: "プロバイダーアカウントでサインイン（コネクターは維持）"
   topup:
-    description: "Nous の残高を表示し、ポータルで請求を管理"
+    description: "残高を表示し、ポータルで請求を管理"
   platforms:
     description: "ゲートウェイ/メッセージングプラットフォームの状態を表示"
   platform:
@@ -1684,7 +1684,7 @@ cli:
   billing:
     load_failed: "{label}: {error}"
     load_failed_label: "請求情報を読み込めませんでした"
-    not_logged_in: "Nous Portal にログインしていません。"
+    not_logged_in: "ポータルにログインしていません。"
     run_portal_then: "`hermes portal` を実行してログインし、その後 {cmd} を実行してください。"
     org_line: "組織: {org}"
     org_line_role: "組織: {org} · {role}"
@@ -1774,7 +1774,7 @@ cli:
     confirm_purchase: "購入の確認"
     total_line: "合計: {amount}"
     portal_card_will_be_charged: "ポータルに保存されたカードに課金されます。"
-    consent_charge: "確認すると、Nous Research によるカードへの課金を許可したことになります。"
+    consent_charge: "確認すると、カードへの課金を許可したことになります。"
     choice_pay_now: "今すぐ {amount} を支払う"
     desc_submit_charge: "課金を送信"
     desc_manage_card_billing: "ブラウザでカード / 請求を管理"
@@ -1835,7 +1835,7 @@ cli:
     threshold_label: "残高がこの金額を下回ったら"
     reload_to_label: "この金額までチャージ"
     reload_must_exceed_threshold: "🔴 チャージ後の金額はしきい値より大きくする必要があります。"
-    auto_reload_consent: "確認すると、残高が {threshold} に達するたびに Nous Research が {card} に課金することを許可したことになります。ここまたはポータルからいつでもオフにできます。"
+    auto_reload_consent: "確認すると、残高が {threshold} に達するたびに {card} に課金することを許可したことになります。ここまたはポータルからいつでもオフにできます。"
     turn_on_auto_reload_question: "自動チャージをオンにしますか？"
     auto_reload_enabled: "✅ 自動チャージ オン: {threshold} 未満で {reload_to} までチャージ。"
     auto_reload_disabled: "✅ 自動チャージをオフにしました。"
@@ -2421,7 +2421,7 @@ cli:
     empty_base_url: "⚠️  プロバイダーリゾルバーが空のベース URL を返しました。プロバイダー設定を確認するか、次を実行してください: hermes setup"
     switching_to_fallback: "⚠️  {reason} — フォールバックに切り替えます: {provider} / {model}"
     first_run_no_provider: "☤ 推論プロバイダーがまだ設定されていません — 今から設定しましょう。"
-    first_run_pick_provider: "プロバイダー（Nous Portal の OAuth が最速で、API キー不要です）とモデルを選択します。"
+    first_run_pick_provider: "プロバイダー（プロバイダー OAuth が最速で、API キー不要です）とモデルを選択します。"
     first_run_prompt: "今すぐプロバイダーを設定しますか？ [Y/n]:"
     first_run_skipped: "スキップしました。'hermes model' または 'hermes setup' はいつでも実行できます。"
     first_run_cancelled: "セットアップをキャンセルしました。'hermes model' はいつでも実行できます。"
@@ -3660,8 +3660,8 @@ tips:
   t181: "Camofox は検出回避型のブラウザです。C++ によるフィンガープリント偽装を備えた Firefox のフォークです。"
   t182: "browser_navigate は自動的にページのスナップショットを返すため、あとから browser_snapshot を呼ぶ必要はありません。"
   t183: "browser_vision に annotate=true を指定すると、操作可能な要素に番号付きラベルを重ねて表示します。"
-  t184: "hermes mcp は Nous 承認済み MCP の対話型ピッカーを開き、キー 1 つでインストールできます。"
-  t185: "hermes mcp catalog はリポジトリに同梱されている Nous 承認済みの MCP サーバーを一覧表示します。"
+  t184: "hermes mcp は 厳選された MCP の対話型ピッカーを開き、キー 1 つでインストールできます。"
+  t185: "hermes mcp catalog はリポジトリに同梱されている 厳選された MCP サーバーを一覧表示します。"
   t186: "hermes mcp install <name> はカタログの項目をインストールし、認証情報の入力を求め、有効にするツールを選択させてくれます。"
   t187: "MCP サーバーは config.yaml で設定します。stdio と HTTP の両方のトランスポートに対応しています。"
   t188: "サーバーごとのツールフィルタリング: tools.include で特定のツールをホワイトリストに、tools.exclude でブラックリストに登録します。"
@@ -3758,7 +3758,7 @@ tips:
   t279: "HERMES_DEV=1 は、ローカル開発のためにコンテナモードの検出を回避します。"
   t280: "各 MCP サーバーには独自のツールセット（mcp-servername）があり、hermes tools で個別にオン/オフできます。"
   t281: "設定内の MCP の ${ENV_VAR} プレースホルダーはサーバー起動時に解決され、~/.hermes/.env の変数も対象です。"
-  t282: "信頼済みリポジトリ（NousResearch）のスキルは「trusted」セキュリティレベルになり、コミュニティのスキルは追加のスキャンを受けます。"
+  t282: "信頼済みリポジトリ（openai、anthropics、huggingface、NVIDIA）のスキルは「trusted」セキュリティレベルになり、コミュニティのスキルは追加のスキャンを受けます。"
   t283: "~/.hermes/skills/.hub/quarantine/ のスキル隔離領域には、セキュリティレビュー待ちのスキルが保管されます。"
   t284: "/steer <prompt> は次のツール呼び出しの後にメモを注入します。中断せずにタスクの途中で方向を修正できます。"
   t285: "/goal <text> は継続的な Ralph ループの目標を設定します。ジャッジが完了と判定するまで、Hermes はターンを自動で続けます。"
@@ -3784,7 +3784,7 @@ tips:
   t305: "hermes curator rollback は実行前のスナップショットからスキルを復元します。バックアップは skills/.curator_backups/ にあります。"
   t306: "hermes auth reset <provider> [target] は、認証情報プール全体、またはインデックス・id・ラベルで指定した 1 件のクールダウンと枯渇フラグをクリアします。"
   t307: "credential_pool_strategies.<provider>: round_robin は、デフォルトの fill_first ではなくキーを均等に巡回させます。"
-  t308: "ツールごとに use_gateway: true を設定すると、web、image、tts、browser を Nous サブスクリプション経由で使えます。追加のキーは不要です。"
+  t308: "ツールごとに use_gateway: true を設定すると、web、image、tts、browser を プロバイダーのサブスクリプション経由で使えます。追加のキーは不要です。"
   t309: "provider_routing.data_collection: deny は、OpenRouter 上でデータを保存するプロバイダーを除外します。"
   t310: "provider_routing.require_parameters: true は、リクエストのすべてのパラメーターに対応するプロバイダーだけにルーティングします。"
   t311: "HERMES_TUI_RESUME=1 は起動時に最新の TUI セッションへ自動で再接続します。SSH が切れた後に便利です。"

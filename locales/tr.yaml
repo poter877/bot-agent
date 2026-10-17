@@ -547,7 +547,7 @@ gateway:
     unknown_subcommand: "Bilinmeyen /usage alt komutu: `{args}`. `/usage` veya `/usage reset [--force]` deneyin."
     reset_wrong_provider: "Biriktirilen limit sıfırlamaları yalnızca openai-codex sağlayıcısında kullanılabilir. Önce `/model` ile geçiş yapın."
   credits:
-    not_logged_in: "Nous Portal'a giriş yapılmadı. Bakiyenizi görmek ve yükleme yapmak için giriş yapın."
+    not_logged_in: "Portala giriş yapılmadı. Bakiyenizi görmek ve yükleme yapmak için giriş yapın."
   verbose:
     not_enabled: "`/verbose` komutu mesajlaşma platformlarında etkin değil.\n\n`config.yaml` içinde etkinleştirin:\n```yaml\ndisplay:\n  tool_progress_command: true\n```"
     mode_off: "⚙️ Araç ilerlemesi: **OFF** — araç etkinliği gösterilmez."
@@ -938,7 +938,7 @@ gateway:
   codex_runtime:
     config_load_failed: "❌ Yapılandırma yüklenemedi: {error}"
   topup:
-    header: "💳 **Nous bakiyesi**"
+    header: "💳 **Bakiye**"
     portal_link: "Faturalandırmayı portalda yönetin: {url}"
     hint: "Bakiye yükleme ve faturalandırma işlemlerini tarayıcıda yapın — bakiyeniz ardından burada güncellenir."
   login:
@@ -1659,11 +1659,11 @@ slash:
   usage:
     description: "Token kullanımını ve hız sınırlarını göster; `reset` biriktirilmiş Codex sınır sıfırlamasını kullanır"
   subscription:
-    description: "Nous planınızı görüntüleyin ve tarayıcıda değiştirin"
+    description: "Planınızı görüntüleyin ve tarayıcıda değiştirin"
   login:
-    description: "Nous hesabıyla giriş yap (bağlayıcılarınız korunur)"
+    description: "Sağlayıcı hesabıyla giriş yap (bağlayıcılarınız korunur)"
   topup:
-    description: "Nous bakiyenizi göster ve faturalandırmayı portalda yönet"
+    description: "Bakiyenizi göster ve faturalandırmayı portalda yönet"
   platforms:
     description: "Gateway/mesajlaşma platformu durumunu göster"
   platform:
@@ -1684,7 +1684,7 @@ cli:
   billing:
     load_failed: "{label}: {error}"
     load_failed_label: "Faturalandırma yüklenemedi"
-    not_logged_in: "Nous Portal'a giriş yapılmadı."
+    not_logged_in: "Portala giriş yapılmadı."
     run_portal_then: "Giriş yapmak için `hermes portal` komutunu çalıştırın, ardından {cmd}."
     org_line: "Kuruluş: {org}"
     org_line_role: "Kuruluş: {org} · {role}"
@@ -1774,7 +1774,7 @@ cli:
     confirm_purchase: "Satın almayı onayla"
     total_line: "Toplam: {amount}"
     portal_card_will_be_charged: "Portalda kayıtlı kartınızdan ücret alınacak."
-    consent_charge: "Onaylayarak Nous Research'ün kartınızdan ücret almasına izin verirsiniz."
+    consent_charge: "Onaylayarak kartınızdan ücret alınmasına izin verirsiniz."
     choice_pay_now: "Şimdi {amount} öde"
     desc_submit_charge: "ücreti gönder"
     desc_manage_card_billing: "kartınızı / faturalandırmayı tarayıcıda yönetin"
@@ -1835,7 +1835,7 @@ cli:
     threshold_label: "Bakiye şunun altına düşünce"
     reload_to_label: "Bakiyeyi şu seviyeye yükle"
     reload_must_exceed_threshold: "🔴 Yükleme tutarı eşikten büyük olmalıdır."
-    auto_reload_consent: "Onaylayarak, bakiyeniz {threshold} seviyesine ulaştığında Nous Research'ün {card} kartından ücret almasına izin verirsiniz. İstediğiniz zaman buradan veya portaldan kapatabilirsiniz."
+    auto_reload_consent: "Onaylayarak, bakiyeniz {threshold} seviyesine ulaştığında {card} üzerinden ücret alınmasına izin verirsiniz. İstediğiniz zaman buradan veya portaldan kapatabilirsiniz."
     turn_on_auto_reload_question: "Otomatik yükleme açılsın mı?"
     auto_reload_enabled: "✅ Otomatik yükleme açık: {threshold} altında → {reload_to} seviyesine yükle."
     auto_reload_disabled: "✅ Otomatik yükleme kapatıldı."
@@ -2421,7 +2421,7 @@ cli:
     empty_base_url: "⚠️  Sağlayıcı çözümleyici boş bir temel URL döndürdü. Sağlayıcı yapılandırmanızı kontrol edin veya şunu çalıştırın: hermes setup"
     switching_to_fallback: "⚠️  {reason} — yedeğe geçiliyor: {provider} / {model}"
     first_run_no_provider: "☤ Henüz yapılandırılmış bir çıkarım sağlayıcısı yok — hadi bunu halledelim."
-    first_run_pick_provider: "Bir sağlayıcı (en hızlısı Nous Portal OAuth; API anahtarı gerekmez) ve bir model seçeceksiniz."
+    first_run_pick_provider: "Bir sağlayıcı (en hızlısı sağlayıcı OAuth; API anahtarı gerekmez) ve bir model seçeceksiniz."
     first_run_prompt: "Şimdi bir sağlayıcı kurulsun mu? [Y/n]:"
     first_run_skipped: "Atlandı. İstediğiniz zaman 'hermes model' veya 'hermes setup' komutunu çalıştırın."
     first_run_cancelled: "Kurulum iptal edildi. İstediğiniz zaman 'hermes model' komutunu çalıştırın."
@@ -3660,8 +3660,8 @@ tips:
   t181: "Camofox tespite karşı dayanıklı bir tarayıcıdır — C++ parmak izi gizleme özellikli bir Firefox çatalı."
   t182: "browser_navigate sayfa anlık görüntüsünü otomatik döndürür — ardından browser_snapshot çağırmanız gerekmez."
   t183: "annotate=true ile browser_vision, etkileşimli öğelerin üzerine numaralı etiketler yerleştirir."
-  t184: "hermes mcp, Nous onaylı MCP'leri tek tuşla kurabileceğiniz etkileşimli bir seçici açar."
-  t185: "hermes mcp catalog, depoyla birlikte gelen Nous onaylı MCP sunucularını listeler."
+  t184: "hermes mcp, özenle seçilmiş MCP'leri tek tuşla kurabileceğiniz etkileşimli bir seçici açar."
+  t185: "hermes mcp catalog, depoyla birlikte gelen özenle seçilmiş MCP sunucularını listeler."
   t186: "hermes mcp install <name>, bir katalog girdisini kurar, kimlik bilgilerini sorar ve hangi araçlarını etkinleştireceğinizi seçmenizi sağlar."
   t187: "MCP sunucuları config.yaml içinde yapılandırılır — hem stdio hem HTTP aktarımları desteklenir."
   t188: "Sunucu başına araç filtreleme: tools.include belirli araçları beyaz listeye, tools.exclude kara listeye alır."
@@ -3758,7 +3758,7 @@ tips:
   t279: "HERMES_DEV=1, yerel geliştirme için container modu algılamasını atlar."
   t280: "Her MCP sunucusu, hermes tools ile bağımsız olarak açılıp kapatılabilen kendi araç setini (mcp-servername) alır."
   t281: "Yapılandırmadaki MCP ${ENV_VAR} yer tutucuları sunucu başlatılırken çözümlenir — ~/.hermes/.env içindeki değişkenler dahil."
-  t282: "Güvenilir depolardan (NousResearch) gelen skill'ler 'trusted' güvenlik düzeyi alır; topluluk skill'leri ek taramadan geçer."
+  t282: "Güvenilir depolardan (openai, anthropics, huggingface, NVIDIA) gelen skill'ler 'trusted' güvenlik düzeyi alır; topluluk skill'leri ek taramadan geçer."
   t283: "~/.hermes/skills/.hub/quarantine/ konumundaki skill karantinası, güvenlik incelemesi bekleyen skill'leri tutar."
   t284: "/steer <prompt>, bir sonraki araç çağrısından sonra bir not enjekte eder — görev ortasında kesmeden yön verin."
   t285: "/goal <text>, kalıcı bir Ralph döngüsü hedefi belirler — bir hakem tamamlandı deyinceye dek Hermes tur tur otomatik devam eder."
@@ -3784,7 +3784,7 @@ tips:
   t305: "hermes curator rollback, skill'leri çalıştırma öncesi anlık görüntüden geri yükler — yedekler skills/.curator_backups/ altında durur."
   t306: "hermes auth reset <provider> [target], bekleme sürelerini ve tükenme işaretlerini tüm kimlik bilgisi havuzunda ya da dizin, id veya etikete göre tek bir kimlik bilgisinde temizler."
   t307: "credential_pool_strategies.<provider>: round_robin, varsayılan fill_first yerine anahtarları eşit biçimde sırayla kullanır."
-  t308: "Araç başına use_gateway: true, web, image, tts veya browser'ı Nous aboneliğiniz üzerinden yönlendirir — ek anahtar gerekmez."
+  t308: "Araç başına use_gateway: true, web, image, tts veya browser'ı sağlayıcı aboneliğiniz üzerinden yönlendirir — ek anahtar gerekmez."
   t309: "provider_routing.data_collection: deny, OpenRouter'da veri saklayan sağlayıcıları dışarıda bırakır."
   t310: "provider_routing.require_parameters: true, yalnızca isteğinizdeki her parametreyi destekleyen sağlayıcılara yönlendirir."
   t311: "HERMES_TUI_RESUME=1, başlatıldığında en son TUI oturumuna otomatik olarak yeniden bağlanır — SSH kopmalarından sonra işe yarar."

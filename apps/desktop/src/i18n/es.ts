@@ -2037,16 +2037,6 @@ export const esOverrides = {
         minimum: (label: string, amount: string) => `${label}: el mínimo es ${amount}.`,
         maximum: (label: string, amount: string) => `${label}: el máximo es ${amount}.`
       },
-      stepUp: {
-        openVerification: 'Abrir la página de verificación',
-        dismiss: 'Descartar',
-        waiting: 'Esperando el enlace de verificación…',
-        verify: 'Verifica para continuar',
-        deniedTitle: 'La verificación no se aprobó',
-        deniedBody: 'La verificación terminó sin permitir el gasto remoto para este terminal.',
-        successTitle: 'Verificación completada',
-        successBody: 'El gasto remoto está permitido para este terminal.'
-      },
       charge: {
         added: (amount?: string) => (amount ? `Se añadieron ${amount} $.` : 'Créditos añadidos.'),
         failedTitle: 'Falló el cargo',
@@ -2208,10 +2198,6 @@ export const esOverrides = {
         consentRequired: {
           title: 'Hace falta confirmar la tarjeta',
           message: 'Confirma esta tarjeta para los cargos del terminal en el portal'
-        },
-        insufficientScope: {
-          title: 'El gasto remoto necesita aprobación',
-          message: 'Esto requiere permitir el gasto remoto. Inicia una recarga para permitirlo y vuelve a intentarlo.'
         },
         remoteSpendingRevoked: {
           title: 'Se detuvo el gasto remoto',

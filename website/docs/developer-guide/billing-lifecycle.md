@@ -38,9 +38,8 @@ Source: `ui-tui/src/components/billingOverlay.tsx` (`OverviewScreen`,
 | Org kill-switch off (`is_admin` but `!cli_billing_enabled`) | Note: `Remote spending is off for this org — a billing admin can turn it on from the portal's Hermes Agent page.` Same collapsed menu. |
 
 Note: `full = s.is_admin && s.cli_billing_enabled` gates the **org-level**
-switch, not the per-terminal `billing:manage` scope — that's discovered
-reactively (a charge 403s `insufficient_scope`) and routes to the resumable
-step-up screen instead of a preflight check.
+switch, not any per-terminal scope — there is no per-terminal billing scope
+anymore.
 
 ## 2. Refusal codes (`renderBillingError`, in code order)
 
@@ -49,7 +48,6 @@ Source: `renderBillingError` in `ui-tui/src/app/slash/commands/topup.ts:37-149`.
 
 | `error` code | Copy | Portal URL | `retry_after` |
 |---|---|:-:|:-:|
-| `insufficient_scope` | `This needs Remote Spending allowed. Start a top-up to allow it, then retry.` | if present | — |
 | `remote_spending_revoked` (CF-4) | `{An admin stopped remote spending for this terminal. \| You stopped remote spending for this terminal.}` (by `actor`) `Reconnect to restore — run /portal to re-authorize this terminal.` Also clears `billing` overlay state immediately (doesn't wait for token refresh). | if present | — |
 | `session_revoked` | `Your session was logged out. Run /portal to log in again.` Also clears `billing` overlay state. | if present | — |
 | `cli_billing_disabled` / `remote_spending_disabled` (dual-emitted) | `Remote spending is off for this account — a billing admin can turn it on from the portal's Hermes Agent page.` | if present | — |
@@ -89,8 +87,8 @@ keep the poll alive forever.
 
 ## 4. Subscription preview / pending-change / upgrade outcomes
 
-Source: `previewAndRoute`, `applyPendingAndRoute`, `upgradeResult`,
-`stepUpDenialResult` in `ui-tui/src/components/subscriptionOverlay.tsx`.
+Source: `previewAndRoute`, `applyPendingAndRoute`, `upgradeResult` in
+`ui-tui/src/components/subscriptionOverlay.tsx`.
 
 **Preview `effect` values** (drive the Confirm screen):
 
@@ -101,7 +99,6 @@ Source: `previewAndRoute`, `applyPendingAndRoute`, `upgradeResult`,
 | `no_op` | `You are already on {target} — nothing to change.` | none (Back only) |
 | `blocked` | `{preview.reason}` or fallback `That change cannot be made here — manage it on the portal.` | `Manage on portal` |
 | Preview RPC returns `null`/transport failure | routes straight to Result: `Could not preview that change.` | — |
-| Preview `!ok`, `insufficient_scope` | routes to `stepup` screen (`{kind:'preview', tierId}`) | — |
 | Preview `!ok`, other error | routes to Result with `errorResult(p)` (`message \|\| error \|\| 'Something went wrong. Try again, or manage on the portal.'`) | — |
 
 **Pending-change apply outcomes** (`applyPendingAndRoute`):
@@ -111,7 +108,6 @@ Source: `previewAndRoute`, `applyPendingAndRoute`, `upgradeResult`,
 | `cancellation` | `Scheduled — your plan stays active until the end of the billing period, then it cancels. Nothing changes today.` |
 | `tier_change` (downgrade/schedule) | `Scheduled — your plan doesn't change today. You keep your current plan until the end of the billing period, then it switches.` |
 | `upgrade` | routed through `upgradeResult` (below) |
-| any kind, mutation `insufficient_scope` | routes to stepup (`{kind:'apply'}`) |
 
 **Upgrade `status` × `reason` matrix** (`upgradeResult`, checked in this
 order — `reason` is checked *before* `status`):
@@ -135,21 +131,6 @@ target. While waiting the screen reads `Applying…`; if it never flips inside
 the budget it reads `Still applying` / `Your upgrade succeeded and is still
 applying — refresh in a moment.` — the upgrade is never re-reported as failed
 just because NAS hasn't caught up yet.
-
-**Step-up denial copy** (`stepUpDenialResult`, subscription flow):
-
-| `error` | Copy |
-|---|---|
-| `session_revoked` | `Your session expired — run /portal to log in again, then retry the change.` |
-| `remote_spending_revoked` | `{message}` or `Remote spending was stopped for this terminal — reconnect from the portal, then retry.` |
-| `rate_limited` | `Too many attempts — wait a moment, then try again.` |
-| other/unknown | `{message}` or `Remote Spending was not allowed — someone with billing permissions (owner, admin, or finance admin) must approve it. You can also make this change on the portal.` |
-
-A **repeat** scope denial during a post-grant replay never re-enters the
-step-up screen (it's already mounted there — re-patching would freeze it);
-`allowStepUp=false` instead surfaces a terminal result: `Remote Spending still
-isn’t active for this terminal — the authorization didn’t take. Retry, or make
-this change on the portal.`
 
 ## Text-mode (CLI) parity
 

@@ -234,28 +234,6 @@ describe('/billing slash command (overlay-driven)', () => {
     expect(out).not.toContain(t('slashCmd.topup.error.rateLimited', ''))
   })
 
-  it('ctx.charge insufficient_scope → resolves needs_remote_spending (overlay routes to stepup)', async () => {
-    const { run } = buildCtx({
-      'billing.state': ownerState(),
-      'billing.charge': { ok: false, error: 'insufficient_scope', idempotency_key: 'k' }
-    })
-
-    await run('')
-    const outcome = await getOverlayState().billing!.ctx.charge('100')
-    // No separate confirm overlay is armed anymore — the overlay's stepup
-    // screen owns the UX; the ctx just reports the outcome.
-    expect(outcome).toBe('needs_remote_spending')
-    expect(getOverlayState().confirm).toBeNull()
-  })
-
-  it.each([[true], [false]])('ctx.requestRemoteSpending → billing.step_up resolves %s', async granted => {
-    const { run, calls } = buildCtx({ 'billing.state': ownerState(), 'billing.step_up': { ok: true, granted } })
-
-    await run('')
-    expect(await getOverlayState().billing!.ctx.requestRemoteSpending()).toBe(granted)
-    expect(calls.find(c => c.method === 'billing.step_up')).toBeTruthy()
-  })
-
   // ── CF-4: revoked-terminal UX (kill the "15-minute zombie button") ──
 
   it.each([['admin', t('slashCmd.topup.error.revokedByAdmin')]])(

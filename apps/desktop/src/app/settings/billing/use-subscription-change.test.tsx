@@ -28,7 +28,7 @@ describe('useDowngradeFlow', () => {
   it('records a preview refusal as the previewFailed phase and re-runs on retry', async () => {
     apiMocks.previewSubscriptionChange.mockResolvedValue({
       ok: false,
-      refusal: { kind: 'insufficient_scope', message: 'billing:manage required' }
+      refusal: { kind: 'role_required', message: 'billing:manage required' }
     })
 
     const { result } = renderHook(() => useDowngradeFlow({ onScheduled: vi.fn() }), { wrapper })
@@ -42,7 +42,7 @@ describe('useDowngradeFlow', () => {
       throw new Error('expected previewFailed phase')
     }
 
-    expect(phase.refusal.kind).toBe('insufficient_scope')
+    expect(phase.refusal.kind).toBe('role_required')
 
     act(() => result.current.retryPreview())
 
@@ -120,7 +120,7 @@ describe('useResumeFlow', () => {
   it('surfaces a resume refusal', async () => {
     apiMocks.resumeSubscription.mockResolvedValue({
       ok: false,
-      refusal: { kind: 'insufficient_scope', message: 'billing:manage required' }
+      refusal: { kind: 'role_required', message: 'billing:manage required' }
     })
 
     const { result } = renderHook(() => useResumeFlow(), { wrapper })
@@ -129,6 +129,6 @@ describe('useResumeFlow', () => {
       await result.current.resume()
     })
 
-    expect(result.current.refusal?.kind).toBe('insufficient_scope')
+    expect(result.current.refusal?.kind).toBe('role_required')
   })
 })

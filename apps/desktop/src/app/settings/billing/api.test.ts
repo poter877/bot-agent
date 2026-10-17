@@ -121,7 +121,7 @@ describe('createBillingApi', () => {
     requestGatewayMock.mockRejectedValueOnce(new Error('request timed out after 5000ms'))
 
     const api = createBillingApi(requestGatewayMock)
-    const response = await api.stepUp()
+    const response = await api.resumeSubscription()
 
     expect(response).toEqual({
       ok: false,
@@ -161,15 +161,6 @@ describe('createBillingApi', () => {
 
     expect(response).toEqual({ data: { message: 'Change cancelled.', ok: true }, ok: true })
     expect(requestGatewayMock).toHaveBeenCalledWith('subscription.resume', {})
-  })
-
-  it('sends a step-up session id when provided', async () => {
-    requestGatewayMock.mockResolvedValueOnce({ granted: true, ok: true })
-
-    const api = createBillingApi(requestGatewayMock)
-    await api.stepUp('session-123')
-
-    expect(requestGatewayMock).toHaveBeenCalledWith('billing.step_up', { session_id: 'session-123' })
   })
 
   it('sends a minted charge idempotency key and reuses it on explicit retry', async () => {

@@ -4,17 +4,13 @@ import { describe, expect, it } from 'vitest'
 import type { BillingRefusal } from './api'
 import { resolveRefusal } from './errors'
 
-const expectedActions: Record<
-  KnownBillingRefusalCode | 'timeout' | 'transport',
-  'none' | 'portal' | 'retry' | 'step_up'
-> = {
+const expectedActions: Record<KnownBillingRefusalCode | 'timeout' | 'transport', 'none' | 'portal' | 'retry'> = {
   auto_top_up_disabled_failures: 'none',
   cli_billing_disabled: 'portal',
   consent_required: 'portal',
   endpoint_unavailable: 'retry',
   idempotency_conflict: 'none',
   idempotency_key_required: 'none',
-  insufficient_scope: 'step_up',
   internal_error: 'none',
   invalid_charge_id: 'none',
   invalid_request: 'none',
@@ -42,7 +38,7 @@ describe('resolveRefusal', () => {
       const resolved = resolveRefusal({
         kind: kind as BillingRefusal['kind'],
         message: 'Server message.',
-        portalUrl: 'https://portal.nousresearch.com/billing',
+        portalUrl: 'https://billing.example.com/portal',
         retryAfter: 90
       })
 

@@ -763,7 +763,7 @@ export const sessionCommands: SlashCommand[] = [
           const creditsLines = r?.credits_lines ?? []
 
           if (creditsLines.length) {
-            ctx.transcript.panel(t('slashCmd.session.usage.nousBalanceTitle'), [{ text: creditsLines.join('\n') }])
+            ctx.transcript.panel(t('slashCmd.session.usage.balanceTitle'), [{ text: creditsLines.join('\n') }])
             showedBalance = true
           }
         }

@@ -23,7 +23,7 @@ type Sys = (text: string) => void
  */
 function buildManageUrl(s: SubscriptionStateResponse, tierId?: string): string | null {
   // portal_url is already an absolute URL resolved by resolve_portal_base_url()
-  // on the Python side (e.g. https://portal.nousresearch.com/billing). Strip any
+  // on the Python side (the provider's portal URL). Strip any
   // path so we can attach /manage-subscription cleanly.
   let base: string | null = null
 
@@ -105,16 +105,6 @@ const buildSubscriptionCtx = (
       .rpc<SubscriptionStateResponse>('subscription.state', {})
       .then(r => r ?? null)
       .catch(() => null),
-  requestRemoteSpending: () =>
-    ctx.gateway
-      .rpc<BillingMutationResponse>('billing.step_up', { session_id: ctx.sid ?? undefined })
-      // Carry the typed denial (session_revoked / remote_spending_revoked /
-      // rate_limited / …) so the stepup screen shows the right recovery.
-      .then(r => ({ error: r?.error, granted: !!(r && r.ok && r.granted), message: r?.message }))
-      .catch(() => ({
-        granted: false,
-        message: t('slashCmd.subscription.billingUnreachable')
-      })),
   resume: () =>
     ctx.gateway
       .rpc<BillingMutationResponse>('subscription.resume', {})
@@ -143,7 +133,7 @@ const buildSubscriptionCtx = (
 
 export const subscriptionCommands: SlashCommand[] = [
   {
-    help: 'View or change your Nous subscription plan',
+    help: 'View or change your subscription plan',
     name: 'subscription',
     aliases: ['upgrade'],
     // ZERO sub-commands: bare `/subscription` fetches state and opens the

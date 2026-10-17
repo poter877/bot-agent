@@ -1,6 +1,6 @@
 import type { KnownBillingRefusalCode } from './billing-types.js'
 
-export type BillingRecovery = 'login' | 'none' | 'portal' | 'reconnect' | 'retry' | 'step_up'
+export type BillingRecovery = 'login' | 'none' | 'portal' | 'reconnect' | 'retry'
 
 export interface BillingRefusalPolicy {
   recovery: BillingRecovery
@@ -15,8 +15,6 @@ export const BILLING_REFUSAL_POLICY: Record<KnownBillingRefusalCode, BillingRefu
   endpoint_unavailable: { recovery: 'retry', reuseIdempotencyKey: true },
   idempotency_conflict: { recovery: 'none' },
   idempotency_key_required: { recovery: 'none' },
-  // Deliberate: losing scope mid-poll cannot undo an accepted charge, so its outcome is unknown.
-  insufficient_scope: { recovery: 'step_up', ambiguousMidPoll: true },
   internal_error: { recovery: 'retry' },
   invalid_charge_id: { recovery: 'none' },
   invalid_request: { recovery: 'none' },

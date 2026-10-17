@@ -70,9 +70,6 @@ export const libTextEn = {
     // lib/billingDialog.ts — the out-of-credits confirm dialog.
     billingDialog: {
       dismiss: 'Dismiss',
-      topUp: 'Top up',
-      nousDetail: 'Your Nous credit balance is exhausted — top up to keep going.',
-      nousTitle: 'Out of Nous credits',
       yourProvider: 'your provider',
       openBillingPage: 'Open billing page',
       switchProvider: 'Switch provider',

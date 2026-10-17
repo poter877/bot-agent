@@ -547,7 +547,7 @@ gateway:
     unknown_subcommand: "أمر فرعي غير معروف لـ /usage: `{args}`. جرّب `/usage` أو `/usage reset [--force]`."
     reset_wrong_provider: "إعادة تعيين الاستخدام المُدّخر متاحة فقط على مزوّد openai-codex. بدّل عبر `/model` أولًا."
   credits:
-    not_logged_in: "لم تُسجّل الدخول إلى Nous Portal. سجّل الدخول لرؤية رصيد أرصدتك وإعادة الشحن."
+    not_logged_in: "لم تُسجّل الدخول إلى البوابة. سجّل الدخول لرؤية رصيد أرصدتك وإعادة الشحن."
   verbose:
     not_enabled: "الأمر `/verbose` غير مُفعّل لمنصّات المراسلة.\n\nفعّله في `config.yaml`:\n```yaml\ndisplay:\n  tool_progress_command: true\n```"
     mode_off: "⚙️ تقدّم الأدوات: **مُعطّل** — لا يُعرض نشاط الأدوات."
@@ -938,7 +938,7 @@ gateway:
   codex_runtime:
     config_load_failed: "❌ تعذّر تحميل الإعدادات: {error}"
   topup:
-    header: "💳 **رصيد Nous**"
+    header: "💳 **الرصيد**"
     portal_link: "أدِر الفوترة من البوابة: {url}"
     hint: "أعد تعبئة الرصيد وأدِر الفوترة في المتصفح — سيتحدّث رصيدك هنا بعد ذلك."
   login:
@@ -1659,11 +1659,11 @@ slash:
   usage:
     description: "عرض استخدام الرموز وحدود المعدّل؛ `reset` يستبدل إعادة تعيين حد Codex المدّخرة"
   subscription:
-    description: "عرض خطة Nous الخاصة بك وتغييرها في المتصفح"
+    description: "عرض خطتك وتغييرها في المتصفح"
   login:
-    description: "تسجيل الدخول بحساب Nous (مع الاحتفاظ بموصّلاتك)"
+    description: "تسجيل الدخول بحساب مزوّد (مع الاحتفاظ بموصّلاتك)"
   topup:
-    description: "عرض رصيد Nous الخاص بك وإدارة الفوترة على البوابة"
+    description: "عرض رصيدك وإدارة الفوترة على البوابة"
   platforms:
     description: "عرض حالة البوّابة/منصات المراسلة"
   platform:
@@ -1684,7 +1684,7 @@ cli:
   billing:
     load_failed: "{label}: {error}"
     load_failed_label: "تعذّر تحميل الفوترة"
-    not_logged_in: "لم تسجّل الدخول إلى Nous Portal."
+    not_logged_in: "لم تسجّل الدخول إلى البوابة."
     run_portal_then: "شغّل `hermes portal` لتسجيل الدخول، ثم {cmd}."
     org_line: "المؤسسة: {org}"
     org_line_role: "المؤسسة: {org} · {role}"
@@ -1774,7 +1774,7 @@ cli:
     confirm_purchase: "تأكيد الشراء"
     total_line: "الإجمالي: {amount}"
     portal_card_will_be_charged: "سيُخصم المبلغ من بطاقتك المحفوظة في البوابة."
-    consent_charge: "بالتأكيد، أنت تسمح لـ Nous Research بالخصم من بطاقتك."
+    consent_charge: "بالتأكيد، تسمح بالخصم من بطاقتك."
     choice_pay_now: "ادفع {amount} الآن"
     desc_submit_charge: "إرسال عملية الخصم"
     desc_manage_card_billing: "أدِر بطاقتك / الفوترة في المتصفح"
@@ -1835,7 +1835,7 @@ cli:
     threshold_label: "عندما ينخفض الرصيد دون"
     reload_to_label: "إعادة تعبئة الرصيد إلى"
     reload_must_exceed_threshold: "🔴 يجب أن يكون مبلغ إعادة التعبئة أكبر من الحد الأدنى."
-    auto_reload_consent: "بتأكيدك، تخوّل Nous Research بالخصم من {card} كلما بلغ رصيدك {threshold}. يمكنك الإيقاف في أي وقت من هنا أو من البوابة."
+    auto_reload_consent: "بتأكيدك، تصرّح بالخصم من {card} كلما بلغ رصيدك {threshold}. يمكنك الإيقاف في أي وقت من هنا أو من البوابة."
     turn_on_auto_reload_question: "هل تريد تفعيل إعادة التعبئة التلقائية؟"
     auto_reload_enabled: "✅ إعادة التعبئة التلقائية مفعّلة: عند الانخفاض دون {threshold} → إعادة التعبئة إلى {reload_to}."
     auto_reload_disabled: "✅ أُوقفت إعادة التعبئة التلقائية."
@@ -2421,7 +2421,7 @@ cli:
     empty_base_url: "⚠️  أعاد محدّد المزوّد عنوان URL أساسيًا فارغًا. تحقق من إعدادات المزوّد أو شغّل: hermes setup"
     switching_to_fallback: "⚠️  {reason} — جارٍ التبديل إلى البديل: {provider} / {model}"
     first_run_no_provider: "☤ لم يُضبط أي مزوّد استدلال بعد — لنُصلح ذلك."
-    first_run_pick_provider: "ستختار مزوّدًا (Nous Portal OAuth هو الأسرع؛ لا يحتاج مفتاح API) ونموذجًا."
+    first_run_pick_provider: "ستختار مزوّدًا (OAuth المزوّد هو الأسرع؛ لا يحتاج مفتاح API) ونموذجًا."
     first_run_prompt: "هل تريد إعداد مزوّد الآن؟ [Y/n]:"
     first_run_skipped: "تم التخطّي. شغّل 'hermes model' أو 'hermes setup' في أي وقت."
     first_run_cancelled: "أُلغي الإعداد. شغّل 'hermes model' في أي وقت."
@@ -3660,8 +3660,8 @@ tips:
   t181: "Camofox متصفح مقاوم للكشف — نسخة مشتقة من Firefox مع تزييف بصمة مكتوب بـ C++."
   t182: "تُرجع browser_navigate لقطة للصفحة تلقائيًا — لا حاجة لاستدعاء browser_snapshot بعدها."
   t183: "تضيف browser_vision مع annotate=true تسميات مرقّمة فوق العناصر التفاعلية."
-  t184: "يفتح hermes mcp منتقيًا تفاعليًا لخوادم MCP المعتمدة من Nous يمكنك تثبيتها بضغطة مفتاح واحدة."
-  t185: "يعرض hermes mcp catalog خوادم MCP المعتمدة من Nous والمرفقة مع المستودع."
+  t184: "يفتح hermes mcp منتقيًا تفاعليًا لخوادم MCP المنتقاة يمكنك تثبيتها بضغطة مفتاح واحدة."
+  t185: "يعرض hermes mcp catalog خوادم MCP المنتقاة والمرفقة مع المستودع."
   t186: "يثبّت hermes mcp install <name> مدخلًا من الفهرس، ويطلب بيانات الاعتماد، ويتيح لك اختيار الأدوات المفعّلة منه."
   t187: "تُضبط خوادم MCP في config.yaml — مع دعم وسيلتي النقل stdio وHTTP."
   t188: "تصفية الأدوات لكل خادم: tools.include يسمح بأدوات محددة، وtools.exclude يحظرها."
@@ -3758,7 +3758,7 @@ tips:
   t279: "يتجاوز HERMES_DEV=1 اكتشاف وضع الحاوية لأغراض التطوير المحلي."
   t280: "يحصل كل خادم MCP على مجموعة أدوات خاصة به (mcp-servername) يمكن تبديلها بشكل مستقل عبر hermes tools."
   t281: "تُحلّ عناصر ${ENV_VAR} النائبة لـ MCP في الإعدادات عند تشغيل الخادم — بما فيها المتغيرات من ~/.hermes/.env."
-  t282: "تحصل المهارات من المستودعات الموثوقة (NousResearch) على مستوى الأمان 'trusted'؛ وتخضع مهارات المجتمع لفحص إضافي."
+  t282: "تحصل المهارات من المستودعات الموثوقة (openai، anthropics، huggingface، NVIDIA) على مستوى الأمان 'trusted'؛ وتخضع مهارات المجتمع لفحص إضافي."
   t283: "يحتفظ حجر المهارات في ~/.hermes/skills/.hub/quarantine/ بالمهارات المنتظرة للمراجعة الأمنية."
   t284: "يحقن /steer <prompt> ملاحظة بعد استدعاء الأداة التالي — لتوجيه المسار أثناء المهمة دون قطعها."
   t285: "يحدّد /goal <text> هدفًا دائمًا بأسلوب حلقة Ralph — يواصل Hermes تلقائيًا دورًا بعد دور حتى يقرّر حَكَم أن العمل تم."
@@ -3784,7 +3784,7 @@ tips:
   t305: "hermes curator rollback يستعيد المهارات من لقطة سابقة للتشغيل — النسخ الاحتياطية تحت skills/.curator_backups/."
   t306: "hermes auth reset <provider> [target] يمسح فترات التهدئة وعلامات النفاد عن مجمّع اعتمادات كامل، أو عن اعتماد واحد بالفهرس أو المعرّف أو التسمية."
   t307: "credential_pool_strategies.<provider>: round_robin يدوّر المفاتيح بالتساوي بدلًا من الافتراضي fill_first."
-  t308: "use_gateway: true لكل أداة يوجّه web أو image أو tts أو browser عبر اشتراكك في Nous — دون مفاتيح إضافية."
+  t308: "use_gateway: true لكل أداة يوجّه web أو image أو tts أو browser عبر اشتراكك لدى المزوّد — دون مفاتيح إضافية."
   t309: "provider_routing.data_collection: deny يستثني المزوّدين الذين يخزّنون البيانات على OpenRouter."
   t310: "provider_routing.require_parameters: true يوجّه فقط إلى المزوّدين الذين يدعمون كل معامل في طلبك."
   t311: "HERMES_TUI_RESUME=1 يُعيد الاتصال تلقائيًا بأحدث جلسة TUI عند الإطلاق — مفيد بعد انقطاع SSH."

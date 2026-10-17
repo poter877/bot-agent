@@ -1218,16 +1218,6 @@ export const zhHantSettings = {
         minimum: (label, amount) => `${label}：最低金額為 ${amount}。`,
         maximum: (label, amount) => `${label}：最高金額為 ${amount}。`
       },
-      stepUp: {
-        openVerification: '開啟驗證頁面',
-        dismiss: '關閉',
-        waiting: '正在等待驗證連結…',
-        verify: '驗證以繼續',
-        deniedTitle: '驗證未獲核准',
-        deniedBody: '驗證已結束，但未允許此終端進行遠端支出。',
-        successTitle: '驗證完成',
-        successBody: '此終端已獲准進行遠端支出。'
-      },
       charge: {
         added: amount => (amount ? `已加入 $${amount}。` : '已加入額度。'),
         failedTitle: '扣款失敗',
@@ -1370,10 +1360,6 @@ export const zhHantSettings = {
       },
       errors: {
         consentRequired: { title: '需要確認銀行卡', message: '請在入口網站中確認此卡可用於終端扣款' },
-        insufficientScope: {
-          title: '需要核准遠端支出',
-          message: '此操作需要遠端支出權限。請發起一次儲值以授權，然後重試。'
-        },
         remoteSpendingRevoked: {
           title: '遠端支出已停止',
           messageByAdmin: '管理員已停止此終端的遠端支出。',

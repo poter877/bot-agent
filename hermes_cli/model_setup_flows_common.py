@@ -180,8 +180,8 @@ def _login_retry_context(args) -> tuple[str, str]:
 def _run_login(login_fn, *args, **kwargs) -> bool:
     """Run an OAuth login helper; print plain failure copy (what happened + retry command) and
     return False on SystemExit / any exception. The retry command and service host come from the
-    provider config passed to the helper, so a MiniMax failure never says ``hermes portal`` /
-    ``portal.nousresearch.com``. Helpers that print their own copy raise ``SystemExit(1)`` with no
+    provider config passed to the helper, so a MiniMax failure never names another provider's
+    portal or CLI command. Helpers that print their own copy raise ``SystemExit(1)`` with no
     message, which stays silent; a SystemExit that carries a message (or a non-cancel code from a
     helper that printed nothing) gets a one-line explanation so the user is never left with no
     output."""
