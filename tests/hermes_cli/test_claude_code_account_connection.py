@@ -44,9 +44,10 @@ def test_disconnect_is_not_success_when_nothing_was_cleared(monkeypatch):
     """A no-op clear must not be a 200 the client can toast as removed."""
     from hermes_cli import auth as auth_mod
 
+    monkeypatch.setattr(auth_mod, "get_codex_auth_status", lambda: {"logged_in": False})
     monkeypatch.setattr(auth_mod, "clear_provider_auth", lambda _provider: False)
 
-    resp = client.delete("/api/providers/oauth/nous", headers=HEADERS)
+    resp = client.delete("/api/providers/oauth/openai-codex", headers=HEADERS)
 
     assert resp.status_code == 409, resp.text
     assert resp.json().get("ok") is not True
@@ -60,9 +61,10 @@ def test_disconnect_failure_does_not_echo_the_store_error(monkeypatch):
     def fail_clear(_provider):
         raise OSError(secret)
 
+    monkeypatch.setattr(auth_mod, "get_codex_auth_status", lambda: {"logged_in": False})
     monkeypatch.setattr(auth_mod, "clear_provider_auth", fail_clear)
 
-    resp = client.delete("/api/providers/oauth/nous", headers=HEADERS)
+    resp = client.delete("/api/providers/oauth/openai-codex", headers=HEADERS)
 
     assert resp.status_code == 500, resp.text
     assert secret not in resp.text

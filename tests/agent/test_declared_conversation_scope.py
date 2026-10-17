@@ -423,19 +423,6 @@ class TestProviderStickyKeys:
 
         assert headers["x-grok-conv-id"] == headers_next["x-grok-conv-id"] == scope
 
-    def test_nous_sticky_key_follows_the_declared_scope(self):
-        from providers import get_provider_profile
-
-        scope = declared_conversation_scope(_agent(RUN_1, None, CHAT_KEY))
-        token = set_affinity_scope(scope)
-        try:
-            body = get_provider_profile("nous").build_extra_body(session_id=RUN_1)
-            body_next = get_provider_profile("nous").build_extra_body(session_id=RUN_2)
-        finally:
-            reset_affinity_scope(token)
-
-        assert body["session_id"] == body_next["session_id"] == scope
-
 
 class TestConversationGenerationRotates:
     """The declared key must not outlive the conversation it names.

@@ -102,6 +102,50 @@ def check_video_generation_requirements() -> bool:
     return any(_provider_call(p, "is_available", False) for p in registry_mod.list_providers())
 
 
+def _backend_video_generate(prompt: str, image_url, reference_image_urls, optional: dict) -> str:
+    """公司模式：视频生成经公司后端 /api/media/video，base64 经既有缓存辅助落盘。"""
+    import datetime
+
+    from account_backend_models import AccountBackendError, generate_media
+    from agent.video_gen_provider import save_b64_video
+
+    payload: dict[str, Any] = {"model": "default", "prompt": prompt}
+    if optional.get("aspect_ratio"):
+        payload["aspectRatio"] = optional["aspect_ratio"]
+    if optional.get("resolution"):
+        payload["resolution"] = optional["resolution"]
+    if optional.get("duration") is not None:
+        payload["duration"] = optional["duration"]
+    if optional.get("seed") is not None:
+        payload["seed"] = optional["seed"]
+    if isinstance(image_url, str) and image_url.strip():
+        payload["imageUrl"] = image_url.strip()
+    refs = [r for r in (reference_image_urls or []) if isinstance(r, str) and r.strip()]
+    if refs:
+        payload["referenceImageUrls"] = refs[:4]
+
+    started = datetime.datetime.now()
+    try:
+        result = generate_media("video", payload)
+    except AccountBackendError as exc:
+        return json.dumps(error_response(
+            error=str(exc), error_type="backend_unavailable",
+            provider="company-backend", model=payload["model"], prompt=prompt))
+    videos = []
+    for video in result.get("videos") or []:
+        media_type = str(video.get("media_type") or "video/mp4")
+        extension = "mp4" if "mp4" in media_type else "webm"
+        path = save_b64_video(str(video.get("base64") or ""), extension=extension)
+        videos.append({"url": str(path)})
+    if not videos:
+        return json.dumps(error_response(
+            error="The company backend returned no videos.", error_type="empty_backend_result",
+            provider="company-backend", model=payload["model"], prompt=prompt))
+    elapsed = (datetime.datetime.now() - started).total_seconds()
+    logger.info("Generated %s video(s) in %.1fs via company backend", len(videos), elapsed)
+    return json.dumps({"success": True, "video": videos[0]["url"], "videos": [v["url"] for v in videos]})
+
+
 def _resolve_active_provider():
     """Active provider or None; a miss forces a discovery refresh (sessions older than the plugin install)."""
     try:
@@ -183,6 +227,13 @@ def _handle_video_generate(args: dict[str, Any], **_kw: Any) -> str:
         return tool_error(
             "video_generate only supports text-to-video, image-to-video, and "
             "reference-to-video; use a provider-specific tool for video edit/extend")
+    # 公司模式：视频生成经公司后端 /api/media/video（服务端持厂商密钥），
+    # 返回 base64 落盘为本地文件后按既有 envelope 返回路径。
+    from account_backend_session import company_backend_enabled
+
+    if company_backend_enabled():
+        return _backend_video_generate(prompt, image_url, reference_image_urls, optional)
+
     configured = _read_configured_video_provider()
     provider = _resolve_active_provider()
     if provider is None:

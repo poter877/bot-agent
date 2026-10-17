@@ -8,20 +8,19 @@ import { useEffect } from 'react'
 
 import { useSessionView } from '@/app/chat/session-view'
 import { useGatewayRequest } from '@/app/gateway/hooks/use-gateway-request'
-import { useConnectionOwner } from '@/components/assistant-ui/use-connection-owner'
+import { type SessionOwner, useSessionOwner } from '@/components/assistant-ui/use-connection-owner'
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
 import { useI18n } from '@/i18n'
 import { lookupPluginCatalogEntry } from '@/lib/plugin-catalog'
 import { cn } from '@/lib/utils'
 import { $agentPlugins, $agentPluginsProfile, loadAgentPlugins } from '@/store/agent-plugins'
-import type { ConnectionOwner } from '@/store/connection-request'
 import { requestGatewayForAgent } from '@/store/gateway'
 import { openCatalogPluginInstall } from '@/store/plugin-catalog-install'
 
 import { CARD_ACTION_CLASS, CARD_CHIP_CLASS, CARD_LABEL_CLASS } from './card-type'
 
-async function readPresence(owner: ConnectionOwner, names: string[]): Promise<CatalogPluginPresence[]> {
+async function readPresence(owner: SessionOwner, names: string[]): Promise<CatalogPluginPresence[]> {
   const result = await requestGatewayForAgent<PluginsManageResult>(
     owner.connectionId,
     owner.profile,
@@ -63,7 +62,7 @@ export function PluginsCard({
   const { t } = useI18n()
   const copy = t.firstRun
   const storedId = useStore(useSessionView().$storedId)
-  const owner = useConnectionOwner(storedId, true)
+  const owner = useSessionOwner(storedId, true)
   const plugins = useStore($agentPlugins)
   const pluginsProfile = useStore($agentPluginsProfile)
   const { requestGateway } = useGatewayRequest()

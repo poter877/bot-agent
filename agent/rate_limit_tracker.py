@@ -1,7 +1,7 @@
 """Rate limit tracking for inference API responses.
 
 Captures ``x-ratelimit-{limit,remaining,reset}-{requests,tokens}[-1h]``
-headers (Nous Portal format, also used by OpenRouter / OpenAI-compatible APIs)
+headers (OpenRouter / OpenAI-compatible API format)
 and formats them for the /usage slash command. Reset values are seconds.
 """
 

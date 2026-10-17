@@ -5,12 +5,9 @@ import { readJson, writeJson } from '@/lib/storage'
 import { MCP_CATALOG_KEY } from '../../mcp/mcp-status'
 import type { LocalServerInput } from '../types'
 
-import { CONNECTOR_LIFETIMES, type ConnectorRead, CONNECTORS_QUERY_ROOT } from './keys'
-
-export type PersistedRead = 'bundled' | 'servers' | ConnectorRead
-
-const persists = (read: PersistedRead): boolean =>
-  read === 'bundled' || read === 'servers' || CONNECTOR_LIFETIMES[read].persist
+/** The reads this module persists: the bundled MCP catalog answer (a react-query cache read) and
+ *  the last-known local servers (written directly, so a restart paints the list before config loads). */
+export type PersistedRead = 'bundled' | 'servers'
 
 const STORAGE_PREFIX = 'hermes.connectors.v4.'
 
@@ -21,19 +18,12 @@ interface PersistedEntry {
   data: unknown
 }
 
-type PersistedValue = PersistedEntry['data']
-
 interface PersistedBlob {
   bundled?: PersistedEntry
-  catalog?: PersistedEntry
-  list?: PersistedEntry
   servers?: PersistedEntry
-  tools?: Record<string, PersistedEntry>
 }
 
 const keyFor = (scopeKey: string) => `${STORAGE_PREFIX}${scopeKey}`
-
-const READS: ReadonlySet<PersistedValue> = new Set(Object.keys(CONNECTOR_LIFETIMES))
 
 function size(value: PersistedBlob | PersistedEntry): number {
   try {
@@ -55,28 +45,12 @@ function readBlob(scopeKey: string): PersistedBlob | null {
 
 const SLOTS = {
   bundled: 'bundled',
-  catalog: 'catalog',
-  list: 'list',
   servers: 'servers'
-} satisfies Partial<Record<PersistedRead, keyof PersistedBlob>>
+} satisfies Record<PersistedRead, keyof PersistedBlob>
 
-type SlotRead = keyof typeof SLOTS
-
-function entryOf(blob: PersistedBlob, read: PersistedRead, slug: string | undefined): PersistedEntry | undefined {
-  if (!persists(read)) {
-    return undefined
-  }
-
-  if (read === 'tools') {
-    return slug ? blob.tools?.[slug] : undefined
-  }
-
-  if (!(read in SLOTS)) {
-    return undefined
-  }
-
-  // SAFETY: guarded by `read in SLOTS` on the line above, and every slot holds a PersistedEntry.
-  return blob[SLOTS[read as SlotRead]] as PersistedEntry | undefined
+function entryOf(blob: PersistedBlob, read: PersistedRead): PersistedEntry | undefined {
+  // SAFETY: every PersistedRead has a slot, and every slot holds a PersistedEntry.
+  return blob[SLOTS[read]] as PersistedEntry | undefined
 }
 
 export interface QuerySeed<T> {
@@ -84,9 +58,9 @@ export interface QuerySeed<T> {
   initialDataUpdatedAt?: number
 }
 
-export function seedOptions<T>(scopeKey: ProfileScope, read: PersistedRead, slug?: string): QuerySeed<T> {
+export function seedOptions<T>(scopeKey: ProfileScope, read: PersistedRead): QuerySeed<T> {
   const blob = readBlob(profileScopeKey(scopeKey))
-  const entry = blob ? entryOf(blob, read, slug) : undefined
+  const entry = blob ? entryOf(blob, read) : undefined
 
   if (!entry || !Number.isFinite(entry.at) || entry.data === undefined || entry.data === null) {
     return {}
@@ -96,69 +70,28 @@ export function seedOptions<T>(scopeKey: ProfileScope, read: PersistedRead, slug
   return { initialData: entry.data as T, initialDataUpdatedAt: entry.at }
 }
 
-function trimmed(blob: PersistedBlob): PersistedBlob {
-  let tools = blob.tools
-
-  while (tools !== undefined && size({ ...blob, tools }) > PERSIST_MAX_BYTES) {
-    const oldest = Object.entries(tools).sort((a, b) => a[1].at - b[1].at)[0]
-
-    if (!oldest) {
-      break
-    }
-
-    const rest = { ...tools }
-    delete rest[oldest[0]]
-    tools = rest
-  }
-
-  return { ...blob, tools }
-}
-
-function store(scopeKey: string, read: PersistedRead, slug: string | undefined, entry: PersistedEntry): void {
-  if (!persists(read) || size(entry) > PERSIST_MAX_BYTES) {
+function store(scopeKey: string, read: PersistedRead, entry: PersistedEntry): void {
+  if (size(entry) > PERSIST_MAX_BYTES) {
     return
   }
 
-  const blob = readBlob(scopeKey) ?? {}
-
-  if (read === 'tools') {
-    if (!slug) {
-      return
-    }
-
-    blob.tools = { ...blob.tools, [slug]: entry }
-  } else {
-    // SAFETY: `read` is not 'tools' here, and every other PersistedRead has a slot.
-    blob[SLOTS[read as SlotRead]] = entry
-  }
-
-  writeJson(keyFor(scopeKey), trimmed(blob))
+  writeJson(keyFor(scopeKey), { ...readBlob(scopeKey), [SLOTS[read]]: entry })
 }
 
 interface ReadTarget {
   read: PersistedRead
   scopeKey: string
-  slug: string | undefined
 }
 
 /* oxlint-disable anti-slop/no-runtime-typeof -- SAFETY: a react-query key is typed `readonly unknown[]`; this function is the one boundary that parses one into a ReadTarget. */
 function targetOf(queryKey: readonly unknown[]): null | ReadTarget {
-  const [root, scopeKey, read, slug] = queryKey
+  const [root, scopeKey] = queryKey
 
   if (typeof scopeKey !== 'string') {
     return null
   }
 
-  if (root === MCP_CATALOG_KEY[0]) {
-    return { read: 'bundled', scopeKey, slug: undefined }
-  }
-
-  if (root !== CONNECTORS_QUERY_ROOT || !READS.has(read)) {
-    return null
-  }
-
-  // SAFETY: READS holds exactly the CONNECTOR_LIFETIMES keys, and `read` is one of them by the check above.
-  return { read: read as ConnectorRead, scopeKey, slug: typeof slug === 'string' ? slug : undefined }
+  return root === MCP_CATALOG_KEY[0] ? { read: 'bundled', scopeKey } : null
 }
 /* oxlint-enable anti-slop/no-runtime-typeof */
 
@@ -177,7 +110,7 @@ export function startConnectorPersistence(): () => void {
     timer = null
 
     for (const [key, write] of pending) {
-      store(write.scopeKey, write.read, write.slug, write.entry)
+      store(write.scopeKey, write.read, write.entry)
       written.set(key, write.entry.at)
     }
 
@@ -196,7 +129,7 @@ export function startConnectorPersistence(): () => void {
       return
     }
 
-    const key = `${target.scopeKey}\u0000${target.read}\u0000${target.slug ?? ''}`
+    const key = `${target.scopeKey}\u0000${target.read}`
 
     if (written.get(key) === dataUpdatedAt) {
       return
@@ -221,7 +154,7 @@ interface ServerSeed {
   name: string
 }
 
-function isSeed(value: PersistedValue): value is ServerSeed {
+function isSeed(value: unknown): value is ServerSeed {
   if (value === null || !(value instanceof Object)) {
     return false
   }
@@ -236,7 +169,7 @@ function isSeed(value: PersistedValue): value is ServerSeed {
 export function storeLocalServers(scope: ProfileScope, servers: readonly LocalServerInput[]): void {
   const seeds: ServerSeed[] = servers.map(({ enabled, name }) => ({ enabled, name }))
 
-  store(profileScopeKey(scope), 'servers', undefined, { at: Date.now(), data: seeds })
+  store(profileScopeKey(scope), 'servers', { at: Date.now(), data: seeds })
 }
 
 export function seedLocalServers(scope: ProfileScope): LocalServerInput[] {
@@ -247,8 +180,4 @@ export function seedLocalServers(scope: ProfileScope): LocalServerInput[] {
   }
 
   return initialData.filter(isSeed).map(seed => ({ ...seed, status: 'unknown', target: '' }))
-}
-
-export function clearPersisted(scope: ProfileScope): void {
-  writeJson(keyFor(profileScopeKey(scope)), null)
 }

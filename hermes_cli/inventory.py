@@ -7,7 +7,6 @@ from contextvars import copy_context
 from dataclasses import dataclass, replace
 from threading import Lock, Thread, current_thread
 from typing import Any, Optional
-from datetime import UTC
 
 _pricing_prewarm_lock = Lock()
 _pricing_prewarm_threads: dict[tuple[str, tuple[tuple[str, str], ...]], Thread] = {}
@@ -76,7 +75,7 @@ def build_models_payload(
     ctx: ConfigContext, *, explicit_only: bool = False, include_unconfigured: bool = False,
     picker_hints: bool = False, canonical_order: bool = False, pricing: bool = False,
     pricing_cache_only: bool = False,
-    capabilities: bool = False, featured: bool = False, force_fresh_nous_tier: bool = False,
+    capabilities: bool = False, featured: bool = False,
     refresh: bool = False, probe_custom_providers: bool = True, probe_current_custom_provider: bool = False,
     for_picker: bool = False, max_models: int | None = None, non_blocking_catalogs: bool = False,
     fast_custom_probe: bool | None = None,
@@ -102,7 +101,7 @@ def build_models_payload(
     rows = list_authenticated_providers(
         current_provider=ctx.current_provider, current_base_url=ctx.current_base_url,
         current_model=ctx.current_model, user_providers=ctx.user_providers,
-        custom_providers=ctx.custom_providers, force_fresh_nous_tier=force_fresh_nous_tier,
+        custom_providers=ctx.custom_providers,
         max_models=max_models, refresh=refresh, probe_custom_providers=probe_custom_providers,
         probe_current_custom_provider=probe_current_custom_provider, for_picker=for_picker,
         excluded_providers=ctx.excluded_providers or [],
@@ -153,7 +152,7 @@ def build_models_payload(
     if canonical_order:
         rows = _reorder_canonical(rows)
     if pricing:
-        _apply_pricing(rows, force_fresh_nous_tier=force_fresh_nous_tier, cached_only=pricing_cache_only)
+        _apply_pricing(rows, cached_only=pricing_cache_only)
     if capabilities:
         _apply_capabilities(rows, metadata_config=metadata_config)
     if featured:
@@ -249,8 +248,7 @@ def build_model_options_payload(
     _apply_limits(payload["providers"])
     _apply_usage(payload["providers"])
     if not refresh:
-        _prewarm_pricing_async(payload["providers"], current_provider=ctx.current_provider,
-                               current_base_url=ctx.current_base_url)
+        _prewarm_pricing_async(payload["providers"])
     return payload
 
 
@@ -259,7 +257,7 @@ def _apply_limits(rows: list[dict]) -> None:
     when instead of the row just looking broken. Only providers with a persisted pool are read (no
     seeding), and a pool that fails to load says nothing rather than failing the whole catalog."""
     import logging
-    from datetime import datetime, timezone
+    from datetime import UTC, datetime
 
     from agent.credential_pool import load_pool
     from hermes_cli.auth import read_credential_pool
@@ -359,7 +357,7 @@ _EXHAUSTED_WINDOW_PERCENT = 100.0
 
 
 def _iso_from_epoch(epoch: float) -> str:
-    from datetime import datetime, timezone
+    from datetime import UTC, datetime
 
     return datetime.fromtimestamp(float(epoch), UTC).isoformat()
 
@@ -516,16 +514,13 @@ def _reasoning_catalog_reader(slug: str):
     must never block on HTTP; a cold cache warms in the background and reports no restriction until then."""
     try:
         from hermes_cli.models_reasoning_caps import (
-            nous_model_reasoning_capabilities,
             openrouter_model_reasoning_capabilities,
-            warm_nous_reasoning_caps_async,
             warm_openrouter_reasoning_caps_async,
         )
     except Exception:
         return None
 
     readers = {
-        "nous": (warm_nous_reasoning_caps_async, nous_model_reasoning_capabilities),
         "openrouter": (warm_openrouter_reasoning_caps_async, openrouter_model_reasoning_capabilities),
     }
     if slug not in readers:
@@ -861,32 +856,18 @@ def _reorder_canonical(rows: list[dict]) -> list[dict]:
     return canon + extras
 
 
-def _apply_pricing(rows: list[dict], *, force_fresh_nous_tier: bool = False, cached_only: bool = False) -> None:
-    """Set ``row["pricing"] = {model_id: {input, output, cache | None, free}}``; for Nous also
-    ``free_tier`` (account is free-tier) and ``unavailable_models`` (paid models a free user can't pick).
-    ``cached_only`` never hits the network: unknown Nous entitlement fails closed (``free_tier_pending``,
-    all models locked) and missing pricing is marked ``pricing_pending``."""
+def _apply_pricing(rows: list[dict], *, cached_only: bool = False) -> None:
+    """Set ``row["pricing"] = {model_id: {input, output, cache | None, free}}``. ``cached_only`` never
+    hits the network: missing pricing is marked ``pricing_pending`` instead."""
     from hermes_cli.models_pricing import (
         _format_price_per_mtok,
-        compute_sale_discount,
         get_pricing_for_provider,
     )
-    from hermes_cli.models import (
-        check_nous_free_tier,
-        get_cached_nous_free_tier,
-        partition_nous_models_by_tier,
-    )
-
-    nous_free_tier: Optional[bool] = None  # resolved once (cached in models.py for the TTL window)
 
     for row in rows:
         slug = str(row.get("slug", "")).lower()
         models = row.get("models") or []
         if not models:
-            continue
-        if row.get("free_tier_row"):
-            # The free tier's one model has no Portal pricing and no entitlement to read: pricing
-            # it would lock the only row a free-tier install can select.
             continue
         try:
             pricing_kwargs = {"cached_only": True} if cached_only else {}
@@ -895,23 +876,8 @@ def _apply_pricing(rows: list[dict], *, force_fresh_nous_tier: bool = False, cac
             raw_pricing = get_pricing_for_provider(slug, **pricing_kwargs) or {}
         except Exception:
             raw_pricing = {}
-        cached_nous_tier: Optional[bool] = None
-        if slug == "nous" and cached_only:
-            cached_nous_tier = get_cached_nous_free_tier()
-            if cached_nous_tier is None:
-                # Entitlement unknown: stay nonblocking but fail closed until the prewarm has populated
-                # both caches, else a free account could briefly select paid models on first open.
-                row["free_tier_pending"] = True
-                row["unavailable_models"] = list(models)
-                if not row.get("warning"):  # say why every model renders locked
-                    row["warning"] = ("Checking Nous plan entitlement… models unlock on the "
-                                      "next picker open or refresh.")
-                continue
         if not raw_pricing:
-            if slug == "nous":
-                row["free_tier"] = bool(cached_nous_tier)
-                row["pricing_pending"] = True
-                row["unavailable_models"] = list(models) if cached_nous_tier else []
+            row["pricing_pending"] = True
             continue
 
         formatted: dict[str, dict] = {}
@@ -923,38 +889,14 @@ def _apply_pricing(rows: list[dict], *, force_fresh_nous_tier: bool = False, cac
             cache_raw = p.get("input_cache_read", "")
             inp = _format_price_per_mtok(inp_raw) if inp_raw != "" else ""
             out = _format_price_per_mtok(out_raw) if out_raw != "" else ""
-            entry: dict = {
+            formatted[mid] = {
                 "input": inp, "output": out,
                 "cache": _format_price_per_mtok(cache_raw) if cache_raw else None,
                 "free": inp == "free" and out in ("free", ""),  # both input and output cost nothing
             }
-            # Sale chrome is Nous Portal-only (other catalogs' nested pricing.original is ignored); free
-            # models get flat -100% chrome, was_* only when the gateway served an original.
-            if slug == "nous":
-                sale = compute_sale_discount(inp_raw, out_raw, p.get("original"))
-                if sale is not None:
-                    discount_percent, was_prompt_raw, was_out_raw = sale
-                    entry["discount_percent"] = discount_percent
-                    for key, was_raw in (("was_input", was_prompt_raw), ("was_output", was_out_raw)):
-                        if was_raw != "":
-                            entry[key] = _format_price_per_mtok(was_raw)
-            formatted[mid] = entry
 
         if formatted:
             row["pricing"] = formatted
-
-        if slug == "nous":
-            try:
-                if nous_free_tier is None:
-                    nous_free_tier = (cached_nous_tier if cached_only
-                                      else check_nous_free_tier(force_fresh=force_fresh_nous_tier))
-                row["free_tier"] = bool(nous_free_tier)
-                row["unavailable_models"] = (
-                    partition_nous_models_by_tier(list(models), raw_pricing, free_tier=True)[1]
-                    if nous_free_tier else [])
-            except Exception:  # tier detection failed — fail open (no gating)
-                row["free_tier"] = False
-                row["unavailable_models"] = []
 
 
 def _local_runtime_row(ctx: ConfigContext) -> dict | None:
@@ -988,9 +930,7 @@ def _local_runtime_row(ctx: ConfigContext) -> dict | None:
         return None
 
 
-def _prewarm_pricing_async(
-    rows: list[dict], *, current_provider: str = "", current_base_url: str = "",
-) -> Optional[Thread]:
+def _prewarm_pricing_async(rows: list[dict]) -> Optional[Thread]:
     """Warm picker pricing caches without delaying the current payload (one worker per
     profile + endpoint scope; a live worker is reused)."""
     from hermes_constants import hermes_home_key
@@ -1004,9 +944,7 @@ def _prewarm_pricing_async(
         for row in rows if row.get("slug")
     }
     endpoint_scope = tuple(sorted(
-        (slug, pricing_cache_scope(
-            slug, base_url=base_url, current_provider=current_provider, current_base_url=current_base_url,
-        ))
+        (slug, pricing_cache_scope(slug, base_url=base_url))
         for slug, base_url in slugs))
     prewarm_key = (hermes_home_key(), endpoint_scope)
 

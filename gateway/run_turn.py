@@ -232,7 +232,7 @@ class GatewayTurnMixin:
                     override["provider"], target_model=override.get("model") or None)
             except Exception as exc:
                 # Layering the override on the default runtime sent its model to the default provider's
-                # endpoint (openai-codex on the Nous URL). Run this turn on the whole default route and say
+                # endpoint. Run this turn on the whole default route and say
                 # so; the persisted override is kept, so the next turn retries it.
                 logger.warning("Session /model override provider %s unavailable: %s", override["provider"], exc)
                 unavailable_override, override = override, None
@@ -3602,7 +3602,7 @@ class GatewayTurnMixin:
             self._evict_cached_agent(session_key)
             return
         _cfg_model = self._fallback_baseline_model(session_key, turn_ctx.source, _agent)
-        if _agent.model != _cfg_model and not self._is_intentional_model_switch(session_key, _agent, _cfg_model):
+        if _agent.model != _cfg_model and not self._is_intentional_model_switch(session_key, _agent):
             self._evict_cached_agent(session_key)
 
     async def _run_agent_finalize_streaming_tts(self, turn_ctx: TurnContext, adapter: Any) -> None:

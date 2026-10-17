@@ -477,43 +477,5 @@ def _safe_client_label(label: str) -> str:
     return safe.lstrip(".").strip()
 
 
-@method("diagnostics.share_nous")
-def _(rid, params: dict) -> dict:
-    """Upload a redacted debug bundle to Nous-internal diagnostics storage — same collection +
-    force-redaction pipeline as ``hermes debug share --nous``; redaction is NOT client-controllable
-    and consent lives with the CALLER (privacy notice first). Structured ``ok``/``error`` envelope so
-    upload failures render inline. Optional: ``error_context`` (-> ``error-context.txt``),
-    ``extra_files`` ({label -> text}), ``log_lines`` (default 200); all force-redacted."""
-    # Outside the try: the except path needs it, and agent.redact is a hard dependency.
-    from hermes_cli.debug_redaction import redact_debug_support_text
-
-    try:
-        from hermes_cli.debug import build_nous_bundle, collect_share_bundle
-        from hermes_cli.diagnostics_upload import share_to_nous
-        log_lines = params.get("log_lines")
-        if not isinstance(log_lines, int) or not (10 <= log_lines <= 2000):
-            log_lines = 200
-        bundle = collect_share_bundle(log_lines=log_lines, redact=True)
-        # Redact complete client values before applying their support-upload caps.
-        error_context = params.get("error_context")
-        if isinstance(error_context, str) and error_context.strip():
-            bundle["error-context.txt"] = _redact_client_text(error_context.strip(), 8_000)
-        # Bounded: at most 4 files, 512KB each, sanitized labels — not an arbitrary upload surface.
-        extra_files = params.get("extra_files")
-        for label, text in list(extra_files.items())[:4] if isinstance(extra_files, dict) else ():
-            safe_label = _safe_client_label(label) if isinstance(label, str) else ""
-            if safe_label and isinstance(text, str) and text.strip():
-                bundle[f"client/{safe_label}"] = _redact_client_text(text, 524_288)
-        res = share_to_nous(build_nous_bundle(bundle, redact=True))
-        view_url = res.get("viewUrl") or res.get("view_url")
-        upload_id = res.get("id")
-        if not view_url and not upload_id:  # an upload the user can't reference is useless to support
-            return _ok(rid, {"ok": False, "error": "upload succeeded but returned no view URL or id"})
-        return _ok(rid, {"ok": True, "view_url": view_url, "upload_id": upload_id,
-                         "expires_at": res.get("expiresAt") or res.get("expires_at")})
-    except Exception as e:
-        return _ok(rid, {"ok": False, "error": redact_debug_support_text(e)})
-
-
 def register(server) -> None:
     bind_module(globals(), server, skip=("_",))

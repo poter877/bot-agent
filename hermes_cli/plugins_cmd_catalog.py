@@ -139,7 +139,7 @@ def _adopt_legacy_sidecar(plugin_dir: Path, record: dict) -> Optional[dict]:
     return _write_catalog_block(plugin_dir, record, block)
 
 
-# Archived Nous handoff repos of providers that left core -> the catalog entry that superseded them: a URL
+# Archived handoff repos of providers that left core -> the catalog entry that superseded them: a URL
 # install of one is adopted as that entry, so `update` re-pins it instead of pulling the archive forever.
 _HANDOFF_REPOS = {"github.com/nousresearch/hermes-plugin-holographic": "holographic"}
 

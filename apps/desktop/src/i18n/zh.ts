@@ -1801,8 +1801,8 @@ export const zhOverrides = {
       state: {
         notice: {
           loggedOut: {
-            title: '连接你的 Nous 账户',
-            message: '登录你的 Nous 账户，即可在此查看余额、套餐和用量。',
+            title: '连接你的账户',
+            message: '登录后即可在此查看余额、套餐和用量。',
             action: '登录'
           },
           openPortal: '打开门户 ↗',

@@ -177,7 +177,7 @@ _DESKTOP_MCP_DISCOVERY_DELAY_S = 1.0
 
 
 def _probe_install_before_state_db() -> None:
-    from hermes_cli.anon_auth import on_local_desktop_backend
+    from hermes_cli.process_identity import on_local_desktop_backend
 
     if not on_local_desktop_backend():
         return
@@ -1091,15 +1091,6 @@ def _no_auth_provider_message(host: str) -> str:
     Bundled providers expose ``LAST_SKIP_REASON`` so an installed-but-
     unconfigured provider is not reported as merely "no providers".
     """
-    skip_reasons: list[str] = []
-    try:
-        from plugins.dashboard_auth import nous as _nous_plugin
-
-        if _nous_plugin.LAST_SKIP_REASON:
-            skip_reasons.append(f"  • nous: {_nous_plugin.LAST_SKIP_REASON}")
-    except Exception:
-        pass
-
     if host in _LOOPBACK_HOST_VALUES:
         public_url = ""
         try:
@@ -1131,8 +1122,7 @@ def _no_auth_provider_message(host: str) -> str:
         "    (hash with: python -c \"from "
         "plugins.dashboard_auth.basic import hash_password; "
         "print(hash_password('your-password'))\")\n"
-        "  • OAuth: run `hermes dashboard register` (Nous Portal) or "
-        "install a DashboardAuthProvider plugin.\n"
+        "  • OAuth: install a DashboardAuthProvider plugin.\n"
         "There is no unauthenticated public-dashboard option. For "
         "local-only use, bind 127.0.0.1 and leave dashboard.public_url "
         "unset; a configured external public URL requires auth even "
@@ -1163,8 +1153,6 @@ def _no_auth_provider_message(host: str) -> str:
         f"Refusing to bind dashboard to {host} — {gate_reason}, "
         f"but no auth providers are registered.\n\n"
     )
-    if skip_reasons:
-        msg += "Bundled providers reported these issues:\n" + "\n".join(skip_reasons) + "\n\n"
     return msg + fix_hint
 
 
@@ -1636,15 +1624,6 @@ def start_server(
     from hermes_cli.resource_limits import apply_nofile_soft_limit
 
     apply_nofile_soft_limit()
-
-    import uvicorn
-
-    try:
-        from hermes_cli.nous_auth_keepalive import start_nous_auth_keepalive
-
-        start_nous_auth_keepalive()
-    except Exception as exc:
-        _log.debug("Nous auth keepalive did not start: %s", exc)
 
     _configure_auth_gate(host, allow_public, ssh_session_token, ssh_owner_nonce)
 

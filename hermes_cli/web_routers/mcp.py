@@ -438,7 +438,7 @@ def _catalog_entry_json(entry: Any, installed: bool, enabled: bool) -> dict[str,
 
 @router.get("/api/mcp/catalog")
 async def list_mcp_catalog(profile: Optional[str] = None):
-    """Browse the Nous-approved MCP catalog (optional-mcps/ manifests), each
+    """Browse the curated MCP catalog (optional-mcps/ manifests), each
     entry annotated with installed/enabled state for ``profile``."""
     with http_failure("mcp_catalog import failed", 500, "Catalog unavailable"):
         from hermes_cli import mcp_catalog

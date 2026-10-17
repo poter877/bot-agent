@@ -553,22 +553,6 @@ def _validate_anthropic_messages(req: _Request) -> dict[str, Any]:
     )
 
 
-def _nous_portal_recommended_names() -> set[str]:
-    """Lower-cased ids from the Portal's live recommended-models feed (empty on any failure)."""
-    from hermes_cli import models as _m
-
-    try:
-        payload = _m.fetch_nous_recommended_models(_m._resolve_nous_portal_url())
-        return {
-            name.lower()
-            for tier in ("freeRecommendedModels", "paidRecommendedModels")
-            for entry in (payload.get(tier) or [])
-            if (name := _m._extract_model_name(entry))
-        }
-    except Exception:
-        return set()
-
-
 def _validate_managed_local(req: _Request) -> Optional[dict[str, Any]]:
     """The managed llama.cpp runtime: the staged library on disk is the source of truth, not the
     live listing. The router's model list is spawn-only (a GGUF landed after its start is
@@ -665,12 +649,6 @@ def _validate_live_listing(req: _Request) -> Optional[dict[str, Any]]:
     ):
         return _accept_with_note(f"Note: `{req.requested}` was not found in the live /v1/models listing "
                                  "but exists in the curated catalog — accepted.")
-    # Nous: the Portal's recommended-models feed can list a model before the curated list or the
-    # docs-hosted manifest catches up; `hermes chat` already accepts those at model-list build
-    # time, so mirror that source of truth for per-message /model validation.
-    if req.normalized == "nous" and req.lookup.lower() in _nous_portal_recommended_names():
-        return _accept_with_note(f"Note: `{req.requested}` was not found in the live /v1/models listing "
-                                 "but is a current Nous Portal recommendation — accepted.")
     return _reject(f"Model `{req.requested}` was not found in this provider's model listing.{match.suggestion_text}")
 
 

@@ -6,7 +6,6 @@ import os
 import shlex
 import shutil
 import sys
-from typing import Set
 
 from hermes_cli.cli_output import (
     print_error as _print_error, print_info as _print_info, print_success as _print_success,
@@ -353,13 +352,28 @@ def _module_installed(module_name: str) -> bool:
         return False
 
 
+def _has_agent_browser() -> bool:
+    """True when the agent-browser CLI resolves (the runtime's own discovery, validate=False)."""
+    try:
+        from tools.browser_tool_install import _find_agent_browser
+        _find_agent_browser(validate=False)
+    except (ImportError, OSError):
+        return False
+    return True
+
+
 def _agent_browser_installed() -> bool:
     """True when everything ``_run_post_setup("agent_browser")`` installs is present: the agent-browser CLI
     *and* the Chromium build it drives (or the Lightpanda engine, which needs no Chromium), so "Run
     setup" flips to installed only when re-running it would be a no-op."""
-    from hermes_cli.nous_subscription import _local_browser_runnable
-
-    return _local_browser_runnable()
+    if not _has_agent_browser():
+        return False
+    try:
+        from tools.browser_tool_install import _chromium_installed
+        from tools.browser_tool_lightpanda_fallback import _using_lightpanda_engine
+    except ImportError:
+        return True  # runtime probe unavailable: fall back to binary presence rather than crashing
+    return _using_lightpanda_engine() or _chromium_installed()
 
 
 def _camofox_installed() -> bool:
@@ -380,7 +394,6 @@ def _lightpanda_installed() -> bool:
 def _cloud_agent_browser_installed() -> bool:
     """Installed-check for the ``browserbase`` hook: cloud providers host their own Chromium, so
     presence of the agent-browser CLI is the whole contract."""
-    from hermes_cli.nous_subscription import _has_agent_browser
     return _has_agent_browser()
 
 

@@ -4,7 +4,6 @@ import { DisclosureCaret } from '@/components/ui/disclosure-caret'
 import { Switch } from '@/components/ui/switch'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
-import { Lock } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 
 import { describesNothingNew } from './derive-tools'
@@ -35,8 +34,7 @@ export interface ToolRowProps {
 export function ToolRow({ expanded, on, onExpand, onToggle, preview = false, readOnly = false, tool }: ToolRowProps) {
   const { t } = useI18n()
   const copy = t.connectorsPage.tools
-  const locked = tool.lockedBy !== null
-  const struck = locked || tool.deprecated
+  const struck = tool.deprecated
   const facet = vocabularyTag(tool.facet)
   const facetCopy = tagCopy(facet, t.connectorsPage.vocabulary)
   const hints = hintTags(tool.hints, tool.facet)
@@ -56,17 +54,11 @@ export function ToolRow({ expanded, on, onExpand, onToggle, preview = false, rea
       <span className="flex shrink-0 items-center gap-1.5 text-[0.65rem] text-(--ui-text-quaternary)">
         {tool.facet === 'unclassified' ? null : (
           <Tip label={facetCopy.long}>
-            <span className={cn('whitespace-nowrap', locked ? 'text-(--ui-text-quaternary)' : TONE_CLASS[facet.tone])}>
-              {facetCopy.label}
-            </span>
+            <span className={cn('whitespace-nowrap', TONE_CLASS[facet.tone])}>{facetCopy.label}</span>
           </Tip>
         )}
 
-        {locked ? (
-          <span className="whitespace-nowrap">{copy.lockedHint}</span>
-        ) : (
-          <HintTags hints={hints.slice(0, MAX_ROW_HINTS)} more={Math.max(0, hints.length - MAX_ROW_HINTS)} />
-        )}
+        <HintTags hints={hints.slice(0, MAX_ROW_HINTS)} more={Math.max(0, hints.length - MAX_ROW_HINTS)} />
 
         {expandable ? <DisclosureCaret className="text-(--ui-text-quaternary)" open={expanded} /> : null}
       </span>
@@ -75,15 +67,13 @@ export function ToolRow({ expanded, on, onExpand, onToggle, preview = false, rea
 
   return (
     <div
-      className={cn('grid', locked && 'bg-muted/40', expanded && 'bg-(--ui-row-open-background)')}
+      className={cn('grid', expanded && 'bg-(--ui-row-open-background)')}
       data-slot="tool-row"
       data-tool={tool.slug}
     >
       <div className="flex items-center gap-2.5 px-3.5" style={{ height: TOOL_ROW_HEIGHT }}>
         <span className="flex w-7 shrink-0 items-center">
-          {preview ? null : locked ? (
-            <Lock aria-hidden className="size-3 text-(--ui-text-quaternary)" />
-          ) : (
+          {preview ? null : (
             <Switch
               aria-label={on ? copy.turnToolOff(tool.name) : copy.turnToolOn(tool.name)}
               checked={on}

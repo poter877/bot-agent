@@ -3150,15 +3150,7 @@ class TestNewEndpoints:
         state so keyless ≠ ready.
         """
         from hermes_cli import tools_config
-        from hermes_cli.nous_account import NousPortalAccountInfo
 
-        # Logged out of Nous Portal → managed subscription rows need sign-in.
-        monkeypatch.setattr(
-            "hermes_cli.nous_subscription.get_nous_portal_account_info",
-            lambda *a, **k: NousPortalAccountInfo(
-                logged_in=False, source="none", fresh=False, paid_service_access=None
-            ),
-        )
         # No xAI credentials → the Grok OAuth-backed row needs sign-in.
         from hermes_cli import tools_config_post_setup
 
@@ -3177,48 +3169,12 @@ class TestNewEndpoints:
         # Genuinely-free keyless row stays Ready.
         assert by_name["Microsoft Edge TTS"]["status"] == "ready"
         # Keyless ≠ ready for gated rows:
-        assert by_name["Nous Subscription"]["status"] == "needs_auth"
         assert by_name["xAI TTS"]["status"] == "needs_auth"
         assert by_name["KittenTTS"]["status"] == "needs_setup"
         assert by_name["Piper"]["status"] == "needs_setup"
         # Keyed row with the key unset:
         assert by_name["ElevenLabs"]["status"] == "needs_keys"
 
-
-    def test_select_managed_nous_provider_reports_needs_nous_auth(self, monkeypatch):
-        """Selecting a managed Nous row while logged out flags needs_nous_auth.
-
-        Regression: the GUI PUT wrote browser.cloud_provider + use_gateway
-        but skipped the Portal entitlement handshake the CLI runs inline
-        (ensure_nous_portal_access) — so the row never activated and nothing
-        told the user to sign in. The endpoint now reports the entitlement
-        gap so the client can drive the existing Nous OAuth flow.
-        """
-        from hermes_cli.nous_account import NousPortalAccountInfo
-
-        monkeypatch.setattr(
-            "hermes_cli.nous_subscription.get_nous_portal_account_info",
-            lambda *a, **k: NousPortalAccountInfo(
-                logged_in=False, source="none", fresh=False, paid_service_access=None
-            ),
-        )
-
-        resp = self.client.put(
-            "/api/tools/toolsets/browser/provider",
-            json={"provider": "Nous Subscription (Browser Use cloud)"},
-        )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["ok"] is True
-        assert data["needs_nous_auth"] is True
-        assert data["feature"] == "browser"
-        # The selection is still persisted — activation is what's gated.
-        # Managed rows store the single 'nous' provider string (the runtime
-        # maps it to the Browser Use cloud through the Nous Tool Gateway).
-        from hermes_cli.config import load_config
-        cfg = load_config()
-        assert cfg["browser"]["cloud_provider"] == "nous"
-        assert "use_gateway" not in cfg["browser"]
 
 
     # -- Web capability split (search vs extract backends) ------------------
@@ -5842,39 +5798,22 @@ class TestSubmittedCustomEndpointSurvivesAssignment:
 
 
 
-class TestNousRecommendedDefaultCostSafePolicy:
-    """Paid-tier Nous recommended default must never land on an Anthropic frontier
-    tier (Opus / Fable) — the user gets no opt-out before it pins their main model
-    (#51491). Regression tests from PR #51493."""
+class TestSilentDefaultCostSafePolicy:
+    """The silent default must never land on an Anthropic frontier tier
+    (Opus / Fable) — the user gets no opt-out before it pins their main model
+    (#51491). Regression tests from PR #51493, retargeted to the shared
+    policy every no-confirmation surface uses."""
 
-    def test_recommended_default_nous_paid_uses_curated_default(self, monkeypatch):
-        """A paid Nous user gets the cost-safe silent default from the list.
-
-        With no preferred catalog label present in the curated list and no
-        Anthropic frontier entries, the first curated entry is selected.
-        """
+    def test_curated_list_without_preferred_uses_first_entry(self, monkeypatch):
+        """With no preferred catalog label present and no Anthropic frontier
+        entries, the first entry is selected."""
         import hermes_cli.models as models_mod
-        from hermes_cli.web_routers.models import get_recommended_default_model
 
-        monkeypatch.setattr(models_mod, "get_curated_nous_model_ids", lambda: ["top/model", "other/model"])
-        import hermes_cli.models_pricing as mp
-        monkeypatch.setattr(mp, "get_pricing_for_provider", lambda provider: {})
-        monkeypatch.setattr(models_mod, "check_nous_free_tier", lambda *, force_fresh=False: False)
-        monkeypatch.setattr(
-            models_mod, "union_with_portal_paid_recommendations",
-            lambda ids, pricing, url: (ids, pricing),
-        )
-        # Keep the catalog preferred out of this list so we exercise the
-        # non-frontier fallback rather than the preferred-hit branch.
         monkeypatch.setattr(
             models_mod, "get_preferred_silent_default_model",
             lambda provider="openrouter": "z-ai/glm-5.2",
         )
-
-        result = get_recommended_default_model(provider="nous")
-        assert result["provider"] == "nous"
-        assert result["model"] == "top/model"
-        assert result["free_tier"] is False
+        assert models_mod.pick_silent_default_model(["top/model", "other/model"]) == "top/model"
 
     @pytest.mark.parametrize(
         "model_ordering, expected_model",
@@ -5912,60 +5851,26 @@ class TestNousRecommendedDefaultCostSafePolicy:
         ],
         ids=["opus_first", "fable_first_main", "override_beats_ordering"],
     )
-    def test_recommended_default_nous_paid_cost_safe_policy(
-        self, monkeypatch, model_ordering, expected_model,
-    ):
-        """Regression for PR #51493 maintainer feedback (Teknium + DavidMetcalfe).
-
-        The interactive Nous recommended default must use the shared
-        cost-safe silent policy: preferred catalog label when present,
-        else first non-frontier (Opus / Fable) entry. Covers both the
-        current Fable-first catalog and a future Opus-first catalog.
-        """
+    def test_cost_safe_policy(self, monkeypatch, model_ordering, expected_model):
+        """Regression for PR #51493 maintainer feedback (Teknium + DavidMetcalfe):
+        preferred catalog label when present, else first non-frontier entry."""
         import hermes_cli.models as models_mod
-        from hermes_cli.web_routers.models import get_recommended_default_model
 
-        monkeypatch.setattr(
-            models_mod, "get_curated_nous_model_ids", lambda: list(model_ordering),
-        )
-        import hermes_cli.models_pricing as mp
-        monkeypatch.setattr(mp, "get_pricing_for_provider", lambda provider: {})
-        monkeypatch.setattr(models_mod, "check_nous_free_tier", lambda *, force_fresh=False: False)
-        monkeypatch.setattr(
-            models_mod, "union_with_portal_paid_recommendations",
-            lambda ids, pricing, url: (ids, pricing),
-        )
         monkeypatch.setattr(
             models_mod, "get_preferred_silent_default_model",
             lambda provider="openrouter": "z-ai/glm-5.2",
         )
+        assert models_mod.pick_silent_default_model(list(model_ordering)) == expected_model
 
-        result = get_recommended_default_model(provider="nous")
-        assert result["provider"] == "nous"
-        assert result["model"] == expected_model
-        assert result["free_tier"] is False
-
-    def test_recommended_default_nous_paid_falls_back_when_all_frontier(self, monkeypatch):
-        """If every curated entry is a frontier tier (Opus / Fable), fall
-        back to the head of the list so the picker is never empty."""
+    def test_falls_back_to_the_head_when_all_frontier(self, monkeypatch):
+        """If every entry is a frontier tier (Opus / Fable), fall back to the
+        head of the list so the picker is never empty."""
         import hermes_cli.models as models_mod
-        from hermes_cli.web_routers.models import get_recommended_default_model
 
-        monkeypatch.setattr(
-            models_mod, "get_curated_nous_model_ids",
-            lambda: ["anthropic/claude-fable-5", "anthropic/claude-opus-4.8"],
-        )
-        import hermes_cli.models_pricing as mp
-        monkeypatch.setattr(mp, "get_pricing_for_provider", lambda provider: {})
-        monkeypatch.setattr(models_mod, "check_nous_free_tier", lambda *, force_fresh=False: False)
-        monkeypatch.setattr(
-            models_mod, "union_with_portal_paid_recommendations",
-            lambda ids, pricing, url: (ids, pricing),
-        )
         monkeypatch.setattr(
             models_mod, "get_preferred_silent_default_model",
             lambda provider="openrouter": "z-ai/glm-5.2",
         )
-
-        result = get_recommended_default_model(provider="nous")
-        assert result["model"] == "anthropic/claude-fable-5"
+        assert models_mod.pick_silent_default_model(
+            ["anthropic/claude-fable-5", "anthropic/claude-opus-4.8"]
+        ) == "anthropic/claude-fable-5"

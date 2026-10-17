@@ -194,7 +194,7 @@ async def _stream_back(request: web.Request, session, upstream_resp) -> web.Stre
 def create_app(adapter: UpstreamAdapter, bound_host: str = DEFAULT_HOST) -> web.Application:
     """Build the aiohttp application bound to a specific upstream adapter.
 
-    Every adapter method is synchronous and blocking (the Nous adapter takes the 15s cross-process
+    Every adapter method is synchronous and blocking (an adapter takes the 15s cross-process
     ``_auth_store_lock()`` and may POST a token refresh; xAI rotates its key pool under a lock),
     so all three are run via ``asyncio.to_thread`` — a contended lock or refresh must never freeze
     the single loop and every other in-flight streaming completion.
@@ -249,7 +249,7 @@ def create_app(adapter: UpstreamAdapter, bound_host: str = DEFAULT_HOST) -> web.
         if upstream_resp is None:
             return session
         if upstream_resp.status in {401, 429}:
-            # One-shot retry with a refreshed/rotated credential (Nous: unconditional refresh
+            # One-shot retry with a refreshed/rotated credential (unconditional refresh
             # POST under the auth lock; xAI: pool rotation).
             try:
                 retry_cred = await asyncio.to_thread(

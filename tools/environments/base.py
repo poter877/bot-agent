@@ -229,7 +229,7 @@ class BaseEnvironment(ABC):
 
     # How execute() hands stdin to _run_bash: "pipe" (process stdin, default),
     # "payload" (passed through as stdin_data; the backend transports it via its
-    # SDK -- Modal/managed Modal stream it, Daytona/Vercel stage a file) or
+    # SDK -- Modal streams it, Daytona/Vercel stage a file) or
     # "heredoc" (embedded in the command; no built-in backend, plugins only).
     _stdin_mode: str = "pipe"  # "pipe" | "payload" | "heredoc"
 

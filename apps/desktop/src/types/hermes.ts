@@ -1,4 +1,4 @@
-import type { ConnectionRequestPayload, ToolLabel } from '@hermes/shared'
+import type { ToolLabel } from '@hermes/shared'
 
 import type { ToolResultMetadata } from '@/lib/tool-result-metadata'
 
@@ -77,16 +77,8 @@ export interface ElevenLabsVoicesResponse {
 }
 
 export interface OAuthProviderStatus {
-  /** Nous only: the tier name the token resolves to, when the backend knows
-   *  one. Null for a pre-free-tier guest identity and for older backends. */
-  account_tier?: null | string
   error?: string
   expires_at?: null | string
-  /** Nous only: true when the stored token is a pre-free-tier guest identity
-   *  rather than a signed-in account (legacy installs only — guests are no
-   *  longer minted). `logged_in` stays true either way — a token exists — so
-   *  this is the only way to tell the two apart. */
-  free_tier?: boolean
   has_refresh_token?: boolean
   last_refresh?: null | string
   logged_in: boolean
@@ -370,8 +362,8 @@ export interface MessagingPlatformTestResponse {
 }
 
 // -- Telegram QR onboarding ---------------------------------------------------
-// The Nous pairing service mints a bot on the user's behalf: the desktop shows
-// a QR/deep link, Telegram confirms, the backend receives the token and writes
+// The pairing service mints a bot on the user's behalf: the desktop shows a
+// QR/deep link, Telegram confirms, the backend receives the token and writes
 // it (plus the allowlist) into the target profile's .env, then restarts the
 // gateway best-effort.
 
@@ -787,8 +779,6 @@ export interface SessionResumeResult {
   // handlers before this response resolves; listed here so resume can tell an
   // authoritative "nothing pending" from a request the handler declined.
   open_requests?: Array<{ id: string; method: string; params: Record<string, unknown> & { session_id?: string } }>
-  // The connection operation still blocking this session; resume restores the backend-owned card projection.
-  pending_connection?: ConnectionRequestPayload
   info?: SessionRuntimeInfo
   message_count: number
   messages: SessionMessage[]
@@ -1214,12 +1204,11 @@ export interface ToolProvider {
   tag: string
   env_vars: ToolEnvVar[]
   post_setup: string | null
-  requires_nous_auth: boolean
   /** True when this is the provider currently written to config (mirrors the
    *  CLI `hermes tools` active-provider detection). */
   is_active: boolean
-  /** Honest readiness computed server-side (keys ∧ Nous entitlement ∧
-   *  post-setup install state). Optional for older backends. */
+  /** Honest readiness computed server-side (keys ∧ post-setup install state).
+   *  Optional for older backends. */
   status?: ToolProviderStatus
   /** Web toolset only: the backend key written to web.*backend config
    *  (e.g. 'searxng'). Absent on other toolsets and older backends. */
@@ -1232,9 +1221,6 @@ export interface ToolProvider {
   /** Web toolset only: capabilities this backend can serve. Search-only
    *  providers (ddgs, brave-free) report ['search']. */
   capabilities?: WebCapability[]
-  /** Set on the "Nous Subscription" rows (e.g. 'web'): served through the
-   *  Nous Tool Gateway rather than the user's own key. */
-  managed_nous_feature?: null | string
 }
 
 /** A web toolset capability — the runtime dispatches web_search and
@@ -1252,10 +1238,6 @@ export interface ToolsetConfig {
   active_search_backend?: string | null
   /** Web toolset only: backend the web_extract tool resolves to right now. */
   active_extract_backend?: string | null
-  /** Web toolset only: web_search / web_extract currently go through the Nous
-   *  Tool Gateway (billed to the subscription) instead of the user's own key. */
-  search_via_nous?: boolean
-  extract_via_nous?: boolean
 }
 
 /** Health status of a terminal execution backend row.
@@ -1769,7 +1751,7 @@ export interface McpServerTestResponse {
   tools: { name: string; description: string }[]
 }
 
-/** One Nous-approved MCP catalog entry from `GET /api/mcp/catalog`. */
+/** One curated MCP catalog entry from `GET /api/mcp/catalog`. */
 export interface McpCatalogEntry {
   name: string
   description: string
@@ -1836,9 +1818,8 @@ export interface DebugShareResponse {
 export interface ModelAssignmentResponse {
   /** Persisted endpoint URL for custom/local providers (echoed back). */
   base_url?: string
-  /** Toolset keys auto-routed through the Nous Tool Gateway as a result of
-   *  switching the main provider to Nous. Empty unless provider === 'nous'
-   *  and the user is a paid subscriber with unconfigured tools. */
+  /** Toolset keys that need attention after the switch (unconfigured tools
+   *  the new provider cannot serve as-is). */
   gateway_tools?: string[]
   confirm_message?: string
   confirm_required?: boolean

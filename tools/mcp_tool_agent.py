@@ -255,8 +255,8 @@ def _merge_preserving_prefix(current_defs: list, new_defs: list, registered_name
     flapped), else dropped; a name only in the fresh list is appended at the tail.
 
     The bridge tools keep their BUILT entry, not the fresh one: ``tool_search``'s description
-    is derived from the session (deferred count, listing, whether ``manage_connections`` was
-    present), so a late MCP server or a ``check_fn`` flap would rewrite it every turn. Search
+    is derived from the session (deferred count, listing), so a late MCP server or a
+    ``check_fn`` flap would rewrite it every turn. Search
     reads the live catalog at dispatch, so the stale count costs nothing."""
     from tools.tool_search_catalog import BRIDGE_TOOL_NAMES
     fresh = {_def_name(entry): entry for entry in new_defs if _def_name(entry)}

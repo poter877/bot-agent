@@ -101,23 +101,6 @@ describe('resolveDeepLinkAction', () => {
     expect(resolveDeepLinkAction({ kind: 'plugin', name: 'install', params: {} })).toEqual({ type: 'ignore' })
   })
 
-  it('preserves connector completion routing without treating browser status as authority', () => {
-    expect(
-      resolveDeepLinkAction({
-        kind: 'connections',
-        name: 'done',
-        params: { op: ' operation-1 ', status: ' connected ' }
-      })
-    ).toEqual({ type: 'connection-done', op: 'operation-1', status: 'connected' })
-    expect(
-      resolveDeepLinkAction({
-        kind: 'connections',
-        name: 'done',
-        params: { status: 'connected' }
-      })
-    ).toEqual({ type: 'ignore' })
-  })
-
   it('routes blueprint composer inserts', () => {
     expect(
       resolveDeepLinkAction({

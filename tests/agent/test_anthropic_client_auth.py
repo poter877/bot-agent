@@ -22,8 +22,6 @@ def wire_headers(client) -> dict:
 
 
 
-    # The bearer mirror (no env x-api-key beside a portal JWT) is owned by
-    # tests/agent/test_nous_portal_anthropic_wire.py::TestClientShape.
 
 
 def test_third_party_request_on_the_wire_carries_no_foreign_bearer(monkeypatch):

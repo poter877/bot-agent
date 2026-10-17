@@ -2130,8 +2130,8 @@ export const esOverrides = {
       state: {
         notice: {
           loggedOut: {
-            title: 'Conecta tu cuenta de Nous',
-            message: 'Inicia sesión con tu cuenta de Nous para ver aquí tu saldo, plan y uso.',
+            title: 'Conecta tu cuenta',
+            message: 'Inicia sesión para ver aquí tu saldo, plan y uso.',
             action: 'Iniciar sesión'
           },
           openPortal: 'Abrir el portal ↗',

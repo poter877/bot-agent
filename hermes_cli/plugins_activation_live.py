@@ -18,6 +18,40 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
+def _registered_tool_names(name: str, wait_seconds: float = 30.0) -> list[str]:
+    """The server's callable names, read from the registry once its registration has finished.
+
+    Registration is a no-op for a server the process already holds, and that includes one another
+    task is still connecting: saving the configuration wakes the config watcher, which starts its
+    own connect, so a large server (hundreds of tools) was reported with no tools three seconds
+    before they were registered. A server that failed discovery earlier is parked with no tools
+    and is woken once. A server that finished registering with no tools is a valid empty list."""
+    import time as _time
+
+    from tools import mcp_tool as _core
+    from tools.mcp_tool_loop import reconnect_mcp_server
+    from tools.mcp_tool_scope import _resolve_server_key
+    from tools.registry import registry
+
+    key = _resolve_server_key(name)
+    deadline = _time.time() + wait_seconds
+    woken = False
+    while True:
+        names = registry.get_tool_names_for_toolset(f"mcp-{name}")
+        if names or _time.time() >= deadline:
+            return names
+        if key not in _core._server_connecting:
+            server = _core._servers.get(key)
+            finished = server is not None and getattr(server, "session", None) is not None \
+                and hasattr(server, "_registered_tool_names")
+            if finished:
+                return names
+            if woken or server is None or not reconnect_mcp_server(name):
+                return names
+            woken = True
+        _time.sleep(0.25)
+
+
 def connect_plugin_mcp(activation: dict[str, Any], portable: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     """Connect every portable MCP server ``activation`` defers, under the caller's profile scope.
     ``portable`` is the manager's portable server configs, read together with ``activation``.
@@ -43,7 +77,6 @@ def connect_plugin_mcp(activation: dict[str, Any], portable: dict[str, dict[str,
             continue
         try:
             register_mcp_servers({name: config})
-            from tools.connectors.mcp import _registered_tool_names
             tools = [t for t in _registered_tool_names(name) if not t.endswith(_utility_suffixes())]
         except Exception as exc:
             rows.append({"name": name, "connected": False, "tools": [], "error": str(exc)})

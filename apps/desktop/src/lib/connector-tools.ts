@@ -103,12 +103,6 @@ export const connectorSubject = (slug: string) => ({
   title: connectorTitle(slug)
 })
 
-export function connectorToolName(name: string): { connector: string; action: string } | null {
-  const match = /^connectors__([a-z0-9_-]+)__(.+)$/i.exec(name)
-
-  return match ? { connector: match[1], action: match[2].replace(/_/g, ' ').toLowerCase() } : null
-}
-
 const TOOL_LABEL_KINDS: readonly ToolLabel['kind'][] = ['connector', 'mcp', 'tool']
 
 /** Where the labels ride on a tool row's args. A real tool takes a `labels` argument
@@ -149,47 +143,4 @@ export function toolLabels(args: ToolCallMessagePart['result']): ToolLabel[] {
 /** The row's own title: the phrase, then the primary argument the classic CLI also shows. */
 export function toolLabelTitle(label: ToolLabel): string {
   return label.preview ? `${label.text}  ${label.preview}` : label.text
-}
-
-interface ConnectorCall {
-  name: string
-  arguments: ToolCallMessagePart['result']
-}
-
-export function connectorCalls(name: string, args: ToolCallMessagePart['result']): ConnectorCall[] {
-  if (connectorToolName(name)) {
-    return [{ name, arguments: args }]
-  }
-
-  if (name !== 'tool_call') {
-    return []
-  }
-
-  const source = recordOf(args)
-  const calls = Array.isArray(source.calls) ? source.calls : [source]
-
-  return calls.flatMap(item => {
-    const call = recordOf(item)
-
-    const callName = connectorText(call.name)
-
-    return callName !== undefined && connectorToolName(callName) ? [{ name: callName, arguments: call.arguments }] : []
-  })
-}
-
-/** Authorization URLs may carry tokens; reject non-HTTPS or embedded credentials. */
-export function connectorAuthorizationUrl(value: ToolCallMessagePart['result']): string | null {
-  const text = connectorText(value)
-
-  if (text === undefined) {
-    return null
-  }
-
-  try {
-    const url = new URL(text)
-
-    return url.protocol === 'https:' && !url.username && !url.password ? text : null
-  } catch {
-    return null
-  }
 }

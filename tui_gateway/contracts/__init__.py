@@ -7,8 +7,6 @@ from . import (
     cloud_computer,
     common,
     config_free_tier_control,
-    connectors,
-    connectors_operation,
     display,
     events,
     groups_bot_relay,

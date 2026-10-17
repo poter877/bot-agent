@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Terminal tool: run shell commands in the configured backend.
 
-Backends (``TERMINAL_ENV``): local (default), docker, singularity, modal
-(direct or managed gateway), daytona, vercel_sandbox, ssh, plus
+Backends (``TERMINAL_ENV``): local (default), docker, singularity, modal,
+daytona, vercel_sandbox, ssh, plus
 plugin-registered backends. Handles background processes, sandbox lifecycle
 (per-task cache, idle reaper, atexit teardown) and sudo password plumbing.
 Cloud-sandbox persistent filesystems preserve working state across sandbox
@@ -53,7 +53,7 @@ from tools.terminal_tool_backends import (
     _record_unavailable_reason, terminal_backend_unavailable_reason,
 )
 # display_hermes_home imported lazily at call site (stale-module safety during hermes update)
-from tools.tool_backend_helpers import coerce_modal_mode, managed_nous_tools_enabled
+from tools.tool_backend_helpers import coerce_modal_mode
 
 
 def _safe_parse_import_env(name: str, default: Any, converter, type_label: str):

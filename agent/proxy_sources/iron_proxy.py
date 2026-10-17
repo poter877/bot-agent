@@ -47,7 +47,7 @@ _DEFAULT_TUNNEL_PORT = 9090
 # Hosts allowed by default for AI inference traffic.  Anything else is 403'd.
 _DEFAULT_ALLOWED_HOSTS: tuple[str, ...] = (
     "openrouter.ai", "*.openrouter.ai", "api.openai.com", "api.anthropic.com", "generativelanguage.googleapis.com",
-    "api.x.ai", "api.mistral.ai", "api.groq.com", "api.together.xyz", "api.deepseek.com", "inference.nousresearch.com",
+    "api.x.ai", "api.mistral.ai", "api.groq.com", "api.together.xyz", "api.deepseek.com",
 )
 
 # Provider env-var name -> upstream hosts on which the Authorization Bearer token is swapped.
@@ -55,7 +55,7 @@ _BEARER_PROVIDERS: dict[str, tuple[str, ...]] = {
     "OPENROUTER_API_KEY": ("openrouter.ai", "*.openrouter.ai"), "OPENAI_API_KEY": ("api.openai.com",),
     "GROQ_API_KEY": ("api.groq.com",), "TOGETHER_API_KEY": ("api.together.xyz",),
     "DEEPSEEK_API_KEY": ("api.deepseek.com",), "MISTRAL_API_KEY": ("api.mistral.ai",),
-    "XAI_API_KEY": ("api.x.ai",), "NOUS_API_KEY": ("inference.nousresearch.com",),
+    "XAI_API_KEY": ("api.x.ai",),
 }
 
 # Non-Authorization-header providers (v0.39 ``match_headers`` is case-insensitive).  ``aliases``

@@ -13,8 +13,11 @@ from agent.relay_runtime import (
     RUNTIME_SCHEMA_VERSION,
 )
 from hermes_cli.platforms import PLATFORMS
-from tools.connectors.gateway.names import CONNECTOR_NAME_PREFIX
 from toolsets import BUILTIN_TOOL_NAMES, BUILTIN_TOOLSET_NAMES
+
+# Retired connector tools collapse to their kind by name prefix; the prefix stays a
+# literal so packages persisted before the retirement still classify.
+CONNECTOR_NAME_PREFIX = "connectors__"
 
 SCHEMA_KEY = "hermes.metrics.schema_version"
 # A random per-emit token (no payload) on rows whose producer waits to learn they were SAVED: facts
@@ -296,7 +299,7 @@ PLATFORM_HEALTH_MARK = PLATFORM_HEALTH_METRIC = "hermes.platform.health"
 PLATFORM_DELIVERY_MARK = PLATFORM_DELIVERY_METRIC = "hermes.platform.delivery"
 REPLY_LATENCY_MARK = REPLY_LATENCY_METRIC = "hermes.gateway.reply_latency"
 CRON_RUN_MARK = CRON_RUN_METRIC = "hermes.cron.run"
-# Plugin platforms are named only when Nous ships them (plugins/platforms/) or the installer proved a
+# Plugin platforms are named only when the project ships them (plugins/platforms/) or the installer proved a
 # plugin-catalog install (shared_metrics_catalog.platform_metric_name); every other one is ``plugin``.
 _PLATFORM_CATALOGS = ("bundled_platform_names", "catalog_platform_names")
 GATEWAY_PLATFORMS = _CatalogValues(*_PLATFORM_CATALOGS, extra=_CORE_GATEWAY_PLATFORMS)
@@ -1808,47 +1811,14 @@ _TOOL_ERROR_TYPES = {
 
 def tool_error_class(kwargs: dict[str, Any], outcome: str | None = None) -> str:
     """Closed failure class from Hermes's own error_type; exception class names become
-    ``exception`` so plugin-defined identifiers never leave the machine. A connector entry's
-    gateway error code names its class instead of ``tool_error``."""
+    ``exception`` so plugin-defined identifiers never leave the machine."""
     outcome = outcome or tool_outcome(kwargs)
     if outcome in _TOOL_STATUS_ERROR_CLASSES:
         return _TOOL_STATUS_ERROR_CLASSES[outcome]
     if outcome != "failed":
         return "unknown"
     error_type = _norm(kwargs.get("error_type"))
-    if error_type == "tool_error" and (connector_class := connector_error_class(kwargs)):
-        return connector_class
     return _TOOL_ERROR_TYPES.get(error_type, "exception" if error_type else "unknown")
-
-
-# The tool gateway's execute codes (``tools.connectors.gateway.wire.EXECUTE_ERROR_CODES``) by class;
-# a code not listed here keeps ``tool_error`` unless its family is backend.
-_CONNECTOR_CODE_CLASSES = {
-    **dict.fromkeys(("CONNECTION_REQUIRED", "CONNECTION_EXPIRED"), "connection_required"),
-    "TOOL_NOT_ALLOWED": "not_allowed",
-    **dict.fromkeys(("ALIAS_REQUIRED", "ALIAS_UNKNOWN"), "alias"),
-    "INVALID_ARGUMENTS": "invalid_arguments",
-    # Agent-side file input refusals (``tools.connectors.gateway.wire.FILE_ERROR_FAMILIES``).
-    "FILE_NOT_ALLOWED": "not_allowed",
-    **dict.fromkeys(("FILE_NOT_FOUND", "FILE_TOO_LARGE"), "invalid_arguments"),
-}
-_CONNECTOR_FAMILY_CLASSES = {"backend": "connector_backend"}
-
-
-def connector_error_class(kwargs: dict[str, Any]) -> str | None:
-    """The class of a failed connector entry from its result's ``error.code``; None when the call is
-    not a connector call or its result names no code."""
-    if not _norm(kwargs.get("tool_name")).startswith(CONNECTOR_NAME_PREFIX):
-        return None
-    error = _result_error(kwargs.get("result"))
-    code = str(error.get("code") or "").strip().upper()
-    if not code:
-        return None
-    # Late import: the wire module pulls pydantic, which the contract does not need at import.
-    from tools.connectors.gateway.wire import execute_error_family
-
-    family = execute_error_family(code, error.get("family") if isinstance(error.get("family"), str) else None)
-    return _CONNECTOR_FAMILY_CLASSES.get(family or "") or _CONNECTOR_CODE_CLASSES.get(code)
 
 
 def _result_error(result: Any) -> dict[str, Any]:

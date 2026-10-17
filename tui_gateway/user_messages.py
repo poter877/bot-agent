@@ -102,7 +102,7 @@ def busy_message(command: str, compressing: bool = False) -> str:
 # debugging credentials that are perfectly fine.
 _AUTH_LOCK_TIMEOUT_PREFIXES = (
     "Timed out waiting for auth store lock",
-    "Timed out waiting for shared Nous auth lock",
+    "Timed out waiting for the shared auth lock",
 )
 
 

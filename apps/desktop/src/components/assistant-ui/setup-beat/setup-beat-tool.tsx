@@ -8,9 +8,11 @@ import { type ComponentType, type ReactNode, useState } from 'react'
 
 import { useSessionView } from '@/app/chat/session-view'
 import { CLARIFY_ICON_CLASS } from '@/components/assistant-ui/clarify/core/shell'
-import { ConnectorDirectoryCard } from '@/components/assistant-ui/connector-directory-card'
 import { AccentPickerCard } from '@/components/assistant-ui/theme-picker/accent-picker-card'
 import { LayoutPickerCard } from '@/components/assistant-ui/theme-picker/layout-picker-card'
+import { Button } from '@/components/ui/button'
+import { useI18n } from '@/i18n'
+import { connectorTitle } from '@/lib/connector-tools'
 import { LayoutDashboard, MessageQuestion, Palette, Plug } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import { applyAppearance } from '@/store/appearance-apply'
@@ -23,7 +25,7 @@ import {
 } from '@/store/setup-beat'
 
 import { NameCard, OptionsCard } from './beat-cards'
-import { CARD_LABEL_CLASS } from './card-type'
+import { CARD_ACTION_CLASS, CARD_LABEL_CLASS } from './card-type'
 import { PluginsCard } from './plugins-card'
 import {
   SETUP_BEAT_SHELL_CLASS,
@@ -84,7 +86,7 @@ function BeatBody({ answer, request }: { answer: (picks: SetupBeatAnswer) => boo
       )
 
     case 'connectors':
-      return null
+      return null // the card lives in the tool row, like the directory card did
   }
 }
 
@@ -116,6 +118,7 @@ function BeatShell({ beat, children, question }: { beat: SetupBeat; children: Re
 /** The setup_beat tool row: the beat's card while its request waits, then a one-line receipt where the
  *  choice happened. A card closed by words in the composer or by the deadline collapses the same way. */
 export function SetupBeatTool(props: ToolCallMessagePartProps) {
+  const { t } = useI18n()
   const view = useSessionView()
   const sessionId = useStore(view.$runtimeId)
   const busy = useStore(view.$busy)
@@ -151,14 +154,31 @@ export function SetupBeatTool(props: ToolCallMessagePartProps) {
     return true
   }
 
-  // The directory card has its own header and plug icon; a frame label above it would be a second header.
+  // The connectors beat names the suggested apps; connecting one happens later from the Connectors
+  // tab, so the card answers Continue with none connected.
   if (request.beat === 'connectors') {
+    const suggested = Array.isArray(request.card.suggested) ? request.card.suggested : []
+
     return (
       <div data-setup-beat="connectors">
-        <ConnectorDirectoryCard
-          onContinue={({ connected, newly_connected }) => answer({ connected, newly_connected })}
-          suggested={Array.isArray(request.card.suggested) ? request.card.suggested : []}
-        />
+        <BeatShell beat={request.beat} question={request.question}>
+          <div className="flex flex-wrap gap-1.5">
+            {suggested.map(slug => (
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full bg-(--ui-bg-quaternary) px-2.5 py-1 text-xs font-medium text-(--ui-text-secondary)"
+                key={slug}
+              >
+                <Plug aria-hidden className="size-3.5" />
+                {connectorTitle(slug)}
+              </span>
+            ))}
+          </div>
+          <div>
+            <Button className={CARD_ACTION_CLASS} onClick={() => answer({ connected: [] })} size="sm">
+              {t.common.continue}
+            </Button>
+          </div>
+        </BeatShell>
       </div>
     )
   }

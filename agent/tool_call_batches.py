@@ -5,10 +5,13 @@ import json
 
 from agent.message_sanitization import coalesce_tool_call_id, deterministic_call_id, uniquify_tool_call_ids
 from agent.transports.types import ToolCall
-from tools.connectors import is_connector_name
-from tools.connectors.gateway.config import MAX_CALLS_PER_DISPATCH
 from tools.tool_search_catalog import TOOL_CALL_NAME
 from tools.tool_search_validation import normalize_tool_call_entries
+
+# Bound on how many sub-calls one ``tool_call`` batch may expand into (was
+# tools.connectors MAX_CALLS_PER_DISPATCH; the connector dispatcher is gone but
+# the expansion guard still applies to every deferred batch).
+MAX_CALLS_PER_DISPATCH = 10
 
 
 def expand_local_tool_batches(tool_calls: list, *, provider_data: dict | None = None) -> list:
@@ -17,7 +20,6 @@ def expand_local_tool_batches(tool_calls: list, *, provider_data: dict | None = 
     Registry-only batch dispatch loses the live agent's inline tools, guardrails,
     and per-server concurrency policy. Split the *new* assistant turn instead,
     before it is persisted; never rewrite an earlier conversation message.
-    Connector-only batches keep their existing dispatcher and wire shape.
     """
     expanded, replacements = [], {}
     for call in tool_calls:
@@ -29,8 +31,7 @@ def expand_local_tool_batches(tool_calls: list, *, provider_data: dict | None = 
             entries, error = normalize_tool_call_entries(json.loads(args) if isinstance(args, str) else args)
         except (TypeError, ValueError, AttributeError):
             entries, error = [], True
-        if (error or not 1 < len(entries) <= MAX_CALLS_PER_DISPATCH
-                or all(is_connector_name(entry["name"]) for entry in entries)):
+        if error or not 1 < len(entries) <= MAX_CALLS_PER_DISPATCH:
             # Leave malformed/oversized requests intact for the dispatcher's error.
             expanded.append(call)
             continue

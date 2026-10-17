@@ -7,7 +7,7 @@ and the faster_whisper post-setup readiness hook.
 
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
@@ -31,20 +31,14 @@ class TestConfigWrites:
     def test_write_provider_config_sets_stt_provider(self):
         config = {"stt": {"use_gateway": True}}
         prov = _stt_provider_named("Groq")
-        _write_provider_config(prov, config, managed_feature=None)
+        _write_provider_config(prov, config)
         assert config["stt"]["provider"] == "groq"
         # Legacy key is popped so the read-time shim can't override the pick.
         assert "use_gateway" not in config["stt"]
 
     def test_apply_provider_selection_stt(self):
         config = {}
-        with patch(
-            "hermes_cli.tools_config.get_nous_subscription_features"
-        ) as feats:
-            feats.return_value = MagicMock(
-                nous_auth_present=False, account_info=None
-            )
-            apply_provider_selection("stt", "OpenAI", config)
+        apply_provider_selection("stt", "OpenAI", config)
         assert config["stt"]["provider"] == "openai"
 
 class TestActiveDetection:

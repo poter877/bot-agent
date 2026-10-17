@@ -34,11 +34,6 @@ const apiMocks = vi.hoisted(() => ({
   updateAutoReload: vi.fn()
 }))
 
-const onboardingMocks = vi.hoisted(() => ({
-  startManualProviderOAuth: vi.fn()
-}))
-
-vi.mock('@/store/onboarding', () => onboardingMocks)
 
 vi.mock('./api', () => ({
   // Pass-through provider — the mocked useBillingApi ignores any override anyway.
@@ -601,16 +596,13 @@ describe('BillingSettings', () => {
     )
   })
 
-  it('renders logged-out as a connect card whose sign-in opens the in-app OAuth flow', async () => {
+  it('renders logged-out as a notice card with no plan or usage rows', async () => {
     apiMocks.fetchBillingState.mockResolvedValue(okBilling(loggedOutBillingState))
     apiMocks.fetchSubscriptionState.mockResolvedValue(okSubscription(loggedOutSubscriptionState))
 
     renderBilling()
 
-    expect(await screen.findByText('Connect your Nous account')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
-    expect(onboardingMocks.startManualProviderOAuth).toHaveBeenCalledWith('nous')
-    expect(apiMocks.openExternal).not.toHaveBeenCalled()
+    expect(await screen.findByText('Connect your account')).toBeTruthy()
     expect(screen.queryByText('Payment method')).toBeNull()
     expect(screen.queryByText('Usage')).toBeNull()
   })

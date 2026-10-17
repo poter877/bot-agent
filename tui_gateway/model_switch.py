@@ -144,15 +144,10 @@ def _session_profile_runtime_scope(session: dict, *, hydrate_secrets: bool = Tru
 def _session_default_route(session: dict) -> tuple[str, str]:
     """``(model, provider)`` a not-yet-built session of its OWN profile will run on. Bare
     ``_resolve_startup_runtime()`` reads the LAUNCH profile's config, so a secondary session's reply or
-    first state.db row carried the launch profile's model id. On the Nous free tier the agent build pins
-    ``nous/welcome`` (``pin_model_for_route``), so the configured default (often the silent default,
-    with no provider) is not what the session runs; report the pinned route instead."""
-    from hermes_cli.anon_auth import GUEST_MODEL, free_tier_route
+    first state.db row carried the launch profile's model id; answer for the session's own profile.
+    The model id alone: the provider is resolved when the agent is built."""
     with _session_profile_runtime_scope({"profile_home": session.get("profile_home") or None},
                                         hydrate_secrets=False):
-        if not _resolve_startup_runtime()[1] and free_tier_route():
-            return GUEST_MODEL, "nous"
-        # Off the free tier, the model id alone: the provider is resolved when the agent is built.
         return _resolve_model(), ""
 
 

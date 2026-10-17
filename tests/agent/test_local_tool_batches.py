@@ -125,7 +125,7 @@ def test_local_batch_runs_once_per_entry_through_agent_and_persists_pairs(mcp_se
 
 def test_expansion_preserves_connector_batches_and_rejects_bad_envelopes():
     from agent.tool_call_batches import expand_local_tool_batches
-    from tools.connectors.gateway.config import MAX_CALLS_PER_DISPATCH
+    from agent.tool_call_batches import MAX_CALLS_PER_DISPATCH
 
     local = {"name": "mcp__fixture__read", "arguments": {"path": "alpha"}}
     remote = {"name": "connectors__drive__list", "arguments": {}}

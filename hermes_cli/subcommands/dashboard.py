@@ -73,8 +73,7 @@ def build_serve_parser(
     return parser
 
 
-def build_dashboard_parser(
-    subparsers, *, cmd_dashboard: Callable, cmd_dashboard_register: Callable) -> None:
+def build_dashboard_parser(subparsers, *, cmd_dashboard: Callable) -> None:
     """Attach ``dashboard`` (browser UI) and ``serve`` (headless backend the desktop spawns)."""
     dashboard_parser = subparsers.add_parser(
         "dashboard", help="Start the web UI dashboard",
@@ -100,26 +99,3 @@ def build_dashboard_parser(
             "a browser UI.")
     _configure_serve_parser(serve_parser, cmd_dashboard=cmd_dashboard)
 
-    # `register` is nested so bare `hermes dashboard` keeps launching the server.
-    dashboard_subparsers = dashboard_parser.add_subparsers(dest="dashboard_subcommand")
-    dashboard_register_parser = dashboard_subparsers.add_parser(
-        "register",
-        help="Register a self-hosted dashboard with Nous Portal (writes the OAuth client ID to .env)",
-        description="Register this install as a self-hosted dashboard with your Nous "
-            "Portal account. Creates an OAuth client, writes "
-            "HERMES_DASHBOARD_OAUTH_CLIENT_ID into ~/.hermes/.env, and prints "
-            "how to engage the login gate. Requires being logged in (hermes setup).")
-    dashboard_register_parser.add_argument(
-        "--name", default=None,
-        help="Human-readable label for the dashboard (default: an auto-generated name)")
-    dashboard_register_parser.add_argument(
-        "--redirect-uri", dest="redirect_uri", default=None,
-        help="Optional public HTTPS OAuth redirect URI for the dashboard, e.g. "
-            "https://hermes.example.com/auth/callback. Omit for localhost-only use.")
-    dashboard_register_parser.add_argument(
-        "--portal-url", dest="portal_url", default=None,
-        help="Override the Nous Portal base URL for registration (default: the "
-            "portal you logged into). The access token must be valid at this "
-            "portal. Also settable via HERMES_DASHBOARD_PORTAL_URL. Mainly for "
-            "testing against a staging/preview portal.")
-    dashboard_register_parser.set_defaults(func=cmd_dashboard_register)

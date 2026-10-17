@@ -53,10 +53,7 @@ def _scope_params(method: str, params: dict) -> dict:
     if not isinstance(params, dict):
         return params
     try:
-        owner = params.get("owner")
         scoped = params
-        if method in server._CONNECTOR_RPC_METHODS and isinstance(owner, dict) and owner.get("type") == "session":
-            scoped = {**params, "session_id": owner.get("session_id")}
         session = server._sessions.get(str(scoped.get("session_id") or ""))
         if isinstance(session, dict) and str(scoped.get("profile") or "").strip():
             requested = server._profile_home(scoped["profile"]) or server._launch_home()

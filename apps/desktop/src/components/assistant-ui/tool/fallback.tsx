@@ -42,7 +42,7 @@ import { FileTypeIcon } from '@/components/ui/file-type-icon'
 import { GlyphSpinner } from '@/components/ui/glyph-spinner'
 import { ToolIcon } from '@/components/ui/tool-icon'
 import { useI18n } from '@/i18n'
-import { connectorCalls, mcpTargets } from '@/lib/connector-tools'
+import { toolLabels, toolLabelTitle } from '@/lib/connector-tools'
 import { PrettyLink, LinkifiedText as SharedLinkifiedText, urlSlugTitleLabel } from '@/lib/external-link'
 import { AlertCircle, CheckCircle2 } from '@/lib/icons'
 import { toolResultRecord } from '@/lib/tool-result-metadata'
@@ -65,7 +65,6 @@ import {
   buildToolView,
   clampForDisplay,
   cleanVisibleText,
-  CONNECTION_CARD_KEY,
   countDiffLineStats,
   inlineDiffFromResult,
   isCardTool,
@@ -80,6 +79,7 @@ import {
   type ToolStatus,
   type ToolTitleAction
 } from './fallback-model'
+import { parseMaybeObject } from './fallback-model/format'
 import { isToolCallPart, summarizeToolRun } from './run-summary'
 import { ToolRunTicker } from './run-ticker'
 
@@ -1047,13 +1047,9 @@ const ToolRun: FC<PropsWithChildren<{ endIndex: number; startIndex: number }>> =
   )
 }
 
-// The name the run splitter classifies a part by: connector and MCP calls are cards, and so is set_theme
-// reached through the tool_call bridge (a reloaded transcript).
+// The name the run splitter classifies a part by: set_theme reached through the tool_call
+// bridge (a reloaded transcript) is a card, and everything else groups by its own name.
 function toolGroupKey(toolName: string, args: ToolCallMessagePartProps['args']): string {
-  if (connectorCalls(toolName, args).length || mcpTargets(toolName, args).length) {
-    return CONNECTION_CARD_KEY
-  }
-
   return setThemeCall(toolName, args) ? SET_THEME_TOOL : toolName
 }
 
@@ -1146,4 +1142,47 @@ export const ToolFallback = ({
   }
 
   return <ToolEntry part={part} />
+}
+
+
+// A result-less inner call in a batch that answered short.
+const MISSING_CALL_RESULT = { error: 'No result for this call.' }
+
+/** One row per inner call of a bridged `tool_call`/`tool_search`. The gateway labels every call the
+ *  bridge runs — MCP or local — so batches render the gateway's own words per row. */
+export function BridgedToolExecution(props: ToolCallMessagePartProps) {
+  const labels = toolLabels(props.args)
+
+  if (labels.length === 0) {
+    return <ToolFallback {...props} />
+  }
+
+  const output = parseMaybeObject(props.result)
+  const results = Array.isArray(output.results) ? output.results : []
+  const input = parseMaybeObject(props.args)
+  const batch = Array.isArray(input.calls) ? input.calls : [input]
+
+  return (
+    <>
+      {labels.map((label, index) => {
+        // A batch answers once for the whole call, and every row shows that same outcome
+        // (a rejected batch, an error). A batch that answered short says so on the rows it left out.
+        const item = results[index] ?? (results.length > 0 ? MISSING_CALL_RESULT : props.result)
+        const result = parseMaybeObject(item)
+
+        return (
+          <ToolFallback
+            {...props}
+            args={parseMaybeObject(parseMaybeObject(batch[index]).arguments ?? props.args) as ToolCallMessagePartProps['args']}
+            innerToolName={props.toolName === 'tool_call' ? label.name : props.toolName}
+            isError={Boolean(result.error) || props.isError === true}
+            key={`${props.toolCallId}:${index}`}
+            result={item}
+            toolCallId={`${props.toolCallId}:${index}`}
+            toolName={toolLabelTitle(label)}
+          />
+        )
+      })}
+    </>
+  )
 }

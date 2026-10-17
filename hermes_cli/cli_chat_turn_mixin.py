@@ -712,17 +712,14 @@ class CLIChatTurnMixin:
                     width=self._scrollback_box_width(),
                 ))
 
-            # Billing CTA pins the single action (Nous → /topup, others → billing page) so it
-            # stays visible instead of scrolling away inside the response prose.
+            # Billing CTA pins the single action (the provider's billing page) so it stays
+            # visible instead of scrolling away inside the response prose.
             if turn.result and turn.result.get("failure_reason") == "billing":
                 _bb = turn.result.get("billing_block") or {}
-                if _bb.get("is_nous"):
-                    _cta_lines = [t("cli.chat.billing_cta_nous")]
-                else:
-                    _url = _bb.get("billing_url")
-                    _cta_lines = [t("cli.chat.billing_cta_provider",
-                                    provider=_bb.get("provider_label") or t("cli.chat.your_provider"))
-                                  + (f": [bold]{_url}[/]" if _url else ".")]
+                _url = _bb.get("billing_url")
+                _cta_lines = [t("cli.chat.billing_cta_provider",
+                                provider=_bb.get("provider_label") or t("cli.chat.your_provider"))
+                              + (f": [bold]{_url}[/]" if _url else ".")]
                 _cta_lines.append(t("cli.chat.billing_cta_switch"))
                 try:
                     ChatConsole().print(Panel(

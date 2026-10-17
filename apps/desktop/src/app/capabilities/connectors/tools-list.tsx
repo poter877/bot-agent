@@ -17,15 +17,9 @@ import {
 } from './derive-tools'
 import { TOOL_ROW_HEIGHT, ToolRow } from './tool-row'
 import { ToolsFilterBar } from './tools-filter-bar'
-import {
-  isToolsStatusPhase,
-  ToolsStatus,
-  type ToolsStatusAction,
-  type ToolsStatusPhase,
-  ToolsWash
-} from './tools-status'
+import { isToolsStatusPhase, ToolsStatus, ToolsWash } from './tools-status'
 import { ToolsSummary, useShowAllTools } from './tools-summary'
-import type { ConflictDifference, QuickAction, ToolRowModel, ToolsEditorCounts, ToolsFilter } from './types'
+import type { QuickAction, ToolRowModel, ToolsEditorCounts, ToolsFilter } from './types'
 import type { ToolsEditor } from './use-tools-editor'
 
 const OVERSCAN = 4
@@ -34,20 +28,13 @@ const MIN_VIEWPORT = 200
 const EMPTY_QUICK_ACTIONS: QuickAction[] = []
 
 export interface ToolsListProps {
-  appOff?: boolean
-  conflict?: ConflictDifference
   connectorName: string
   editor: ToolsEditor
   listKey: string
   onReload: () => void
-  onRemove?: () => void
   onRetry: () => void
-  onRetryRules?: () => void
-  onSignIn?: () => void
   preview?: boolean
   readOnly?: boolean
-  rulesSignedOut?: boolean
-  signedOut?: boolean
   summaryTitle?: string
   tools: ToolRowModel[]
 }
@@ -64,17 +51,7 @@ export function ToolsList(props: ToolsListProps) {
   }
 
   if (isToolsStatusPhase(phase)) {
-    return (
-      <StatusColumn
-        connectorName={props.connectorName}
-        difference={props.conflict ?? { theyOff: 0, theyOn: 0 }}
-        editor={props.editor}
-        onReload={props.onReload}
-        onRemove={props.onRemove}
-        onSignIn={props.onSignIn}
-        phase={phase}
-      />
-    )
+    return <ToolsStatus connectorName={props.connectorName} phase={phase} />
   }
 
   return <ToolsListBody {...props} />
@@ -84,22 +61,9 @@ function ToolsListBody(props: ToolsListProps) {
   const { t } = useI18n()
   const [filter, setFilter] = useState<ToolsFilter>(EMPTY_TOOLS_FILTER)
 
-  const {
-    appOff = false,
-    connectorName,
-    editor,
-    listKey,
-    onRetryRules,
-    onSignIn,
-    preview = false,
-    readOnly = false,
-    rulesSignedOut = false,
-    signedOut = false,
-    summaryTitle,
-    tools
-  } = props
+  const { connectorName, editor, listKey, preview = false, readOnly = false, summaryTitle, tools } = props
 
-  const frozen = readOnly || preview || appOff
+  const frozen = readOnly || preview
   const all = useShowAllTools(listKey, editor.dirty)
 
   const chrome = useMemo(() => {
@@ -140,22 +104,12 @@ function ToolsListBody(props: ToolsListProps) {
           onShowAll={all.show}
           onToggleFacet={editor.toggleFacet}
           preview={preview}
-          readOnly={readOnly || appOff}
+          readOnly={readOnly}
           rows={summary}
           title={summaryTitle}
           total={tools.length}
         />
       )}
-
-      <FrozenLines
-        appOffName={appOff ? connectorName : undefined}
-        frozen={readOnly || appOff}
-        onRetryRules={onRetryRules}
-        onSignIn={onSignIn}
-        preview={preview}
-        rulesSignedOut={rulesSignedOut}
-        signedOut={signedOut}
-      />
 
       {all.open ? (
         <ToolViewport
@@ -188,38 +142,6 @@ function ToolsListBody(props: ToolsListProps) {
   )
 }
 
-function StatusColumn({
-  connectorName,
-  difference,
-  editor,
-  onReload,
-  onRemove,
-  onSignIn,
-  phase
-}: {
-  connectorName: string
-  difference: ConflictDifference
-  editor: ToolsEditor
-  onReload: () => void
-  onRemove?: () => void
-  onSignIn?: () => void
-  phase: ToolsStatusPhase
-}) {
-  const act = {
-    keepMine: () => void editor.keepMine(),
-    reload: () => {
-      editor.discard()
-      onReload()
-    },
-    remove: onRemove,
-    signIn: onSignIn
-  } satisfies Record<ToolsStatusAction, (() => void) | undefined>
-
-  return (
-    <ToolsStatus connectorName={connectorName} difference={difference} onAction={id => act[id]?.()} phase={phase} />
-  )
-}
-
 function Line({ action, label }: { action?: ReactNode; label: string }) {
   return (
     <div className="flex shrink-0 items-center gap-2 border-b border-(--ui-stroke-tertiary) px-3.5 py-1.5">
@@ -240,85 +162,6 @@ function UnavailableLine({ onRetry }: { onRetry: () => void }) {
         </Button>
       }
       label={t.connectorsPage.tools.unavailableLine}
-    />
-  )
-}
-
-function SignInLine({ onSignIn }: { onSignIn: () => void }) {
-  const { t } = useI18n()
-
-  return (
-    <Line
-      action={
-        <Button onClick={onSignIn} size="inline" variant="textStrong">
-          {t.connectorsPage.page.signIn}
-        </Button>
-      }
-      label={t.connectorsPage.tools.staleSignIn}
-    />
-  )
-}
-
-function FrozenLines({
-  appOffName,
-  frozen,
-  onRetryRules,
-  onSignIn,
-  preview,
-  rulesSignedOut,
-  signedOut
-}: {
-  appOffName?: string
-  frozen: boolean
-  onRetryRules?: () => void
-  onSignIn?: () => void
-  preview: boolean
-  rulesSignedOut: boolean
-  signedOut: boolean
-}) {
-  return (
-    <>
-      {frozen && !preview ? (
-        <RulesLine appOffName={appOffName} onRetryRules={onRetryRules} onSignIn={onSignIn} signedOut={rulesSignedOut} />
-      ) : null}
-
-      {signedOut && onSignIn ? <SignInLine onSignIn={onSignIn} /> : null}
-    </>
-  )
-}
-
-function RulesLine({
-  appOffName,
-  onRetryRules,
-  onSignIn,
-  signedOut
-}: {
-  appOffName?: string
-  onRetryRules?: () => void
-  onSignIn?: () => void
-  signedOut: boolean
-}) {
-  const { t } = useI18n()
-  const copy = t.connectorsPage
-
-  if (appOffName) {
-    return <Line label={copy.dialog.rulesAppOff(appOffName)} />
-  }
-
-  return (
-    <Line
-      action={
-        signedOut && onSignIn ? (
-          <Button onClick={onSignIn} size="inline" variant="textStrong">
-            {copy.page.signIn}
-          </Button>
-        ) : onRetryRules ? (
-          <Button onClick={onRetryRules} size="inline" variant="textStrong">
-            {copy.page.retry}
-          </Button>
-        ) : null
-      }
-      label={signedOut ? copy.dialog.rulesSignIn : copy.dialog.rulesReadOnly}
     />
   )
 }

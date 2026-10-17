@@ -329,64 +329,6 @@ class TestDelegateTask(unittest.TestCase):
                     child_db.close()
                 parent_db.close()
 
-    def test_nous_child_rederives_api_mode_from_model(self):
-        """Portal is dual-wire — same provider + different model prefix must
-        not inherit the parent's Messages/chat_completions mode verbatim.
-        Native wire selected (opt-in since 2026-09-06, ``nous.anthropic_wire``)."""
-        with patch("hermes_cli.providers._nous_anthropic_wire", return_value="native"):
-            self._nous_child_rederives_api_mode_from_model()
-
-    def _nous_child_rederives_api_mode_from_model(self):
-        parent = _make_mock_parent(depth=0)
-        parent.base_url = "https://inference-api.nousresearch.com/v1"
-        parent.api_key = "portal-jwt"
-        parent.provider = "nous"
-        parent.api_mode = "anthropic_messages"
-        parent.model = "anthropic/claude-opus-4.8"
-
-        with patch("run_agent.AIAgent") as MockAgent:
-            mock_child = MagicMock()
-            MockAgent.return_value = mock_child
-
-            _build_child_agent(
-                task_index=0,
-                goal="Stay on chat completions",
-                context=None,
-                toolsets=None,
-                model="hermes-4-405b",
-                max_iterations=10,
-                parent_agent=parent,
-                task_count=1,
-            )
-
-            _, kwargs = MockAgent.call_args
-            self.assertEqual(kwargs["provider"], "nous")
-            self.assertEqual(kwargs["model"], "hermes-4-405b")
-            self.assertEqual(kwargs["api_mode"], "chat_completions")
-
-        with patch("run_agent.AIAgent") as MockAgent:
-            mock_child = MagicMock()
-            MockAgent.return_value = mock_child
-            parent.api_mode = "chat_completions"
-            parent.model = "hermes-4-405b"
-
-            _build_child_agent(
-                task_index=0,
-                goal="Move onto Messages",
-                context=None,
-                toolsets=None,
-                model="anthropic/claude-opus-4.8",
-                max_iterations=10,
-                parent_agent=parent,
-                task_count=1,
-            )
-
-            _, kwargs = MockAgent.call_args
-            self.assertEqual(kwargs["api_mode"], "anthropic_messages")
-
-class TestToolNamePreservation(unittest.TestCase):
-    """Verify _last_resolved_tool_names is restored after subagent runs."""
-
     def test_global_tool_names_restored_after_delegation(self):
         """The process-global _last_resolved_tool_names must be restored
         after a subagent completes so the parent's execute_code sandbox

@@ -179,8 +179,7 @@ _DETAIL_MODES = frozenset({"hidden", "collapsed", "expanded"})
 # creation + a prompt.submit; onboarding.state = a bounded wait on the boot-time due answer.
 _LONG_HANDLERS = frozenset({
     "session.foreign.list", "session.foreign.preview", "session.foreign.import",
-    "billing.state", "subscription.state", "subscription.preview", "subscription.change",
-    "subscription.resume", "subscription.upgrade", "usage.bars", "session.usage", "billing.step_up",
+    "session.usage",
     "browser.manage", "cli.exec", "complete.path", "complete.slash", "llm.oneshot", "model.options",
     "pet.cells", "pet.gallery", "pet.generate", "pet.hatch", "pet.info", "pet.select", "pet.thumb",
     "learning.frames", "plugins.manage", "plugins.catalog.lookup", "reload.mcp", "mcp.servers.test",
@@ -793,17 +792,6 @@ def _open_requests(sid: str) -> list[dict]:
     return []
 
 
-def _pending_connection_request_payload(sid: str) -> dict | None:
-    """The open connection operation on *sid* as its ``connection.request`` payload, so a client
-    that missed the event (or restarted) restores the card with the server's deadline."""
-    from tools.connectors import live
-
-    session = _sessions.get(sid)
-    operation = (live.current(str(session.get("session_key") or ""), profile_home=session.get("profile_home"))
-                 if session else None)
-    return operation.request_payload() if operation is not None else None
-
-
 def _pending_approval_request_payload(session_key: str) -> dict | None:
     """Read the oldest unresolved approval in a session, if there is one."""
     try:
@@ -1104,11 +1092,7 @@ def _attach_built_agent(sid: str, current: dict, agent) -> bool:
 
 
 def _announce_built_agent(sid: str, key: str, current: dict, agent) -> None:
-    """Post-wiring tail of a build: credits seed, session services, session.info, late MCP catch-up."""
-    # Credits notices at session OPEN (notice_callback already wired) so depletion warnings show at "ready".
-    with contextlib.suppress(Exception):
-        from agent.credits_tracker import seed_credits_at_session_start
-        seed_credits_at_session_start(agent)
+    """Post-wiring tail of a build: session services, session.info, late MCP catch-up."""
     _start_session_services(sid, key, current)
     info = _session_info(agent, current)
     if cfg_warn := _probe_config_health(_load_cfg()):
@@ -1657,7 +1641,7 @@ def _stored_session_runtime_overrides(row: dict | None) -> dict:
     """Runtime fields persisted with a stored session (model column, ``billing_provider``, JSON ``model_config``):
     resume restores the model/provider/reasoning THAT chat used, not the global pick. Plugin-owned Bot-Mode
     sessions normally rebuild from the member profile's CURRENT config (a stale provider pin left room bots
-    "out of Nous credits" after a profile switch). A canonical Bot Chat may instead restore an explicit
+    profile switch). A canonical Bot Chat may instead restore an explicit
     composer pick while the profile model it diverged from remains unchanged."""
     if not row:
         return {}
@@ -3186,8 +3170,7 @@ def _live_session_payload(
     }
     for key, value in (("inflight", inflight), ("queued", queued),
                        ("pending_approval", _pending_approval_request_payload(str(session.get("session_key") or ""))),
-                       ("open_requests", _open_requests(sid)),
-                       ("pending_connection", _pending_connection_request_payload(sid))):
+                       ("open_requests", _open_requests(sid))):
         if value:
             payload[key] = value
     return _attach_todo_state(payload, session)
@@ -3659,7 +3642,7 @@ from . import (
     session_compression as _session_compression, model_switch as _model_switch,
     compute_host_bridge as _compute_host_bridge, session_workdir as _session_workdir,
     session_lifecycle as _session_lifecycle, session_reaper as _session_reaper,
-    session_transports as _session_transports, prompt_turn as _prompt_turn, billing_view as _billing_view,
+    session_transports as _session_transports, prompt_turn as _prompt_turn,
     methods_browser_control as _methods_browser_control, methods_bot_relay as _methods_bot_relay,
     methods_complete as _methods_complete, methods_config as _methods_config,
     methods_config_set as _methods_config_set, methods_images as _methods_images,
@@ -3668,7 +3651,6 @@ from . import (
     methods_projects as _methods_projects, methods_session_foreign as _methods_session_foreign,
     methods_session_control as _methods_session_control, methods_subagents as _methods_subagents,
     methods_vault as _methods_vault,
-    methods_connectors as _methods_connectors, methods_connectors_account as _methods_connectors_account,
     methods_display as _methods_display, methods_display_watch as _methods_display_watch,
     methods_onboarding as _methods_onboarding, methods_i18n as _methods_i18n, methods_machine as _methods_machine,
     methods_shared_metrics as _methods_shared_metrics, methods_plugin_catalog as _methods_plugin_catalog,
@@ -3681,9 +3663,9 @@ for _m in (
     _methods_complete_helpers, _methods_slash, _methods_voice, _methods_browser,
     _methods_browser_control, _methods_session, _methods_prompt, _methods_config,
     _methods_config_set, _methods_complete, _methods_tools, _methods_tools_plugin_servers, _methods_profiles, _methods_images,
-    _methods_bot_relay, _prompt_turn, _billing_view, _methods_projects, _methods_session_foreign,
-    _methods_session_control, _methods_subagents, _methods_vault, _methods_connectors,
-    _methods_connectors_account, _methods_display, _methods_display_watch, _methods_onboarding,
+    _methods_bot_relay, _prompt_turn, _methods_projects, _methods_session_foreign,
+    _methods_session_control, _methods_subagents, _methods_vault,
+    _methods_display, _methods_display_watch, _methods_onboarding,
     _methods_i18n, _methods_machine, _methods_shared_metrics, _methods_plugin_catalog,
     _methods_account_auth, _methods_cloud_computer):
     _m.register(sys.modules[__name__])

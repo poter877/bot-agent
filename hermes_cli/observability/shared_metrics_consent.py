@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 # (label, enabled, send): the Desktop strip's three equal answers, in its order.
 OFFER_CHOICES = (
-    ("Collect and send to Nous", True, True),
+    ("Collect and send", True, True),
     ("Collect locally only", True, False),
     ("No thanks", False, False),
 )
@@ -36,7 +36,7 @@ _OFFER_DESCRIPTION = "\n".join((
     "model routes, token totals, feature use and coarse machine facts. A failed or",
     "finished fresh install is noted on this machine and counted only if you opt in.",
     "Never prompts, files, paths,",
-    "setting values or error text. Collection stays on this machine; sending to Nous is",
+    "setting values or error text. Collection stays on this machine; sending is",
     "a separate choice, and apart from that install note, data from before you opt in",
     "is never sent.",
     f"Details: {DOCS_URL}",
@@ -142,7 +142,7 @@ def offer_consent(config: dict | None = None, *, reask: bool = False) -> bool:
         return False
     _, enabled, send = OFFER_CHOICES[idx]
     save_consent(enabled, send, config)
-    outcome = "collected and sent to Nous" if send else "collected on this machine only" if enabled else "off"
+    outcome = "collected and sent" if send else "collected on this machine only" if enabled else "off"
     print_success(f"Shared metrics {outcome}. Change it any time with `hermes setup telemetry`.")
     return True
 

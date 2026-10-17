@@ -1,9 +1,8 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { ConnectorCard, ConnectorRow, type ConnectorRowProps } from './connector-card'
 import { connectorLogoSource } from './connector-logo'
-import { SetupFormDialog } from './setup-form-dialog'
 
 afterEach(cleanup)
 
@@ -49,48 +48,6 @@ describe('a row in the card', () => {
 
     expect(screen.queryAllByRole('button')).toHaveLength(0)
     expect(screen.getByRole('status').textContent).toBe('Connected')
-  })
-})
-
-describe('credentials under a row', () => {
-  const fields = [
-    { default: 'https://api.linear.app', name: 'LINEAR_URL', prompt: 'API URL', required: true, secret: false },
-    { default: '', name: 'LINEAR_API_KEY', prompt: 'API key', required: true, secret: true }
-  ]
-
-  const copy = {
-    cancel: 'Cancel',
-    connect: 'Connect',
-    openInBrowser: 'Open in browser',
-    setup: (server: string) => `Set up ${server}`
-  }
-
-  it('renders plain and masked inputs, prefills plain defaults, and reports the complete draft', () => {
-    const onConnect = vi.fn()
-
-    render(
-      <SetupFormDialog
-        copy={copy}
-        fields={fields}
-        onCancel={vi.fn()}
-        onConnect={onConnect}
-        onOpenBrowser={vi.fn()}
-        open
-        pending={false}
-        server="Linear"
-        status="pending"
-      />
-    )
-
-    const plain = screen.getByLabelText('API URL')
-    const secret = screen.getByLabelText('API key')
-
-    expect(plain.getAttribute('type')).toBe('text')
-    expect(plain.getAttribute('value')).toBe('https://api.linear.app')
-    expect(secret.getAttribute('type')).toBe('password')
-    fireEvent.change(secret, { target: { value: 'lin_abc' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
-    expect(onConnect).toHaveBeenCalledWith({ LINEAR_API_KEY: 'lin_abc', LINEAR_URL: 'https://api.linear.app' })
   })
 })
 

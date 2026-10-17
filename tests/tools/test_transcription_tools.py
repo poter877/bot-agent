@@ -511,11 +511,14 @@ class TestTranscribeLocalExtended:
             }
         }
 
+        # The Apple Silicon CPU fallback would override the config values
+        # this test forwards; the guard is another test's subject.
         with patch("tools.transcription_tools._HAS_FASTER_WHISPER", True), \
              patch("faster_whisper.WhisperModel", mock_whisper_cls), \
              patch("tools.transcription_tools._local_model", None), \
              patch("tools.transcription_tools._local_model_name", None), \
-             patch("tools.transcription_tools._load_stt_config", return_value=fake_config):
+             patch("tools.transcription_tools._load_stt_config", return_value=fake_config), \
+             patch("tools.transcription_local._should_force_faster_whisper_cpu", return_value=False):
             from tools.transcription_tools import _transcribe_local
             result = _transcribe_local(str(audio), "base")
 
@@ -1623,15 +1626,10 @@ def test_command_stt_idle_timeout_preserves_transcription_contract(tmp_path, pro
 # ============================================================================
 
 class TestExplicitOpenaiSelectionError:
-    """A managed-route outage must not be reported as generic setup guidance.
-
-    When ``_resolve_openai_audio_client_config()`` raises its
-    selection-specific ValueError (managed openai-audio gateway unavailable,
-    with the ``hermes tools`` remediation for managed-Nous users), the old
-    boolean probe flattened it into False — the log said "no API key" and
-    the transcription result returned the all-provider install hint,
-    pointing operators at unrelated setup instead of their managed route.
-    """
+    """A selection-specific resolution failure must not be reported as the
+    generic all-provider setup hint: an explicit ``stt.provider`` whose
+    credentials are missing names the selection, while auto-detect with no
+    credentials at all keeps the generic hint."""
 
     def _no_openai_credentials(self, monkeypatch):
         monkeypatch.delenv("VOICE_TOOLS_OPENAI_KEY", raising=False)
@@ -1640,39 +1638,6 @@ class TestExplicitOpenaiSelectionError:
             "tools.tool_backend_helpers.resolve_openai_audio_api_key",
             lambda: None,
         )
-        monkeypatch.setattr(
-            "tools.managed_tool_gateway.resolve_managed_tool_gateway",
-            lambda vendor: None,
-        )
-
-
-    def test_dispatch_returns_selection_specific_error(self, monkeypatch):
-        """The final transcription result carries the managed-route error and
-        its hermes tools remediation instead of the all-provider install
-        hint."""
-        self._no_openai_credentials(monkeypatch)
-        monkeypatch.setattr(
-            "tools.tool_backend_helpers.managed_nous_tools_enabled", lambda: True
-        )
-        monkeypatch.setattr(
-            "tools.transcription_tools._load_stt_config", dict
-        )
-        with patch("tools.transcription_tools._HAS_OPENAI", True), \
-             patch("tools.transcription_tools._HAS_FASTER_WHISPER", False), \
-             patch(
-                 "tools.tool_backend_helpers.nous_tool_gateway_unavailable_message",
-                 lambda what: f"managed route down for {what}; run `hermes tools`",
-             ):
-            from tools.transcription_tools import _dispatch_stt_provider
-
-            result = _dispatch_stt_provider(
-                "/tmp/nonexistent.wav", "none", {"provider": "openai"}
-            )
-
-        assert result["success"] is False
-        assert "managed route down" in result["error"]
-        assert "hermes tools" in result["error"]
-        assert "No STT provider available" not in result["error"]
 
     def test_auto_detect_none_keeps_generic_hint(self, monkeypatch):
         """Auto-detect with no credentials at all still returns the generic

@@ -133,9 +133,6 @@ def _resolve_cloud_provider_uncached() -> Optional[CloudBrowserProvider]:
                 _bt._cached_cloud_provider = None
                 _bt._cloud_provider_resolved = True
                 return None
-            if provider_key == "nous":
-                # Managed "Nous Subscription" is serviced by the Browser Use provider.
-                provider_key = "browser-use"
         if provider_key:
             resolved = _instantiate_explicit_cloud_provider(provider_key)
             if resolved is None:
@@ -143,7 +140,7 @@ def _resolve_cloud_provider_uncached() -> Optional[CloudBrowserProvider]:
     except ValueError:
         raise
     except Exception as e:
-        # Config may be temporarily unreadable; still try auto-detect (env/managed creds). Don't pin cache.
+        # Config may be temporarily unreadable; still try auto-detect (env creds). Don't pin cache.
         _bt.logger.debug("Could not read cloud_provider from config: %s", e)
 
     if resolved is None and provider_key is None:

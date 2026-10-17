@@ -166,16 +166,14 @@ def _pick_model_or_prompt(model_list, prompt: str, **kwargs):
 
 def _login_retry_context(args) -> tuple[str, str]:
     """(retry_command, service_host) for a login helper's failure copy, from the ``ProviderConfig``
-    among its positional args. Nous keeps ``hermes portal``; every other OAuth provider is retried
-    with ``hermes auth add <provider>`` and named by its own portal host (``hermes login`` no longer
-    exists). Falls back to ``hermes model`` when no provider config is in play."""
+    among its positional args. Every OAuth provider is retried with ``hermes auth add <provider>``
+    and named by its own portal host (``hermes login`` no longer exists). Falls back to
+    ``hermes model`` when no provider config is in play."""
     pconfig = next((a for a in args if hasattr(a, "id") and hasattr(a, "portal_base_url")), None)
     if pconfig is None:
         return "hermes model", "the sign-in service"
     provider_id = str(getattr(pconfig, "id", "") or "")
     host = urlparse(str(getattr(pconfig, "portal_base_url", "") or "")).hostname or "the sign-in service"
-    if provider_id == "nous":
-        return "hermes portal", host
     return (f"hermes auth add {provider_id}" if provider_id else "hermes model"), host
 
 

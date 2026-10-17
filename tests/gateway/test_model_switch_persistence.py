@@ -128,8 +128,7 @@ class TestApplySessionModelOverride:
 
 class TestIsIntentionalModelSwitch:
     """The fallback-eviction check must not evict a session whose model differs from the config
-    default for a reason the system produced: a /model override, or the Nous gateway moving the
-    session off the ``nous/welcome`` alias the config still carries."""
+    default for a reason the system produced: a /model override."""
 
     def test_matches_override(self):
         runner = _make_runner()
@@ -144,25 +143,13 @@ class TestIsIntentionalModelSwitch:
         }
 
         agent = SimpleNamespace(model="gpt-5.4")
-        assert runner._is_intentional_model_switch(sk, agent, "openai/gpt-5") is True
-
-    def test_server_model_switch_off_the_welcome_alias_is_intentional(self):
-        runner = _make_runner()
-        sk = build_session_key(_make_source())
-        # apply_model_switch moved the session and recorded the move (alias -> backing).
-        agent = SimpleNamespace(model="z-ai/glm-5.3-flash", _nous_model_switch=("nous/welcome", "z-ai/glm-5.3-flash"))
-        assert runner._is_intentional_model_switch(sk, agent, "nous/welcome") is True
-        # A config that names something else is real drift, not the server's move.
-        assert runner._is_intentional_model_switch(sk, agent, "openai/gpt-5") is False
-        # A later fallback onto a third model is drift too, even with the config still on the alias.
-        agent.model = "fallback/model"
-        assert runner._is_intentional_model_switch(sk, agent, "nous/welcome") is False
+        assert runner._is_intentional_model_switch(sk, agent) is True
 
     def test_plain_drift_is_not_intentional(self):
         runner = _make_runner()
         sk = build_session_key(_make_source())
         agent = SimpleNamespace(model="fallback/model")
-        assert runner._is_intentional_model_switch(sk, agent, "primary/model") is False
+        assert runner._is_intentional_model_switch(sk, agent) is False
 
 
 class TestFallbackEvictionHonorsChannelOverrides:
@@ -173,7 +160,7 @@ class TestFallbackEvictionHonorsChannelOverrides:
     @staticmethod
     def _evicted_after_turn(
         monkeypatch, source, agent_model, *, global_model="default/model", channel_model="chan/model",
-        session_model=None, session_provider="nous", **agent_attrs,
+        session_model=None, session_provider="openai", **agent_attrs,
     ):
         from gateway.turn_context import TurnContext
 
@@ -202,47 +189,18 @@ class TestFallbackEvictionHonorsChannelOverrides:
     def test_fallback_off_the_channel_model_still_evicts(self, monkeypatch):
         assert self._evicted_after_turn(monkeypatch, _make_source(), "fallback/model") is True
 
-    _WELCOME = "https://welcome-api.nousresearch.com/v1"
-
-    @pytest.mark.parametrize("global_model", ["nous/welcome", "default/model"])
-    def test_the_welcome_host_pins_its_model_over_the_channel_model(self, monkeypatch, global_model):
-        """AIAgent.__init__ runs a welcome-host agent on ``nous/welcome`` whatever the chat configured."""
-        from hermes_cli.anon_auth import pin_model_for_route
-
-        agent_model = pin_model_for_route("nous", self._WELCOME, "chan/model")
-        assert agent_model == "nous/welcome"
-        assert self._evicted_after_turn(
-            monkeypatch, _make_source(), agent_model, global_model=global_model,
-            provider="nous", base_url=self._WELCOME,
-        ) is False
-
-    def test_the_recorded_welcome_alias_switch_keeps_the_cached_agent(self, monkeypatch):
-        assert self._evicted_after_turn(
-            monkeypatch, _make_source(), "backing/model", provider="nous", base_url=self._WELCOME,
-            _nous_model_switch=("nous/welcome", "backing/model"),
-        ) is False
-
-    def test_a_fallback_onto_the_welcome_host_still_evicts(self, monkeypatch):
-        """The pin applies to the agent's primary route, not the fallback route it is on now."""
-        assert self._evicted_after_turn(
-            monkeypatch, _make_source(), "nous/welcome", provider="nous", base_url=self._WELCOME,
-            _primary_runtime={"provider": "openrouter", "base_url": "https://openrouter.ai/api/v1"},
-        ) is True
-
-    @pytest.mark.parametrize("agent_model, session_provider, switch, evicted", [
-        ("backing/model", "nous", ("nous/welcome", "backing/model"), False),  # the server's recorded move
-        ("chan/model", "nous", None, True),  # a fallback that happens to land on the channel's model
+    @pytest.mark.parametrize("agent_model, session_provider, evicted", [
+        ("chan/model", "openai", True),  # a fallback that happens to land on the channel's model
         # The override's provider was unavailable, so this turn ran on the channel's model.
-        ("chan/model", "openai-codex", None, False),
-    ], ids=["recorded-switch-off-the-session-model", "fallback-onto-the-channel-model", "override-unavailable"])
+        ("chan/model", "openai-codex", False),
+    ], ids=["fallback-onto-the-channel-model", "override-unavailable"])
     def test_a_session_model_override_outranks_the_channel_model(
-        self, monkeypatch, agent_model, session_provider, switch, evicted,
+        self, monkeypatch, agent_model, session_provider, evicted,
     ):
         """The agent was built on the session's /model choice, so drift is measured from it."""
         assert self._evicted_after_turn(
-            monkeypatch, _make_source(), agent_model, global_model="backing/model", session_model="nous/welcome",
-            session_provider=session_provider, provider="nous", base_url="https://inference-api.nousresearch.com/v1",
-            **({"_nous_model_switch": switch} if switch else {}),
+            monkeypatch, _make_source(), agent_model, global_model="backing/model", session_model="openai/gpt-5.5",
+            session_provider=session_provider, provider="openai", base_url="https://api.openai.com/v1",
         ) is evicted
 
     @pytest.mark.parametrize("session_model", [None, "chan/model"], ids=["channel-model", "session-model"])

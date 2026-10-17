@@ -4,47 +4,22 @@ Covers render_notice_line — the pure helper that turns an AgentNotice into the
 single plaintext line pushed standalone over a messaging platform (no status
 bar, unlike the TUI). Behavior contracts, not data snapshots.
 """
-from agent.credits_tracker import AgentNotice
+from agent.status_output import AgentNotice
 from gateway.run import render_notice_line
 
 
-def test_real_policy_notices_render_without_doubling():
-    """End-to-end regression: every notice evaluate_credits_notices emits already
-    carries its glyph, so render_notice_line must return it unchanged (no second
-    glyph prepended) for the messaging push."""
-    from agent.credits_tracker import CreditsState, evaluate_credits_notices
-
-    def _emitted(uf=None, paid=True, purchased=0):
-        # Both crossing gates pre-opened: this test's subject is RENDERING of
-        # every notice the policy can emit, not the gating.
-        latch = {"active": set(), "seen_below_90": True, "usage_band": None,
-                 "seen_grant_unspent": True}
-        if uf is None:
-            st = CreditsState(
-                subscription_limit_micros=None, subscription_micros=0,
-                denominator_kind="none", paid_access=paid,
-                purchased_micros=purchased, purchased_usd="%.2f" % (purchased / 1e6),
-            )
-        else:
-            lim = 20_000_000
-            st = CreditsState(
-                subscription_limit_micros=lim, subscription_limit_usd="20.00",
-                subscription_micros=int(lim * (1 - uf)), denominator_kind="subscription_cap",
-                paid_access=paid, purchased_micros=purchased,
-                purchased_usd="%.2f" % (purchased / 1e6),
-            )
-        show, _ = evaluate_credits_notices(st, latch)
-        return show
+def test_policy_notices_render_verbatim_without_doubling():
+    """Every policy notice the credits flow used to emit carries its own glyph; the
+    renderer must return the line unchanged (no second glyph prepended). The
+    notices are constructed directly — the credits gating itself was retired
+    with the free tier."""
 
     notices = (
-        _emitted(uf=0.9)                          # band 90 (warn)
-        + _emitted(uf=0.5)                        # band 50 (info)
-        + _emitted(uf=1.0, purchased=5_000_000)   # grant_spent (band suppressed by top-up)
-        + _emitted(uf=None, paid=False)           # depleted
+        AgentNotice(key="credits_90", text="⚠️ 90% of your plan used"),
+        AgentNotice(key="credits_50", text="ℹ️ 50% of your plan used"),
+        AgentNotice(key="credits_grant_spent", text="Top-up credits exhausted"),
+        AgentNotice(key="credits_depleted", text="Your plan credits are depleted"),
     )
-    # Every leg above must actually produce its notice — a gate regression that
-    # silences one leg must fail here, not silently shrink the coverage.
-    assert len(notices) == 4, [n.key for n in notices]
     for n in notices:
         assert render_notice_line(n) == n.text  # verbatim — no prepended glyph
 

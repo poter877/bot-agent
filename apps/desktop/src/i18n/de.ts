@@ -2136,8 +2136,8 @@ export const deOverrides = {
       state: {
         notice: {
           loggedOut: {
-            title: 'Nous-Konto verbinden',
-            message: 'Melden Sie sich mit Ihrem Nous-Konto an, um hier Guthaben, Tarif und Nutzung zu sehen.',
+            title: 'Konto verbinden',
+            message: 'Melden Sie sich an, um hier Guthaben, Tarif und Nutzung zu sehen.',
             action: 'Anmelden'
           },
           openPortal: 'Portal öffnen ↗',

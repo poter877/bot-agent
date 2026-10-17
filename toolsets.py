@@ -465,10 +465,9 @@ def session_disabled_toolsets(disabled: Optional[list[str]], platform: Optional[
 
 
 def agent_tool_drops(agent: Any) -> frozenset:
-    """Tool names *agent* never carries, whatever its toolsets resolved to: the side-agent drops and
-    the toolsets its session platform does not get. Applied at load, MCP refresh and prefix restore."""
-    from tools.connectors.turn import side_agent_tool_drops
-    return side_agent_tool_drops(agent) | session_platform_tool_drops(getattr(agent, "platform", None))
+    """Tool names *agent* never carries, whatever its toolsets resolved to: the toolsets its
+    session platform does not get. Applied at load, MCP refresh and prefix restore."""
+    return session_platform_tool_drops(getattr(agent, "platform", None))
 
 
 def validate_toolset(name: str) -> bool:

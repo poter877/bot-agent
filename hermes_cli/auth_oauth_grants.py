@@ -11,7 +11,7 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 from hermes_cli.auth_constants import _decode_jwt_claims
 from utils import file_signature
 
@@ -24,32 +24,28 @@ logger = logging.getLogger("hermes_cli.auth")
 # ``refresh_token_reused``.
 # Profiles must never receive a copy: ONE grant lives at the global root and named profiles read
 # it through the ``read_credential_pool`` root fallback.
-SINGLE_USE_REFRESH_POOL_PROVIDERS = frozenset({"anthropic", "openai-codex", "xai-oauth", "nous"})
+SINGLE_USE_REFRESH_POOL_PROVIDERS = frozenset({"anthropic", "openai-codex", "xai-oauth"})
 
 # Singleton credential files holding the same single-use grants outside ``auth.json``. Copying one
 # into a profile re-seeds a forked pool row on the profile's next ``load_pool()``.
 SINGLE_USE_OAUTH_SINGLETON_FILES = (".anthropic_oauth.json",)
 
 # Providers whose device-code grants live under ``providers.<id>`` (not only the pool).
-# Only a block carrying a refresh token is a forkable grant: an agent_key-only ``nous`` block is
-# not single-use and must survive.
-_DEVICE_CODE_BLOCK_PROVIDERS = ("openai-codex", "xai-oauth", "nous")
+_DEVICE_CODE_BLOCK_PROVIDERS = ("openai-codex", "xai-oauth")
 
 
 def _block_tokens(block: dict[str, Any]) -> dict[str, Any]:
-    # Codex/xAI nest the pair under ``tokens``; Nous stores it flat on the block.
+    # Codex/xAI nest the pair under ``tokens``.
     tokens = block.get("tokens")
     return tokens if isinstance(tokens, dict) else block
 
 
 def _is_forkable_pool_row(provider_id: str, entry: Any) -> bool:
-    # An agent_key-only nous row carries no single-use refresh token: it is not a fork, and
-    # stripping it while its providers block survives lets the profile's next load_pool('nous')
-    # write that block over root's shared row. Same refresh_token gate the block strip uses.
     if not _is_oauth_pool_payload(entry):
         return False
-    # Pool rows are flat (no ``tokens`` nesting), so read refresh_token directly.
-    return provider_id != "nous" or bool(str(entry.get("refresh_token") or "").strip())
+    # Pool rows are flat (no ``tokens`` nesting); the payload gate above already requires the
+    # refresh token that makes a row single-use.
+    return True
 
 
 def _is_oauth_pool_payload(entry: Any) -> bool:
@@ -615,7 +611,7 @@ class _HealPass:
         kept_rows: list[Any] = []
         for row in self.p_rows:
             if not _is_forkable_pool_row(self.provider_id, row):
-                # API keys (and agent_key-only nous rows) are safe to duplicate
+                # API keys are safe to duplicate
                 kept_rows.append(row)
                 continue
             match_idx = _find_root_counterpart(row, self.r_rows)

@@ -240,7 +240,7 @@ class CLIAgentSetupMixin:
         self._credentials_rate_limited = False
         self._credentials_terminal = False
         try:
-            # target_model: the ladder's model-keyed rungs (Zen/Go api_mode, Copilot/Nous
+            # target_model: the ladder's model-keyed rungs (Zen/Go api_mode, Copilot
             # api_mode) must see the model this CLI will actually send, not config's `default`,
             # or `hermes -m mimo-v2.5 --provider opencode-go` resolves an api_mode/base_url the
             # sent model cannot use (#112600).
@@ -642,7 +642,6 @@ class CLIAgentSetupMixin:
                 _single_query_clarify_callback
                 if single_query_mode
                 else self._clarify_callback)
-            connection_callback = None if single_query_mode else self._connection_callback
             self.agent = AIAgent(
                 model=effective_model, api_key=runtime.get("api_key"),
                 base_url=runtime.get("base_url"), provider=runtime.get("provider"),
@@ -664,7 +663,7 @@ class CLIAgentSetupMixin:
                 provider_data_collection=self._provider_data_collection,
                 openrouter_min_coding_score=self._openrouter_min_coding_score,
                 session_id=self.session_id, platform="cli", session_db=self._session_db,
-                clarify_callback=clarify_callback, connection_callback=connection_callback,
+                clarify_callback=clarify_callback,
                 reasoning_callback=self._current_reasoning_callback(),
                 fallback_model=self._fallback_model, thinking_callback=self._on_thinking,
                 checkpoints_enabled=self.checkpoints_enabled,
@@ -697,13 +696,6 @@ class CLIAgentSetupMixin:
             # patch_stdout's StdoutProxy (#2262), holding lines while a response box streams so a
             # subagent/background completion notice never splits the reply mid-paragraph.
             self.agent._print_fn = self._agent_status_print
-            # Hydrate credits notices at session OPEN (parity with the TUI) so a depletion
-            # warning shows before the first message. Idempotent + fail-open in the helper.
-            try:
-                from agent.credits_tracker import seed_credits_at_session_start
-                seed_credits_at_session_start(self.agent)
-            except Exception:
-                pass
             self._active_agent_route_signature = _route_signature(effective_model, runtime)
 
             # Force-create DB row on /title intent, then apply title.

@@ -38,7 +38,6 @@ import { $clarifyRequests, clearClarifyRequest } from '@/store/clarify'
 import { announceGoneSessionDraft, announceNewSessionDraftKey, migrateSessionDraft } from '@/store/composer'
 import { clearQueuedPrompts, migrateQueuedPrompts } from '@/store/composer-queue'
 import { resetSessionBackground } from '@/store/composer-status'
-import { $connectionRequests } from '@/store/connection-request'
 import {
   isActivePrimary,
   openGatewayForAgent,
@@ -170,7 +169,6 @@ import { provisionalTranscriptPaint, transcriptRestScope } from './provisional-t
 import { rememberedOwnerForResume } from './remembered-owner'
 import { restorePendingApproval } from './restore-pending-approval'
 import { pendingClarifyToolPayload, restorePendingClarifyFromSnapshot } from './restore-pending-clarify'
-import { projectPendingConnection, restorePendingConnectionFromSnapshot } from './restore-pending-connection'
 import { createGatewaySession, desktopSessionCreateParams } from './session-create-request'
 import {
   createPersistedDisplayTranscriptProvenance,
@@ -1578,7 +1576,6 @@ export function useSessionActions({
             const activateStartedAt = Date.now() / 1000
             const activateBaselineState = sessionStateByRuntimeIdRef.current.get(cachedRuntimeId) ?? cachedViewState
             const clarifyRequestIdAtActivateStart = $clarifyRequests.get()[cachedRuntimeId]?.requestId
-            const connectionOpIdAtActivateStart = $connectionRequests.get()[cachedRuntimeId]?.opId
 
             try {
               activated = await requestForSession<SessionResumeResult>('session.activate', {
@@ -1628,13 +1625,6 @@ export function useSessionActions({
               )
 
               const pendingClarify = pendingClarifyState.request
-
-              const pendingConnection = restorePendingConnectionFromSnapshot(
-                activated,
-                cachedRuntimeId,
-                activateStartedAt,
-                connectionOpIdAtActivateStart
-              ).request
 
               const clarifyAuthoritativelyAbsent =
                 pendingClarifyState.authoritativeAbsent && !$clarifyRequests.get()[cachedRuntimeId]
@@ -1720,7 +1710,6 @@ export function useSessionActions({
                   needsInput:
                     pendingApproval ||
                     Boolean(pendingClarify) ||
-                    Boolean(pendingConnection) ||
                     (clarifyAuthoritativelyAbsent ? false : state.needsInput),
                   // Adopting someone else's turn: we'll stream its reply
                   // without ever having received its prompt, so the settle
@@ -1892,16 +1881,8 @@ export function useSessionActions({
                   )
                 : null
 
-              const pendingConnectionProjection = projectPendingConnection(
-                pendingClarifyProjection?.messages ?? clearedClarifyProjection?.messages ?? activatedMessages,
-                pendingConnection
-              )
-
               const visibleActivatedMessages =
-                pendingConnectionProjection?.messages ??
-                pendingClarifyProjection?.messages ??
-                clearedClarifyProjection?.messages ??
-                activatedMessages
+                pendingClarifyProjection?.messages ?? clearedClarifyProjection?.messages ?? activatedMessages
 
               if (!running) {
                 restoreSessionTodosFromSnapshot(
@@ -1930,7 +1911,7 @@ export function useSessionActions({
                     acceptedPersistedDisplayTranscript || hasValidProvenance
                       ? (expectedProvenance ?? undefined)
                       : undefined,
-                  ...livePromptStreamId(pendingConnectionProjection, pendingClarifyProjection),
+                  ...livePromptStreamId(null, pendingClarifyProjection),
                   ...(clearedClarifyProjection
                     ? {
                         streamId: state.busy ? (clearedClarifyProjection.streamId ?? state.streamId) : null
@@ -2339,12 +2320,6 @@ export function useSessionActions({
         const pendingClarifyState = restorePendingClarifyFromSnapshot(resumed, resumed.session_id, resumeStartedAt)
         const pendingClarify = pendingClarifyState.request
 
-        const pendingConnection = restorePendingConnectionFromSnapshot(
-          resumed,
-          resumed.session_id,
-          resumeStartedAt
-        ).request
-
         const clarifyAuthoritativelyAbsent =
           pendingClarifyState.authoritativeAbsent && !$clarifyRequests.get()[resumed.session_id]
 
@@ -2372,16 +2347,8 @@ export function useSessionActions({
             )
           : null
 
-        const pendingConnectionProjection = projectPendingConnection(
-          pendingClarifyProjection?.messages ?? clearedClarifyProjection?.messages ?? messagesForView,
-          pendingConnection
-        )
-
         const visibleMessagesForView =
-          pendingConnectionProjection?.messages ??
-          pendingClarifyProjection?.messages ??
-          clearedClarifyProjection?.messages ??
-          messagesForView
+          pendingClarifyProjection?.messages ?? clearedClarifyProjection?.messages ?? messagesForView
 
         // The eagerly painted REST page is persisted-display authority: stamp
         // its provenance so the next warm switch to this session paints it
@@ -2410,7 +2377,6 @@ export function useSessionActions({
             needsInput:
               pendingApproval ||
               Boolean(pendingClarify) ||
-              Boolean(pendingConnection) ||
               (clarifyAuthoritativelyAbsent ? false : state.needsInput),
             adoptedRunningTurn: state.adoptedRunningTurn || resumedRunning,
             ...(inFlightRecovery.applied
@@ -2424,7 +2390,7 @@ export function useSessionActions({
               : {
                   turnStartedAt: resumedRunning && resumedTurnStartedAt !== null ? resumedTurnStartedAt : null
                 }),
-            ...livePromptStreamId(pendingConnectionProjection, pendingClarifyProjection),
+            ...livePromptStreamId(null, pendingClarifyProjection),
             ...(clearedClarifyProjection
               ? {
                   streamId: resumedRunning ? (clearedClarifyProjection.streamId ?? state.streamId) : null

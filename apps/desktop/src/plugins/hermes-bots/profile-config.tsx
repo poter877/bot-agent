@@ -12,7 +12,6 @@ import * as sdk from '@hermes/plugin-sdk'
 import {
   Checkbox,
   GlyphSpinner,
-  host,
   Input,
   queryClient,
   surfaceModelSwitchConfirm,
@@ -428,7 +427,7 @@ export function AdvancedProfileConfig({ bot, state, setState }: AdvancedProfileC
       {labeled(
         b.editor.mcpServers,
         <div className="overflow-hidden rounded-md border border-(--ui-stroke-secondary)">
-          {ConnectorsTab && typeof host.getGateway === 'function' ? (
+          {ConnectorsTab ? (
             <div
               className="overflow-y-auto overscroll-contain"
               style={{
@@ -436,7 +435,7 @@ export function AdvancedProfileConfig({ bot, state, setState }: AdvancedProfileC
                 maxHeight: 360
               }}
             >
-              <ConnectorsTab gateway={host.getGateway()} profile={backendScope} />
+              <ConnectorsTab profile={backendScope} />
             </div>
           ) : mcpList.length === 0 ? (
             <div className="px-1 py-2 text-center text-xs text-(--ui-text-tertiary)">{b.tools.noMcpServers}</div>

@@ -36,29 +36,8 @@ def test_native_carriers_follow_only_their_owner_on_each_request():
     assert "reasoning_details" not in transport.convert_messages(only_native, base_url=OPENROUTER)[0]
 
 
-NOUS_PORTAL = "https://inference-api.nousresearch.com/v1"
-
-
-def test_nous_portal_replays_reasoning_details_on_wire():
-    """The Portal forwards assistant carriers to its upstream lanes and the "cumulative replay
-    budget" blamed for #118182 does not exist (no 400 across ~440 live replay requests), so the
-    Portal reads reasoning_details again. Lookalike hosts never match and still strip."""
-    standard = {"type": "reasoning.encrypted", "data": "opaque-signature"}
-    history = [{"role": "assistant", "content": "answer", "reasoning_details": [standard]}]
-    original = deepcopy(history)
-    transport = ChatCompletionsTransport()
-
-    for base_url in (NOUS_PORTAL, "https://stg-inference-api.nousresearch.com/v1"):
-        wire = transport.convert_messages(deepcopy(history), base_url=base_url)
-        assert wire[0]["reasoning_details"] == [standard]
-        assert history == original
-
-    assert "reasoning_details" not in transport.convert_messages(
-        deepcopy(history), base_url="https://nousresearch.com.evil.io/v1")[0]
-
-
-def test_openrouter_replay_unchanged_by_portal_strip():
-    """Sibling #129037: the OpenRouter branch of the allowlist still keeps standard
+def test_openrouter_replay_keeps_standard_details():
+    """The OpenRouter branch of the replay allowlist keeps standard
     reasoning_details on the wire."""
     standard = {"type": "reasoning.encrypted", "data": "opaque-signature"}
     history = [{"role": "assistant", "content": "answer", "reasoning_details": [standard]}]
@@ -67,9 +46,9 @@ def test_openrouter_replay_unchanged_by_portal_strip():
     assert transport.convert_messages(deepcopy(history), base_url=OPENROUTER)[0]["reasoning_details"] == [standard]
 
 
-def test_profile_native_carrier_still_replayed_on_portal_route():
+def test_profile_native_carrier_replays_on_any_route():
     """A profile declaring a native carrier type consumes replayed details by contract,
-    independent of the route allowlist — the Portal strip must not break that."""
+    independent of the route allowlist."""
     owner = ProviderProfile(name="native-owner", base_url="process://native-owner")
     owner.native_reasoning_details_type = "native-owner.native_assistant"
     carrier = {"type": owner.native_reasoning_details_type, "messages": [{"text": "private"}]}
@@ -78,6 +57,6 @@ def test_profile_native_carrier_still_replayed_on_portal_route():
     original = deepcopy(history)
     transport = ChatCompletionsTransport()
 
-    wire = transport.build_kwargs("test", history, provider_profile=owner, base_url=NOUS_PORTAL)["messages"]
+    wire = transport.build_kwargs("test", history, provider_profile=owner, base_url="https://relay.example.test/v1")["messages"]
     assert wire[0]["reasoning_details"] == [carrier, standard]
     assert history == original

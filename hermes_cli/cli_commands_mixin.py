@@ -1758,49 +1758,6 @@ class CLICommandsMixin(CLICommandsSessionToolsMixin):
 
         return threading.Thread(target=run, daemon=True, name=name)
 
-    def _handle_login_command(self, cmd_original: str) -> None:
-        """Start an in-chat sign-in without blocking the input loop while approval is pending."""
-        from hermes_cli import anon_auth
-        # Pin the output target now. Under the live TUI ``self.console`` writes straight to
-        # patch_stdout's StdoutProxy, which mangles Rich's escapes — there ``None`` keeps the
-        # panel on the ``_cprint`` path. Only the slash worker (``_app`` is None) swaps the console.
-        console = None if getattr(self, "_app", None) else getattr(self, "console", None)
-        _cp(f"  {anon_auth.LOGIN_STARTING}")
-        gen = anon_auth.run_sign_in(timeout_seconds=8.0)
-        try:
-            first = next(gen, None)
-        except KeyboardInterrupt:
-            with suppress(Exception):
-                gen.close()
-            return _cp(anon_auth.UPGRADE_CANCELLED)
-        if first is None:
-            return
-        if first.terminal:
-            return _cp(f"  {first.copy}")
-        anon_auth.render_sign_in_cli_code(first, chat=True, printer=_cp)
-
-        def _settle_session_model(state) -> None:
-            """A completed sign-in moved this profile onto the account: the welcome host is gone and
-            the portal serves ``nous/welcome`` as a paid model, so a session still carrying it must
-            move too — the CLI counterpart of the gateway's on-``Completed`` sweep. Only the free
-            tier's own model is replaced; a model the user picked while the sign-in was pending
-            stands. Writing ``self.model`` is enough: ``chat()`` compares the turn-route signature
-            and rebuilds the agent on the next turn, so a turn already in flight keeps the agent it
-            started with. ``getattr``: tests drive this handler with minimal shells.
-            """
-            if state.kind != "completed" or not getattr(state, "model_changed", False):
-                return
-            if str(getattr(self, "model", "") or "") == anon_auth.GUEST_MODEL:
-                # "" when the settle cleared the default: _ensure_runtime_credentials then applies
-                # the provider's silent default, which is what settle_after_upgrade documents.
-                self.model = state.model or ""
-
-        thread = self._side_worker(
-            lambda: anon_auth.drain_sign_in_copy(gen, chat=True, on_terminal=_settle_session_model),
-            name="login", fail_label=_t("login.label"), header_lines=[f"  {_t('login.label')}"],
-            title_suffix=_t("login.title_suffix"), empty_note=f"  {_t('login.no_result')}", console=console)
-        thread.start()
-
     def _handle_btw_command(self, cmd: str):
         """Handle /btw <question> — answer a side question about this conversation from a
         history snapshot via a one-shot auxiliary call. The live session is never touched
@@ -2373,16 +2330,14 @@ class CLICommandsMixin(CLICommandsSessionToolsMixin):
 
     # ---- /debug, /update, /voice, /wake ---------------------------------------------------
     def _handle_debug_command(self, cmd_original: str = ""):
-        """Handle /debug [nous|local] — upload debug report + logs and print share URLs.
-        Default: public paste service; ``nous``: Nous-internal (staff-only); ``local``: render to
-        stdout, no upload. ``local`` wins if both are given (never touches the network)."""
+        """Handle /debug [local] — upload debug report + logs and print share URLs.
+        Default: public paste service; ``local``: render to stdout, no upload."""
         from hermes_cli.debug import run_debug_share
         from types import SimpleNamespace
         words = {w.lower() for w in cmd_original.split()[1:]}
         local = "local" in words
         # Typing /debug is the upload consent (yes=True); input() would hang in prompt_toolkit anyway.
-        run_debug_share(SimpleNamespace(
-            lines=200, expire=7, local=local, nous="nous" in words and not local, yes=True))
+        run_debug_share(SimpleNamespace(lines=200, expire=7, local=local, yes=True))
 
     def _handle_update_command(self) -> bool:
         """Handle /update — exit the session and relaunch as ``hermes update``. Returns True when

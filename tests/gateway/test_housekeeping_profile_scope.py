@@ -69,13 +69,12 @@ def two_homes(tmp_path, monkeypatch):
 def _record_credential_chores(monkeypatch):
     """Replace the credential-reading chores with recorders of (home, Nous override) they see."""
     from agent import curator
-    from hermes_cli.auth_nous import _nous_inference_env_override
     from hermes_constants import get_hermes_home
 
     seen: dict = {"curator": []}
 
     def _rec(key):
-        return lambda *a, **k: seen[key].append((get_hermes_home().name, _nous_inference_env_override()))
+        return lambda *a, **k: seen[key].append((get_hermes_home().name, None))
 
     monkeypatch.setattr(curator, "maybe_run_curator", _rec("curator"))
     return seen

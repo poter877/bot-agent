@@ -1,6 +1,5 @@
 import type {
   ConnectorCardModel,
-  ConnectorGroupId,
   ConnectorGroupModel,
   ConnectorPageModel,
   ConnectorSegmentModel,
@@ -9,29 +8,16 @@ import type {
 } from './types'
 
 const STATE_RANK = {
-  available: 5,
+  available: 2,
   broken: 0,
   connected: 4,
   connecting: 3,
-  expired: 1,
-  off: 6,
+  off: 1,
   unknown: 2
 } satisfies Record<ConnectorState, number>
 
-const GROUP_OF = {
-  available: 'available',
-  broken: 'connected',
-  connected: 'connected',
-  connecting: 'connected',
-  expired: 'connected',
-  off: 'off',
-  unknown: 'connected'
-} satisfies Record<ConnectorState, ConnectorGroupId>
-
-const GROUP_ORDER: readonly ConnectorGroupId[] = ['connected', 'local', 'available', 'off']
-
-export function groupIdOf(card: ConnectorCardModel): ConnectorGroupId {
-  return card.residency === 'local' && card.state !== 'available' ? 'local' : GROUP_OF[card.state]
+export function groupIdOf(card: ConnectorCardModel): 'available' | 'local' {
+  return card.state === 'available' ? 'available' : 'local'
 }
 
 function byStateThenName(a: ConnectorCardModel, b: ConnectorCardModel): number {
@@ -45,7 +31,7 @@ export function cardMatchesQuery(card: ConnectorCardModel, query: string): boole
 }
 
 function groupCards(cards: readonly ConnectorCardModel[]): ConnectorGroupModel[] {
-  const buckets = new Map<ConnectorGroupId, ConnectorCardModel[]>()
+  const buckets = new Map<'available' | 'local', ConnectorCardModel[]>()
 
   for (const card of cards) {
     const id = groupIdOf(card)
@@ -58,14 +44,13 @@ function groupCards(cards: readonly ConnectorCardModel[]): ConnectorGroupModel[]
     }
   }
 
-  return GROUP_ORDER.filter(id => (buckets.get(id)?.length ?? 0) > 0).map(id => ({
-    cards: [...buckets.get(id)!].sort(byStateThenName),
-    id
-  }))
+  return (['local', 'available'] as const)
+    .filter(id => (buckets.get(id)?.length ?? 0) > 0)
+    .map(id => ({ cards: [...buckets.get(id)!].sort(byStateThenName), id }))
 }
 
 export function showsAttentionFirst({ cards }: ConnectorGroupModel): boolean {
-  return cards.length > 1 && cards.some(card => card.state === 'broken' || card.state === 'expired')
+  return cards.length > 1 && cards.some(card => card.state === 'broken')
 }
 
 export function derivePage(

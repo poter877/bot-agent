@@ -221,10 +221,9 @@ describe('a build whose CapabilitiesView cannot route connections', () => {
       toolset: 'local-tools'
     })
     expect(sdk.seen.ConnectorsTab[0]).toEqual({
-      gateway: 'ambient-gateway',
       profile: { connectionId: 'local', profile: 'default' }
     })
-    expect(sdk.gatewayReads.count).toBe(1)
+    expect(sdk.gatewayReads.count).toBe(0)
   })
 })
 

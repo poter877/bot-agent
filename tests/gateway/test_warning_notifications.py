@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from agent.credits_tracker import AgentNotice
+from agent.status_output import AgentNotice
 from agent.status_output import StatusOutputMixin
 from gateway.config import Platform
 from gateway.run import GatewayRunner, _load_gateway_config

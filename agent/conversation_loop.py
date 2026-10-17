@@ -40,7 +40,7 @@ from agent.turn_retry_state import TurnRetryState
 from agent.turn_scripted_prelude import Prelude, play_prelude
 # Phase helpers of the turn loop, bound at import so a source-tree swap cannot load a
 # skewed phase mid-turn.
-from agent.turn_api_call import handle_api_interrupt, nous_rate_limit_guard, perform_api_call
+from agent.turn_api_call import handle_api_interrupt, perform_api_call
 from agent.turn_api_error import handle_api_error
 from agent.turn_api_request import build_api_request
 from agent.turn_failure_copy import FAILED_TURN_DISPLAY_KIND, failed_turn_notice, site_copy
@@ -60,7 +60,6 @@ from agent.turn_response_intake import normalize_model_response
 from agent.turn_tool_round import run_tool_round
 from hermes_logging import set_session_context
 from tools.skill_provenance import set_current_write_origin
-from utils import base_url_host_matches
 
 logger = logging.getLogger(__name__)
 
@@ -479,20 +478,6 @@ def _ra():
     return run_agent
 
 
-def _nous_entitlement_message(capability: str) -> str:
-    try:
-        from hermes_cli.nous_account import (
-            format_nous_portal_entitlement_message,
-            get_nous_portal_account_info,
-        )
-        account_info = get_nous_portal_account_info(force_fresh=True)
-        return format_nous_portal_entitlement_message(
-            account_info, capability=capability, in_chat=True
-        ) or ""
-    except Exception:
-        return ""
-
-
 def _print_guidance(agent, message: str) -> bool:
     """Print each line of ``message`` as a 💡 hint; False when there is nothing to print."""
     if not message:
@@ -500,10 +485,6 @@ def _print_guidance(agent, message: str) -> bool:
     for line in message.splitlines():
         agent._vprint(f"{agent.log_prefix}   💡 {line}", force=True, diagnostic=True)
     return True
-
-
-def _print_nous_entitlement_guidance(agent, capability: str) -> bool:
-    return _print_guidance(agent, _nous_entitlement_message(capability))
 
 
 def _system_prompt_for_hooks(api_kwargs: Any, request_messages: Any) -> Any:
@@ -519,18 +500,9 @@ def _system_prompt_for_hooks(api_kwargs: Any, request_messages: Any) -> Any:
     return system_prompt
 
 
-def _is_nous_inference_route(provider: str, base_url: str) -> bool:
-    return (provider or "").strip().lower() == "nous" or base_url_host_matches(
-        str(base_url or ""), "inference-api.nousresearch.com"
-    )
-
-
 def _billing_or_entitlement_message(
     *, capability: str, provider: str, base_url: str, model: str, unverified: bool = False
 ) -> str:
-    if _is_nous_inference_route(provider, base_url):
-        return _nous_entitlement_message(capability)
-
     provider_label = (provider or "").strip() or "the selected provider"
     model_label = (model or "").strip() or "the selected model"
 
@@ -863,14 +835,6 @@ def _restore_or_build_system_prompt(agent, system_message, conversation_history)
             )
         except Exception as exc:
             logger.warning("on_session_start hook failed: %s", exc)
-
-    # Cold-start credits seed (L3) fallback for the first-turn path; TUI/desktop seed at
-    # session open, so this is idempotent (skips when _credits_state exists). Fail-open.
-    try:
-        from agent.credits_tracker import seed_credits_at_session_start
-        seed_credits_at_session_start(agent)
-    except Exception:
-        logger.debug("cold-start credits seed failed (fail-open)", exc_info=True)
 
     _persist_system_prompt(
         agent,
@@ -1495,16 +1459,11 @@ def _run_phase(fn, agent, state: _LoopState, **extra):
 
 
 def _run_api_retry_loop(agent, s: _LoopState) -> Optional[dict[str, Any]]:
-    """One API call with its retry/recovery loop (guard → build → call → check, error handlers).
+    """One API call with its retry/recovery loop (build → call → check, error handlers).
 
     Returns a turn result dict when a phase ends the turn, else None once the loop is left
     (success, a restart armed on ``s._retry``, interrupt, or retries exhausted)."""
     while s.retry_count < s.max_retries:
-        _ng = _run_phase(nous_rate_limit_guard, agent, s)
-        if _ng.action == "return":
-            return _ng.result
-        if _ng.action == "break":
-            return None
         try:
             _run_phase(build_api_request, agent, s)
             if _run_phase(perform_api_call, agent, s).action == "break":

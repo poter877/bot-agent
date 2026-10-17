@@ -1,15 +1,12 @@
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ConnectorLogo } from '@/components/ui/connector-logo'
 import { Switch } from '@/components/ui/switch'
 import { useI18n } from '@/i18n'
 import type { Translations } from '@/i18n/types'
-import { connectorIconUrl } from '@/lib/connector-tools'
 import { cn } from '@/lib/utils'
 
 import { CatalogMark } from './catalog-mark'
 import { connectorKindWord, showsCatalogMark } from './connector-kind'
-import { twinPillOf } from './derive'
 import type { ConnectorCardModel, ConnectorFact, ConnectorState } from './types'
 
 const STATE_DOT = {
@@ -17,7 +14,6 @@ const STATE_DOT = {
   broken: 'bg-(--ui-red)',
   connected: 'bg-(--ui-green)',
   connecting: 'bg-(--ui-yellow)',
-  expired: 'bg-(--ui-orange)',
   off: 'bg-(--ui-text-quaternary)',
   unknown: 'bg-(--ui-text-quaternary)'
 } satisfies Record<ConnectorState, string>
@@ -27,7 +23,6 @@ const REASON_TONE = {
   broken: 'text-(--ui-red)',
   connected: '',
   connecting: 'text-(--ui-text-secondary)',
-  expired: 'text-(--ui-orange)',
   off: '',
   unknown: ''
 } satisfies Record<ConnectorState, string>
@@ -36,9 +31,6 @@ function factText(copy: Translations['connectorsPage']['card'], fact: ConnectorF
   switch (fact.key) {
     case 'tools':
       return copy.fact.tools(fact.count)
-
-    case 'toolsOff':
-      return copy.fact.toolsOff(fact.count)
 
     case 'toolsOn':
       return copy.fact.toolsOn(fact.count)
@@ -69,13 +61,11 @@ export function ConnectorRowCard({
 }: ConnectorRowCardProps) {
   const { t } = useI18n()
   const copy = t.connectorsPage.card
-  const local = card.residency === 'local'
   const unset = card.state === 'available'
 
-  const stateLabel = local && card.fact ? factText(copy, card.fact) : copy.state[card.stateWord]
+  const stateLabel = card.fact ? factText(copy, card.fact) : copy.state[card.stateWord]
 
   const reason = card.reason ? (card.reason.text ?? copy.reason[card.reason.key]) : undefined
-  const twin = twinPillOf(card)
 
   return (
     <div
@@ -92,7 +82,7 @@ export function ConnectorRowCard({
     >
       <ConnectorLogo
         className="size-9 shrink-0 rounded-[9px]"
-        connector={{ iconUrl: local ? undefined : connectorIconUrl(card.slug), name: card.slug, title: card.name }}
+        connector={{ name: card.slug, title: card.name }}
       />
 
       <div className="grid min-w-0 flex-1 gap-0.5">
@@ -109,14 +99,6 @@ export function ConnectorRowCard({
           <span className="shrink-0 text-[0.6875rem] text-(--ui-text-tertiary)">{connectorKindWord(card, copy)}</span>
 
           {showsCatalogMark(card) ? <CatalogMark /> : null}
-
-          <AccountSummary card={card} />
-
-          {twin ? (
-            <Badge className="shrink-0" size="xs" variant="muted">
-              {twin === 'hostedTwin' ? copy.hostedTwin : copy.alsoLocal}
-            </Badge>
-          ) : null}
         </div>
 
         <SecondLine card={card} reason={reason} />
@@ -125,7 +107,7 @@ export function ConnectorRowCard({
       <CardLane
         busy={busy}
         card={card}
-        onServerToggle={local && card.plugin === undefined ? onServerToggle : undefined}
+        onServerToggle={card.plugin === undefined ? onServerToggle : undefined}
         onVerb={onVerb}
         stateLabel={stateLabel}
         withDot={!unset}
@@ -151,8 +133,7 @@ function CardLane({
 }) {
   const { t } = useI18n()
   const copy = t.connectorsPage.card
-  const server = card.ways.local
-  const fact = card.residency === 'hosted' && card.fact ? factText(copy, card.fact) : null
+  const server = card.ways
 
   return (
     <div className="relative z-10 flex w-[7.75rem] shrink-0 flex-col items-end gap-1">
@@ -163,7 +144,7 @@ function CardLane({
         <span className="truncate">{stateLabel}</span>
       </span>
 
-      {server?.installed === true && onServerToggle ? (
+      {server.installed === true && onServerToggle ? (
         <Switch
           aria-label={server.serverEnabled ? copy.turnServerOff(card.name) : copy.turnServerOn(card.name)}
           checked={server.serverEnabled ?? false}
@@ -183,28 +164,8 @@ function CardLane({
           {copy.verb[card.verb]}
         </Button>
       ) : null}
-
-      {card.verb === undefined && fact !== null ? (
-        <span className="truncate text-[0.6875rem] text-(--ui-text-tertiary)">{fact}</span>
-      ) : null}
     </div>
   )
-}
-
-/** The connected account's name, or how many accounts the app has when there are several. */
-function AccountSummary({ card }: { card: ConnectorCardModel }) {
-  const { t } = useI18n()
-  const accounts = card.ways.hosted?.accounts ?? []
-  const summary = accounts.length > 1 ? t.connectorsPage.accounts.count(accounts.length) : accounts[0]?.alias
-
-  return summary ? (
-    <span
-      className="min-w-0 truncate text-[0.6875rem] text-(--ui-text-secondary)"
-      data-slot="connector-account-summary"
-    >
-      {summary}
-    </span>
-  ) : null
 }
 
 function SecondLine({ card, reason }: { card: ConnectorCardModel; reason?: string }) {

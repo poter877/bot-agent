@@ -95,21 +95,6 @@ def _bare_custom_provider_def(current_base_url: str) -> Optional[ProviderDef]:
         base_url=base_url, is_aggregator=False, auth_type="api_key", source="model-config")
 
 
-# --- Non-agentic model warning
-
-_HERMES_MODEL_WARNING = (
-    "Nous Research Hermes 3 & 4 models are NOT agentic and are not designed "
-    "for use with Hermes Agent. They lack the tool-calling capabilities "
-    "required for agent workflows. Consider using an agentic model instead "
-    "(Claude, GPT, Gemini, DeepSeek, etc.).")
-
-# Match only the real Nous Research Hermes 3 / 4 chat families; a bare substring check
-# false-positived on tool-capable local Modelfiles like ``hermes-brain:qwen3-14b-ctx16k``.
-#   match:    NousResearch/Hermes-3-Llama-3.1-70B, hermes-4-405b, openrouter/hermes3:70b
-#   no match: hermes-brain:qwen3-14b-ctx16k, qwen3:14b, claude-opus-4-6
-_NOUS_HERMES_NON_AGENTIC_RE = re.compile(r"(?:^|[/:])hermes[-_ ]?[34](?:[-_.:]|$)", re.IGNORECASE)
-
-
 # Opaque proxy model IDs (Palantir Foundry: ``ri.language-model-service..language-model.<slug>``)
 # are noise in status output; the provider_label already carries the routing context. Stripped
 # for DISPLAY ONLY — never for wire-side comparison, persistence, config writes or alias lookup.
@@ -122,16 +107,6 @@ def format_model_for_display(model_name: str) -> str:
         if model_name and model_name.startswith(prefix):
             return model_name[len(prefix):] or model_name
     return model_name
-
-
-def is_nous_hermes_non_agentic(model_name: str) -> bool:
-    """True if *model_name* is a real Nous Hermes 3/4 chat model (single owner; cli.py uses it too)."""
-    return bool(model_name and _NOUS_HERMES_NON_AGENTIC_RE.search(model_name))
-
-
-def _check_hermes_model_warning(model_name: str) -> str:
-    """Warning string if *model_name* is a Nous Hermes 3/4 chat model, else ""."""
-    return _HERMES_MODEL_WARNING if is_nous_hermes_non_agentic(model_name) else ""
 
 
 # --- Model aliases -- short names -> (vendor, family) with NO version numbers,
@@ -850,12 +825,12 @@ def get_authenticated_provider_slugs(
 def _resolve_alias_fallback(
     raw_input: str, authenticated_providers: list[str] = (), user_providers: Optional[dict] = None,
     custom_providers: Optional[list] = None) -> Optional[tuple[str, str, str]]:
-    """Resolve an alias on the user's authenticated providers (``("openrouter", "nous")`` when none given).
+    """Resolve an alias on the user's authenticated providers (``("openrouter",)`` when none given).
 
     AmbiguousAliasError propagates: the alias exists on this provider, the user just has to
     choose — trying the next provider would silently switch them somewhere they didn't ask for."""
     results = (resolve_alias(raw_input, p, user_providers, custom_providers)
-               for p in authenticated_providers or ("openrouter", "nous"))
+               for p in authenticated_providers or ("openrouter",))
     return next((r for r in results if r is not None), None)
 
 
@@ -1381,14 +1356,6 @@ def _route_from_model_input(st: _Switch) -> Optional[ModelSwitchResult]:
     # Steps d.5 / e only apply while the request is still unrouted on the current provider.
     if st.resolved_alias or resolved_in_current_catalog or st.target_provider != current_provider:
         return None
-    if current_provider == "nous":
-        # The welcome host serves nous/welcome only; a model outside it needs an account or a key.
-        # Never hop to another provider on the user's behalf here (there is no key to hop to).
-        from hermes_cli.anon_auth import GUEST_MODEL, route_is_welcome_host
-        if route_is_welcome_host(st.current_base_url) and st.new_model != GUEST_MODEL:
-            return st.fail(
-                f"{st.new_model} needs a Nous account or an API key. "
-                "Use /login to sign in, or /model to pick another provider.")
     config_routed = _route_configured_provider(st)  # d.5 — deliberately NOT gated on ``not is_custom``
     if isinstance(config_routed, ModelSwitchResult):
         return config_routed
@@ -1667,25 +1634,16 @@ def _opencode_api_mode(provider: str, model: str, api_key: str) -> str:
     return opencode_model_api_mode(provider, model)
 
 
-def _nous_api_mode(provider: str, model: str, api_key: str) -> str:
-    # Portal serves anthropic/* on /v1/messages and everything else on /chat/completions;
-    # re-derive from the FINAL model so alias clears / empty fallbacks cannot leave Claude on the
-    # OpenAI wire.
-    from hermes_cli.providers import nous_api_mode
-    return nous_api_mode(model)
-
-
 # Per-provider api_mode overrides applied after validation, keyed on the final target provider
 # (the key sets are disjoint, so exactly one — or none — fires).
 _PROVIDER_API_MODE_OVERRIDES: dict[str, Any] = {
     **dict.fromkeys(("copilot", "github-copilot"), _copilot_api_mode),
-    **dict.fromkeys(("opencode-zen", "opencode-go", "opencode"), _opencode_api_mode),
-    **dict.fromkeys(("nous", "nous-portal", "nousresearch"), _nous_api_mode)}
+    **dict.fromkeys(("opencode-zen", "opencode-go", "opencode"), _opencode_api_mode)}
 
 
 def model_derived_api_mode(provider: str, model: str, api_key: str = "") -> Optional[str]:
     """api_mode re-derived from the FINAL model for providers that serve several wire formats behind one
-    endpoint (OpenCode Zen/Go and custom providers extending a family slug, Copilot, Nous); None when the
+    endpoint (OpenCode Zen/Go and custom providers extending a family slug, Copilot); None when the
     provider's wire is fixed by its endpoint. A persisted api_mode from an earlier model of such a provider
     is never authoritative — resume paths must call this instead of honoring the row (#96066)."""
     from hermes_cli.models import opencode_provider_family
@@ -1716,7 +1674,7 @@ def _build_switch_result(st: _Switch) -> ModelSwitchResult:
         is_codex_backend=st.target_provider.strip().lower() == "openai-codex")
     model_info = get_model_info(st.target_provider, st.new_model, allow_network=True)
 
-    warnings = [w for w in (st.validation.get("message"), _check_hermes_model_warning(st.new_model)) if w]
+    warnings = [w for w in (st.validation.get("message"),) if w]
 
     # Carry the switched provider's request_overrides (custom_providers ``extra_body`` such as
     # chat_template_kwargs) so the gateway applies them like the default-provider path does.

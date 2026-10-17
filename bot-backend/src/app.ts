@@ -19,6 +19,8 @@ import { createAuth, type Auth } from './modules/auth/auth.js'
 import { createUsersRoutes } from './modules/users/users.routes.js'
 import { createHealthRoutes } from './modules/health/health.routes.js'
 import { createLlmRoutes } from './modules/llm/llm.routes.js'
+import { createMediaRoutes } from './modules/media/media.routes.js'
+import type { MediaCatalogEntry } from './modules/media/catalog.js'
 import { CatalogStore, parseModelCatalog } from './modules/llm/catalog.js'
 import { createAdminRoutes } from './modules/admin/admin.routes.js'
 import { createCloudComputerRoutes } from './modules/cloud-computer/cloud-computer.routes.js'
@@ -33,6 +35,8 @@ export interface AppDeps {
   logger: Logger
   /** Test seams for the model stream route (defaults: env catalog + env keys). */
   llm?: { modelResolver?: Parameters<typeof createLlmRoutes>[0]['modelResolver']; catalog?: Parameters<typeof createLlmRoutes>[0]['catalog'] }
+  /** Test seams for the media routes. */
+  media?: Pick<Parameters<typeof createMediaRoutes>[0], 'imageGenerator' | 'videoGenerator' | 'imageCatalog' | 'videoCatalog'>
   cloudComputer?: { worker: CloudWorker }
 }
 
@@ -93,6 +97,9 @@ export async function createApp(deps: AppDeps): Promise<App> {
     )
   }
   app.use(realIpMiddleware(config.TRUSTED_PROXIES))
+  // Media generation (video especially) legitimately runs for minutes: give the
+  // media tree its own budget BEFORE the global mount, which would kill it at 10s.
+  app.use('/api/media/*', processingTimeout(config.MEDIA_REQUEST_TIMEOUT_MS))
   app.use(processingTimeout(config.REQUEST_TIMEOUT_MS))
 
   for (const tree of ['/api/auth/*', '/v1/*']) {
@@ -205,6 +212,44 @@ export async function createApp(deps: AppDeps): Promise<App> {
     }),
   )
   app.route('/api/llm', createLlmRoutes({ config, db, redis: redis.commands, logger, catalogStore, ...deps.llm }))
+
+  // Media generation (image/video): same Better Auth session, own per-user
+  // request budget, small JSON bodies, generation errors answer as 502.
+  app.use('/api/media/*', bodyPolicyMiddleware(config.MEDIA_BODY_LIMIT_BYTES))
+  app.use(
+    '/api/media/*',
+    rateLimitMiddleware({
+      redis: redis.commands,
+      scope: 'entry-ip',
+      limit: config.RATE_LIMIT_ENTRY_MAX,
+      windowSeconds: config.RATE_LIMIT_ENTRY_WINDOW_SECONDS,
+      subject: (c) => c.get('realIp'),
+    }),
+  )
+  // Media accepts two principals: a Better Auth user session, or an internal
+  // service token (ai-drama 等内部服务) attributed to MEDIA_SERVICE_USER_ID —
+  // 同一套目录、配额与用量账本。
+  app.use('/api/media/*', async (c, next) => {
+    const token = config.MEDIA_SERVICE_TOKEN
+    const authz = c.req.header('authorization')
+    if (token && authz === `Bearer ${token}`) {
+      c.set('auth', { userId: config.MEDIA_SERVICE_USER_ID, sessionId: 'media-service' })
+      await next()
+      return
+    }
+    await authenticate(auth)(c, next)
+  })
+  app.use(
+    '/api/media/*',
+    rateLimitMiddleware({
+      redis: redis.commands,
+      scope: 'media',
+      limit: config.RATE_LIMIT_MEDIA_MAX,
+      windowSeconds: config.RATE_LIMIT_MEDIA_WINDOW_SECONDS,
+      subject: byAuthUserId,
+    }),
+  )
+  app.route('/api/media', createMediaRoutes({ config, redis: redis.commands, logger, ...deps.media }))
 
   // 运营管理后台: same-origin form posts (urlencoded — NOT the JSON body
   // policy), session role check per request, entry-ip flood guard only.

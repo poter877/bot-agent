@@ -18,7 +18,7 @@ from hermes_cli.models import provider_label
 from hermes_cli.runtime_provider import resolve_requested_provider
 from hermes_cli.vercel_auth import describe_vercel_auth
 from hermes_cli.status_auth import (  # renderers wired into _SECTIONS below
-    _render_api_keys, _render_apikey_providers, _render_auth_providers, _render_nous_gateway)
+    _render_api_keys, _render_apikey_providers, _render_auth_providers)
 from hermes_constants import OPENROUTER_MODELS_URL
 
 
@@ -413,16 +413,14 @@ def _render_summary(ctx):
 
 # Print order of `hermes status`; each renderer takes the shared _StatusContext.
 _SECTIONS = (
-    _render_header, _render_environment, _render_api_keys, _render_auth_providers, _render_nous_gateway,
+    _render_header, _render_environment, _render_api_keys, _render_auth_providers,
     _render_apikey_providers, _render_terminal, _render_platforms, _render_gateway, _render_cron,
     _render_sessions, _render_deep, _render_footer)
 
 
 def show_status(args):
     """One-screen summary by default; ``--full``/``--deep`` print every section."""
-    # Shared by section renderers: config, --deep, and the Nous login facts Auth Providers derives
-    # for the later Nous Tool Gateway section.
-    ctx = SimpleNamespace(deep=getattr(args, 'deep', False), config={}, nous_logged_in=False,
-                          nous_inference_present=False, nous_account_info=None)
+    # Shared by section renderers: config and --deep.
+    ctx = SimpleNamespace(deep=getattr(args, 'deep', False), config={})
     for render in _SECTIONS if getattr(args, 'full', False) or ctx.deep else (_render_summary,):
         render(ctx)

@@ -62,9 +62,8 @@ def _remote_write(env, remote_path: str, content: str, *, atomic: bool = False,
     (ssh, docker, local, singularity: the real shared-host ones) deliver it on
     real stdin, so it never enters argv where a co-tenant can read it via
     ``/proc/*/cmdline``; ``BaseEnvironment.execute`` embeds it as a heredoc
-    for heredoc-mode backends (modal, daytona, vercel), and managed_modal
-    forwards it as ``stdinData``, the same contract ``_write_to_sandbox``
-    relies on."""
+    for heredoc-mode backends (modal, daytona, vercel), the same contract
+    ``_write_to_sandbox`` relies on."""
     encoded = base64.b64encode(content.encode("utf-8")).decode("ascii")
     target = shlex.quote(remote_path)
     write = (f"base64 -d > {target}.tmp && mv -f {target}.tmp {target}"

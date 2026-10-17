@@ -209,12 +209,6 @@ class TestCuratedAccessors:
         ]
 
 
-    def test_nous_returns_none_when_catalog_empty(self, isolated_home):
-        from hermes_cli import model_catalog
-        with patch.object(model_catalog, "_fetch_manifest", return_value=None):
-            assert model_catalog.get_curated_nous_models() is None
-
-
 class TestDefaultModelFromCache:
     """get_default_model_from_cache reads the '"default": true' label without
     ever hitting the network."""
@@ -254,7 +248,7 @@ class TestDefaultModelFromCache:
 
 
     def test_shipped_manifest_labels_glm52_default(self, isolated_home):
-        """Contract with the in-repo manifest: both provider blocks label the
+        """Contract with the in-repo manifest: the provider block labels the
         same default entry the code constant points at."""
         from hermes_cli import model_catalog
         from hermes_cli.models import PREFERRED_SILENT_DEFAULT_MODEL
@@ -263,7 +257,7 @@ class TestDefaultModelFromCache:
         manifest = json.loads(
             (repo_root / "website" / "static" / "api" / "model-catalog.json").read_text()
         )
-        for provider in ("openrouter", "nous"):
+        for provider in ("openrouter",):
             block = manifest["providers"][provider]
             labeled = [m["id"] for m in block["models"] if m.get("default")]
             assert labeled == [PREFERRED_SILENT_DEFAULT_MODEL], (
@@ -324,73 +318,16 @@ class TestRefreshCadence:
         with patch.object(model_catalog, "_load_catalog_config", return_value={
             "enabled": True, "url": "http://master", "ttl_hours": 1.0, "providers": {},
         }), patch.object(model_catalog, "get_catalog", return_value=_valid_manifest()) as gc, \
-             patch("hermes_cli.models.fetch_openrouter_models") as orm, \
-             patch("hermes_cli.models.fetch_nous_recommended_models") as nous:
+             patch("hermes_cli.models.fetch_openrouter_models") as orm:
             assert model_catalog.refresh_catalogs() is True
         gc.assert_called_once_with(force_refresh=True)
         orm.assert_called_once_with(force_refresh=True)
-        nous.assert_called_once_with(force_refresh=True)
 
 
 class TestIntegrationWithModelsModule:
     """Exercise the fallback paths via the real callers in hermes_cli.models."""
 
 
-
-    def test_picker_nous_row_uses_curated_list(self, tmp_path, monkeypatch):
-        """The /model picker surfaces the curated ``_PROVIDER_MODELS["nous"]``
-        list in curated order — matching the ``hermes model`` CLI — not the live
-        ``/v1/models`` catalog or the manifest. Portal free/paid recommendations
-        are unioned in when reachable; offline (as here, with the Portal calls
-        stubbed out) it's exactly the curated list.
-        """
-        # We deliberately do NOT use the ``isolated_home`` fixture here:
-        # that fixture monkeypatches ``Path.home`` to ``tmp_path``, which
-        # trips the auth-store seat-belt in ``_auth_file_path()`` because
-        # ``HERMES_HOME / auth.json`` then resolves to the same path the
-        # seat-belt thinks is the "real" user store. Use the autouse
-        # ``_hermetic_environment`` HERMES_HOME directly instead.
-        import importlib
-        from hermes_cli import model_catalog
-        from hermes_cli.models import get_curated_nous_model_ids
-        importlib.reload(model_catalog)
-        try:
-            from hermes_cli.model_switch_providers import list_picker_providers
-
-            active_home = Path(os.environ["HERMES_HOME"])
-            (active_home / "auth.json").write_text(
-                json.dumps(
-                    {
-                        "providers": {"nous": {"access_token": "fake"}},
-                        "credential_pool": {},
-                    }
-                )
-            )
-
-            # Stub the Portal recommendation union so the row is deterministic
-            # (the curated list alone) and never touches the network. ``expected``
-            # is computed from the same source the picker uses internally
-            # (``curated["nous"] = get_curated_nous_model_ids()``), so the test
-            # stays an invariant — it can't rot as the curated/manifest list grows.
-            with patch.object(
-                model_catalog, "_fetch_manifest", return_value=_valid_manifest()
-            ), patch("hermes_cli.models.check_nous_free_tier", return_value=False), patch(
-                "hermes_cli.models.union_with_portal_free_recommendations",
-                side_effect=lambda ids, *a, **k: (ids, {}),
-            ), patch(
-                "hermes_cli.models.union_with_portal_paid_recommendations",
-                side_effect=lambda ids, *a, **k: (ids, {}),
-            ):
-                expected = get_curated_nous_model_ids()
-                picker = list_picker_providers(
-                    current_provider="nous", max_models=99
-                )
-        finally:
-            model_catalog.reset_cache()
-
-        nous_row = next((r for r in picker if r["slug"] == "nous"), None)
-        assert nous_row is not None, "nous row must appear when authed"
-        assert nous_row["models"] == expected
 
     def test_picker_max_models_cap_semantics(self, tmp_path, monkeypatch):
         """The cap argument has three distinct meanings on the real slicing
@@ -401,56 +338,52 @@ class TestIntegrationWithModelsModule:
         """
         import importlib
         from hermes_cli import model_catalog
-        from hermes_cli.models import get_curated_nous_model_ids
         importlib.reload(model_catalog)
         try:
             from hermes_cli.model_switch import list_authenticated_providers
             from hermes_cli.model_switch_providers import list_picker_providers
 
+            # The section-1 credential gate resolves keys through the per-profile
+            # .env (get_env_prefer_dotenv), not os.environ.
             active_home = Path(os.environ["HERMES_HOME"])
-            (active_home / "auth.json").write_text(
-                json.dumps(
-                    {
-                        "providers": {"nous": {"access_token": "fake"}},
-                        "credential_pool": {},
-                    }
-                )
+            (active_home / ".env").write_text(
+                "OPENROUTER_API_KEY=fake-key-for-picker-cap-test\n", encoding="utf-8"
             )
+            from hermes_cli.config import invalidate_env_cache
+            invalidate_env_cache()
+            from hermes_cli.models_catalog_static import OPENROUTER_MODELS
             with patch.object(
                 model_catalog, "_fetch_manifest", return_value=_valid_manifest()
-            ), patch("hermes_cli.models.check_nous_free_tier", return_value=False), patch(
-                "hermes_cli.models.union_with_portal_free_recommendations",
-                side_effect=lambda ids, *a, **k: (ids, {}),
-            ), patch(
-                "hermes_cli.models.union_with_portal_paid_recommendations",
-                side_effect=lambda ids, *a, **k: (ids, {}),
-            ):
-                expected = get_curated_nous_model_ids()
-                full = list_picker_providers(current_provider="nous", max_models=None)
-                one = list_picker_providers(current_provider="nous", max_models=1)
+            ), patch("hermes_cli.models.fetch_openrouter_models",
+                     return_value=list(OPENROUTER_MODELS)), \
+                 patch("agent.models_dev.fetch_models_dev",
+                       return_value={"openrouter":
+                                     {"models": {}, "env": ["OPENROUTER_API_KEY"]}}):
+                full = list_picker_providers(current_provider="openrouter", max_models=None)
+                one = list_picker_providers(current_provider="openrouter", max_models=1)
                 # 0 is exercised on list_authenticated_providers (the slug-only
                 # path); the picker variant drops empty-model rows entirely, so
                 # the empty-list contract lives on the auth-providers call.
                 zero = list_authenticated_providers(
-                    current_provider="nous", max_models=0
+                    current_provider="openrouter", max_models=0
                 )
         finally:
             model_catalog.reset_cache()
 
-        def _nous(rows):
-            return next((r for r in rows if r["slug"] == "nous"), None)
+        def _openrouter(rows):
+            return next((r for r in rows if r["slug"] == "openrouter"), None)
 
-        # Only meaningful when the curated list actually exceeds 1 entry.
-        assert len(expected) > 1, "test needs a multi-model curated nous list"
+        full_row = _openrouter(full)
+        assert full_row is not None and len(full_row["models"]) > 1, (
+            "test needs a multi-model curated openrouter row"
+        )
+        expected = full_row["models"]
 
-        full_row = _nous(full)
-        assert full_row is not None and full_row["models"] == expected
-
-        # The Nous row is already curated, so an int cap never trims it (its free tier sits last).
-        one_row = _nous(one)
+        # The OpenRouter row is already curated, so an int cap never trims it.
+        one_row = _openrouter(one)
         assert one_row is not None and one_row["models"] == expected
 
-        zero_row = _nous(zero)
+        zero_row = _openrouter(zero)
         # 0 means an empty model list — NOT unlimited. total_models still real.
         assert zero_row is not None
         assert zero_row["models"] == []
@@ -461,11 +394,10 @@ class TestIntegrationWithModelsModule:
 # Drift guard — prevent the in-repo curated lists from going out of sync with
 # the docs-hosted manifest at website/static/api/model-catalog.json.
 #
-# History: qwen/qwen3.6-plus was added to _PROVIDER_MODELS["nous"] in commit
+# History: qwen/qwen3.6-plus was added to a curated in-repo list in commit
 # 9dd6e5510 but website/static/api/model-catalog.json was not regenerated for
-# weeks, so free-tier users on a new install fetched a stale manifest and the
-# free-tier picker showed "No free models currently available." even though
-# the Portal was serving qwen/qwen3.6-plus as free. CI must catch this.
+# weeks, so users on a new install fetched a stale manifest that lacked it.
+# CI must catch this.
 # -----------------------------------------------------------------------------
 
 
@@ -595,7 +527,7 @@ class TestManifestMatchesInRepoLists:
 
         assert self._strip_volatile(actual) == self._strip_volatile(expected), (
             "website/static/api/model-catalog.json is out of sync with "
-            "_PROVIDER_MODELS['nous'] / OPENROUTER_MODELS. "
+            "the in-repo OPENROUTER_MODELS. "
             "Run: python scripts/build_model_catalog.py && "
             "git add website/static/api/model-catalog.json"
         )
@@ -624,11 +556,4 @@ class TestManifestMatchesInRepoLists:
             ]
         assert "inclusionai/ling-3.0-flash:free" in manifest_ids
 
-    def test_nous_lists_portal_served_muse_spark_but_not_contributor_twins(self):
-        """The Portal serves plain muse-spark 1.2/1.3; only the -contributor twins are OpenRouter-only."""
-        from hermes_cli.models_catalog_static import _PROVIDER_MODELS
 
-        nous = _PROVIDER_MODELS["nous"]
-        for version in ("1.2", "1.3"):
-            assert f"meta/muse-spark-{version}" in nous
-            assert f"meta/muse-spark-{version}-contributor" not in nous

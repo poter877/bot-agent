@@ -3,7 +3,6 @@ import { useQuery } from '@tanstack/react-query'
 import type { Translations } from '@/i18n'
 import { en } from '@/i18n/en'
 import { fmtDate } from '@/lib/time'
-import { startManualProviderOAuth } from '@/store/onboarding'
 
 import type { BillingRefusal, BillingResult } from './api'
 import { useBillingApi } from './api'
@@ -15,7 +14,7 @@ export const FALLBACK_PORTAL_BILLING_URL = 'https://portal.nousresearch.com/bill
 export const FALLBACK_PORTAL_URL = 'https://portal.nousresearch.com'
 
 // The billing endpoint is the authoritative source of truth for balance / cap /
-// plan — the inference `x-nous-credits-*` headers are best-effort and can drift
+// plan — the inference usage headers are best-effort and can drift
 // out of sync (notably in team/org accounts where another member's spend moves
 // the shared balance without ever touching THIS client's headers). So the page
 // never trusts a cache: `staleTime: 0` + `refetchOnMount: 'always'` force a
@@ -209,12 +208,9 @@ export function deriveBillingView(
   const billing = stateResult.data
   const subscription = subscriptionResult?.ok ? subscriptionResult.data : null
 
-  // Signing in is the only thing that writes a credential; a portal link never would, so the
-  // page would stay logged out after the user logged in on the web (#87792).
   if (!billing.logged_in || subscription?.logged_in === false) {
     return {
       notice: {
-        action: { label: b.state.notice.loggedOut.action, onSelect: () => startManualProviderOAuth('nous') },
         message: b.state.notice.loggedOut.message,
         title: b.state.notice.loggedOut.title
       },

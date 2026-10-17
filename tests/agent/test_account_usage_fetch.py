@@ -1,5 +1,3 @@
-import concurrent.futures
-import contextvars
 import threading
 import time
 from datetime import datetime, timezone, UTC
@@ -9,11 +7,9 @@ import pytest
 from agent.account_usage import (
     AccountUsageSnapshot,
     AccountUsageWindow,
-    _fetch_portal_account,
     fetch_account_usage,
     render_account_usage_lines,
 )
-from agent.billing_usage import fetch_nous_account as _billing_fetch_nous_account
 from providers.base import ProviderProfile
 
 
@@ -294,48 +290,3 @@ def test_plugin_usage_hook_failure_never_reaches_threading_excepthook(monkeypatc
         if t is not threading.current_thread() and "account-usage" in t.name:
             t.join(2)
     assert escaped == []
-
-
-@pytest.mark.parametrize("fetch", [_fetch_portal_account, _billing_fetch_nous_account])
-def test_fetch_portal_account_is_wall_clock_bounded(monkeypatch, fetch):
-    """A portal that accepts the connection but never answers must release the
-    caller at ``timeout``, not when the wedged worker finishes on its own
-    (``Executor.__exit__`` used to join it via ``shutdown(wait=True)``) — on the
-    /usage path and the /billing path alike (#115982)."""
-    release = threading.Event()
-
-    def hanging_portal_fetch(*, force_fresh):
-        release.wait(timeout=30)
-        return object()
-
-    monkeypatch.setattr(
-        "hermes_cli.nous_account.get_nous_portal_account_info", hanging_portal_fetch
-    )
-    started = time.monotonic()
-    try:
-        with pytest.raises(concurrent.futures.TimeoutError):
-            fetch(timeout=0.5)
-    finally:
-        release.set()
-    assert time.monotonic() - started < 10
-
-
-def test_fetch_portal_account_returns_value_and_keeps_caller_context(monkeypatch):
-    marker = contextvars.ContextVar("portal_fetch_test_marker", default="unset")
-    sentinel = object()
-    seen = {}
-
-    def probing_portal_fetch(*, force_fresh):
-        seen["force_fresh"] = force_fresh
-        seen["marker"] = marker.get()
-        return sentinel
-
-    monkeypatch.setattr(
-        "hermes_cli.nous_account.get_nous_portal_account_info", probing_portal_fetch
-    )
-    token = marker.set("profile-scope")
-    try:
-        assert _fetch_portal_account(timeout=5) is sentinel
-    finally:
-        marker.reset(token)
-    assert seen == {"force_fresh": True, "marker": "profile-scope"}

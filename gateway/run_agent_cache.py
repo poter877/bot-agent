@@ -246,16 +246,11 @@ class GatewayAgentCacheMixin:
             state.conversation.model_override = None
         self._evict_cached_agent(session_key)
 
-    def _is_intentional_model_switch(self, session_key: str, agent: Any, config_model: str) -> bool:
+    def _is_intentional_model_switch(self, session_key: str, agent: Any) -> bool:
         """True when *agent* running a model other than *config_model* is deliberate: a /model session
-        override names that model, or the Nous gateway moved the session off the ``nous/welcome``
-        alias that *config_model* still carries (``anon_auth.apply_model_switch``)."""
+        override names that model."""
         override = self._session_model_override(session_key)
-        if override is not None and override.get("model") == agent.model:
-            return True
-        # Exactly the recorded move (alias -> backing): a later fallback onto some other model is
-        # ordinary drift and still evicts.
-        return getattr(agent, "_nous_model_switch", None) == (config_model, agent.model)
+        return override is not None and override.get("model") == agent.model
 
     def _fallback_baseline_model(self, session_key: str, source: Optional[SessionSource], agent: Any) -> str:
         """The model *agent* was built to run, for the post-turn fallback check: what
@@ -283,10 +278,6 @@ class GatewayAgentCacheMixin:
             from hermes_cli.model_normalize import _AGGREGATOR_PROVIDERS, normalize_model_for_provider
             if provider and provider not in _AGGREGATOR_PROVIDERS:
                 model = normalize_model_for_provider(model, provider)
-        # The Nous welcome host runs its one model whatever the chat configured (pin_model_for_route).
-        with suppress(Exception):
-            from hermes_cli.anon_auth import pin_model_for_route
-            model = pin_model_for_route(provider, primary.get("base_url", getattr(agent, "base_url", None)), model)
         return model
 
     def _release_running_agent_state(

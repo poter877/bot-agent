@@ -12,9 +12,7 @@ import { type ComponentProps, type FC, type ReactNode, useEffect, useMemo, useRe
 import { useSessionView } from '@/app/chat/session-view'
 import { CatalogInstallTool } from '@/components/assistant-ui/catalog-install-tool'
 import { ClarifyTool } from '@/components/assistant-ui/clarify'
-import { ConnectorExecution, ConnectorTool } from '@/components/assistant-ui/connector-tool'
 import { MarkdownText, MarkdownTextContent } from '@/components/assistant-ui/markdown-text'
-import { McpSetupTool } from '@/components/assistant-ui/mcp-setup-tool'
 import { SetupBeatTool } from '@/components/assistant-ui/setup-beat/setup-beat-tool'
 import { setThemeCall } from '@/components/assistant-ui/theme-picker/args'
 import { ThemeTool } from '@/components/assistant-ui/theme-picker/theme-tool'
@@ -22,13 +20,14 @@ import { AgentDeliveryNotice, deliveryTargetFromCommand } from '@/components/ass
 import { TimelineTimestamp } from '@/components/assistant-ui/thread/timeline-timestamp'
 import { DelegateTool } from '@/components/assistant-ui/tool/delegate'
 import { ToolFallback, ToolGroupSlot } from '@/components/assistant-ui/tool/fallback'
+import { BridgedToolExecution } from '@/components/assistant-ui/tool/fallback'
 import { parseMaybeObject, toolCallFailed } from '@/components/assistant-ui/tool/fallback-model'
 import { formatElapsed, useElapsedSeconds, useMeasuredDuration } from '@/components/chat/activity-timer'
 import { ActivityTimerText } from '@/components/chat/activity-timer-text'
 import { GeneratedImage } from '@/components/chat/generated-image-result'
 import { SCAFFOLD_LABEL_CLASS, SCAFFOLD_META_CLASS, ScaffoldRow } from '@/components/chat/scaffold-row'
 import { useI18n } from '@/i18n'
-import { mcpTargets, toolLabels } from '@/lib/connector-tools'
+import { toolLabels } from '@/lib/connector-tools'
 import { generatedImageFromResult } from '@/lib/generated-images'
 import { separateGluedReasoningBlocks } from '@/lib/reasoning-blocks'
 import { isTodoToolName } from '@/lib/todos'
@@ -118,15 +117,11 @@ const SetupBeatToolPart: FC<TimelineToolCallProps> = props => {
   return <SetupBeatTool {...props} />
 }
 
-const ConnectionsToolPart: FC<TimelineToolCallProps> = props =>
-  mcpTargets(props.toolName, props.args).length > 0 ? <McpSetupTool {...props} /> : <ConnectorTool {...props} />
-
 const TOOL_CARDS: Record<CardToolName, FC<TimelineToolCallProps>> = {
   clarify: ClarifyToolPart,
   delegate_task: DelegateToolPart,
   image_generate: ImageGenerateTool,
   manage_catalog: CatalogInstallTool,
-  manage_connections: ConnectionsToolPart,
   set_theme: ThemeToolPart,
   setup_beat: SetupBeatToolPart
 }
@@ -181,7 +176,7 @@ const ChainToolFallback: FC<TimelineToolCallProps> = props => {
   }
 
   if (toolLabels(props.args).length > 0) {
-    return <ConnectorExecution {...props} />
+    return <BridgedToolExecution {...props} />
   }
 
   // The tool feed (reads, searches, commands) follows display.tool_progress,

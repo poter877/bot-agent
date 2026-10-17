@@ -1774,8 +1774,8 @@ export const en: Translations = {
       state: {
         notice: {
           loggedOut: {
-            title: 'Connect your Nous account',
-            message: 'Sign in with your Nous account to see your balance, plan and usage here.',
+            title: 'Connect your account',
+            message: 'Sign in to see your balance, plan and usage here.',
             action: 'Sign in'
           },
           openPortal: 'Open portal ↗',

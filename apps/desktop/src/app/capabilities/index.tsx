@@ -6,8 +6,6 @@ import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
 import { queryClient } from '@/lib/query-client'
 import { invalidateSlashCompletions } from '@/lib/slash-completion-cache'
-import { useStoreSelector } from '@/lib/use-session-slice'
-import { $gateway } from '@/store/gateway'
 import { OFFICIAL_SKILLS_KEY } from '@/store/hub-actions'
 
 import { useRefreshHotkey } from '../hooks/use-refresh-hotkey'
@@ -68,8 +66,6 @@ export function CapabilitiesView({
   const routeTab = useRouteEnumParam('tab', CAPABILITY_MODES, 'skills')
   const localTab = useState<CapabilityMode>('skills')
   const [mode, setMode] = embedded ? localTab : routeTab
-  const gateway = useStoreSelector($gateway, g => (mode === 'connectors' ? g : null))
-
   const [query, setQuery] = useState('')
 
   // Keep the docs iframe alive after the first Skills visit.
@@ -135,16 +131,7 @@ export function CapabilitiesView({
   )
 
   const tabContent = {
-    // The gateway instance backs ONLY the live `reload.mcp` RPC, and it is the
-    // ACTIVE gateway's socket — for a scope pinned to a different backend that
-    // (config edits still apply on that backend's next session).
-    connectors: () => (
-      <ConnectorsTab
-        gateway={scope.crossBackend ? null : gateway}
-        key={`connectors-${scope.key}`}
-        profile={scope.profile}
-      />
-    ),
+    connectors: () => <ConnectorsTab key={`connectors-${scope.key}`} profile={scope.profile} />,
     // Agent plugins for the scoped profile (selector in the section header),
     // app-level desktop plugins, and the docs catalog picker underneath.
     plugins: () => (

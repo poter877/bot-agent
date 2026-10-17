@@ -265,6 +265,22 @@ def is_local_desktop_backend() -> bool:
     return os.environ.get("HERMES_DESKTOP") == "1" and os.environ.get("HERMES_DASHBOARD_SESSION_TOKEN", "") != ""
 
 
+def client_surface() -> str:
+    """``gateway`` in the process that holds the messaging gateway's runtime lock (nobody is at its
+    console), ``desktop`` for the backend the desktop app spawned, else ``cli``. ``HERMES_DESKTOP``
+    alone is inherited by every terminal-pane shell, so desktop ownership needs the spawn credential."""
+    status = sys.modules.get("gateway.status")
+    if status is not None and status.owns_gateway_runtime_lock():
+        return "gateway"
+    return "desktop" if is_desktop_owned_backend() else "cli"
+
+
+def on_local_desktop_backend() -> bool:
+    """This process is the backend the desktop app spawned on this machine: never an SSH, URL or
+    cloud backend, and never a gateway or shell the desktop merely launched."""
+    return client_surface() == "desktop" and is_local_desktop_backend()
+
+
 def _desktop_spawner_identity() -> tuple[Optional[int], Optional[float]]:
     """Spawner ``(pid, create_time)`` from the Electron app's HERMES_PARENT_PID (+ optional
     ``winms:<ms>`` start marker) parent-death watchdog vars, so ledger lineage works with every

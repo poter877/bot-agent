@@ -84,7 +84,7 @@ class TestChatCompletionsBasic:
             "{}",
         ]
 
-    @pytest.mark.parametrize("provider", ["nous", "openrouter"])
+    @pytest.mark.parametrize("provider", ["openrouter"])
     def test_gpt56_ultra_uses_max_wire_effort(self, transport, provider):
         from providers import get_provider_profile
 
@@ -281,31 +281,6 @@ class TestChatCompletionsBuildKwargs:
 
 
 
-
-    def test_nous_tags(self, transport):
-        from agent.portal_tags import nous_portal_tags
-        from providers import get_provider_profile
-        profile = get_provider_profile("nous")
-        msgs = [{"role": "user", "content": "Hi"}]
-        kw = transport.build_kwargs(model="gpt-4o", messages=msgs, provider_profile=profile)
-        assert kw["extra_body"]["tags"] == nous_portal_tags()
-
-
-    def test_nous_omits_disabled_reasoning_for_unknown_model(self, transport):
-        from providers import get_provider_profile
-        profile = get_provider_profile("nous")
-        msgs = [{"role": "user", "content": "Hi"}]
-        kw = transport.build_kwargs(
-            model="gpt-4o", messages=msgs,
-            provider_profile=profile,
-            supports_reasoning=True,
-            reasoning_config={"enabled": False},
-        )
-        # Not a Portal model id, so the catalog can't rule out a
-        # reasoning-mandatory route (which 400s on a disable) — omit.
-        # tests/plugins/model_providers/test_nous_profile.py covers the
-        # catalog-known cases where the disable IS forwarded.
-        assert "reasoning" not in kw.get("extra_body", {})
 
     def test_ollama_num_ctx(self, transport):
         from providers import get_provider_profile
@@ -679,8 +654,17 @@ class TestChatCompletionsGeminiNativeExtraBodyStrip:
     """
 
     def _nous_profile(self):
-        from providers import get_provider_profile
-        return get_provider_profile("nous")
+        """A profile-shaped stand-in whose extra_body carries the portal tags:
+        the contract under test is the transport's strip rule, not any one
+        provider plugin."""
+        from agent.portal_tags import nous_portal_tags
+        from providers.base import ProviderProfile
+
+        class _TaggedProfile(ProviderProfile):
+            def build_extra_body(self, *, session_id=None, **context):
+                return {"tags": nous_portal_tags(session_id=session_id)}
+
+        return _TaggedProfile(name="tagged-portal")
 
     def test_tags_stripped_when_endpoint_is_native_gemini(self, transport):
         kw = transport.build_kwargs(

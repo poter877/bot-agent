@@ -1631,10 +1631,9 @@ export const host = {
   },
 
   /** The LIVE gateway instance for the active profile (null before the first
-   *  socket opens). Most plugins want `host.request`; this exists for SDK
-   *  components that take a `HermesGateway` prop directly (e.g. `ConnectorsTab`),
-   *  which need the instance, not just a JSON-RPC door. Re-read per use — the
-   *  active instance changes on a profile swap. */
+   *  socket opens). Most plugins want `host.request`; this exists for the rare
+   *  SDK component that needs the instance itself, not just a JSON-RPC door.
+   *  Re-read per use — the active instance changes on a profile swap. */
   getGateway: (): HermesGateway | null => $gateway.get(),
 
   /** Change-only desktop.log line for multi-connection identity diagnostics
@@ -1894,8 +1893,7 @@ export { Contribute, type ContributeProps } from '@/contrib/react/contribute'
 /** Settings ▸ Plugins entries (`ctx.registerSettingsPage`); `pluginSettingsHref` deep-links one. */
 export { pluginSettingsHref, SETTINGS_PLUGINS_AREA } from '@/contrib/settings-pages'
 export type { Contribution } from '@/contrib/types'
-/** The live gateway instance type — for typing the `gateway` prop `ConnectorsTab`
- *  takes; obtain the instance from `host.getGateway()`. */
+/** The live gateway instance type; obtain the instance from `host.getGateway()`. */
 export type { HermesGateway } from '@/hermes'
 /** Grab-to-pan for overflow containers (boards, timelines, wide tables) —
  *  the shared scrub primitive; don't hand-roll drag-to-scroll. */

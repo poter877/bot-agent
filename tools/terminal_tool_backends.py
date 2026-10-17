@@ -12,14 +12,11 @@ from typing import Any, Dict, Optional
 
 from tools.environments.docker import DockerEnvironment as _DockerEnvironment
 from tools.environments.local import LocalEnvironment as _LocalEnvironment
-from tools.environments.managed_modal import ManagedModalEnvironment as _ManagedModalEnvironment
 from tools.environments.modal import ModalEnvironment as _ModalEnvironment
 from tools.environments.singularity import SingularityEnvironment as _SingularityEnvironment
 from tools.environments.ssh import SSHEnvironment as _SSHEnvironment
-from tools.managed_tool_gateway import is_managed_tool_gateway_ready
 from tools.terminal_tool_config import _get_plugin_env_provider
-from tools.tool_backend_helpers import (has_direct_modal_credentials, managed_nous_tools_enabled,
-                                        nous_tool_gateway_unavailable_message, resolve_modal_backend_state)
+from tools.tool_backend_helpers import has_direct_modal_credentials, resolve_modal_backend_state
 
 # Log-record parity with the origin module.
 logger = logging.getLogger("tools.terminal_tool")
@@ -103,31 +100,20 @@ def _is_supported_vercel_runtime(runtime: str) -> bool:
 
 
 def _get_modal_backend_state(modal_mode: object | None) -> dict[str, Any]:
-    """Resolve direct vs managed Modal backend selection."""
-    return resolve_modal_backend_state(modal_mode, has_direct=has_direct_modal_credentials(),
-                                       managed_ready=is_managed_tool_gateway_ready("modal"))
+    """Resolve the Modal backend selection (direct credentials or nothing)."""
+    return resolve_modal_backend_state(modal_mode, has_direct=has_direct_modal_credentials())
 
 
 def _modal_unavailable_reason(modal_state: dict[str, Any]) -> tuple[str, str]:
     """(log message, ValueError message) for a modal_state with no selected backend.
     Single decision shared by the requirements checker and the env builder."""
-    gateway = nous_tool_gateway_unavailable_message("managed Modal execution")
-    if modal_state["managed_mode_blocked"] or modal_state["mode"] == "managed":
-        tail = (("Nous Tool Gateway access is not currently available and no direct Modal credentials/config "
-                 f"were found. {gateway} Choose TERMINAL_MODAL_MODE=direct/auto to use direct Modal credentials.")
-                if modal_state["managed_mode_blocked"] else f"the managed tool gateway is unavailable. {gateway}")
-        return (f"Modal backend selected with TERMINAL_MODAL_MODE=managed, but {tail}",
-                f"Modal backend is configured for managed mode, but {tail}")
-    managed = managed_nous_tools_enabled()
     if modal_state["mode"] == "direct":
         return ("Modal backend selected with TERMINAL_MODAL_MODE=direct, but no direct Modal credentials/config "
-                f"were found. Configure Modal or choose TERMINAL_MODAL_MODE={'managed/auto' if managed else 'auto'}.",
+                "were found. Configure Modal or choose TERMINAL_MODAL_MODE=auto.",
                 "Modal backend is configured for direct mode, but no direct Modal credentials/config were found.")
-    found = "or managed tool gateway was found" if managed else "was found"
-    fix = ", set up the managed gateway, or" if managed else " or"
-    return (f"Modal backend selected but no direct Modal credentials/config {found}. "
-            f"Configure Modal{fix} choose a different TERMINAL_ENV.",
-            f"Modal backend selected but no direct Modal credentials/config {found}.")
+    return ("Modal backend selected but no direct Modal credentials/config was found. "
+            "Configure Modal or choose a different TERMINAL_ENV.",
+            "Modal backend selected but no direct Modal credentials/config was found.")
 
 
 # --- Environment builders. Signature: (*, image, cwd, timeout, cc, task_id, ssh_config, local_config, host_cwd)
@@ -173,12 +159,10 @@ def _build_modal_env(*, image, cwd, timeout, cc, task_id, **_):
         except Exception:
             pass
     modal_state = _get_modal_backend_state(cc.get("modal_mode"))
-    selected = modal_state["selected_backend"]
-    if selected not in ("managed", "direct"):
+    if modal_state["selected_backend"] != "direct":
         raise ValueError(_modal_unavailable_reason(modal_state)[1])
-    cls = _ManagedModalEnvironment if selected == "managed" else _ModalEnvironment
-    return cls(image=image, cwd=cwd, timeout=timeout, modal_sandbox_kwargs=sandbox_kwargs,
-               persistent_filesystem=res["persistent_filesystem"], task_id=task_id)
+    return _ModalEnvironment(image=image, cwd=cwd, timeout=timeout, modal_sandbox_kwargs=sandbox_kwargs,
+                             persistent_filesystem=res["persistent_filesystem"], task_id=task_id)
 
 
 # env_type -> (class getter, takes image, extra kwargs from (cc, resource kwargs)). SDK-backed modules
@@ -297,8 +281,6 @@ def _check_vercel(config: dict[str, Any]) -> bool:
 
 def _modal_pre(config: dict[str, Any]) -> Optional[bool]:
     modal_state = _get_modal_backend_state(config.get("modal_mode"))
-    if modal_state["selected_backend"] == "managed":
-        return True
     if modal_state["selected_backend"] != "direct":
         return _reject(_modal_unavailable_reason(modal_state)[0])
     return None

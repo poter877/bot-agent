@@ -1,7 +1,8 @@
 """``_pricing_cache`` keys on the credential, not just the base URL.
 
-Nous ``/v1/models`` answers each caller with the catalog their org may reach,
-so an anonymous read, and two different tokens, must not share a cache entry.
+A governed endpoint answers each caller with the catalog its credential may
+reach, so an anonymous read, and two different tokens, must not share a cache
+entry.
 """
 
 from __future__ import annotations
@@ -155,27 +156,26 @@ class TestPeekCachedPricing:
         assert catalog == []
 
 
-class TestNousCatalogExpiry:
-    """A Nous catalog reflects the org's policy, which an admin can change while
-    a long-lived process holds the entry."""
+class TestTtlCatalogExpiry:
+    """A catalog fetched with a TTL reflects server-side state (an org's model
+    policy) that can change while a long-lived process holds the entry."""
 
     def test_entry_expires_so_a_policy_change_is_picked_up(self, catalog, monkeypatch):
-        from hermes_cli.models_pricing import _NOUS_CATALOG_TTL_SECONDS
-
+        ttl = 120
         fetch_models_with_pricing(
             api_key="sk-test", base_url=BASE,
-            cache_ttl_seconds=_NOUS_CATALOG_TTL_SECONDS,
+            cache_ttl_seconds=ttl,
         )
         assert len(catalog) == 1
 
         now = models_mod.time.monotonic()
         monkeypatch.setattr(
             models_mod.time, "monotonic",
-            lambda: now + _NOUS_CATALOG_TTL_SECONDS + 1,
+            lambda: now + ttl + 1,
         )
         fetch_models_with_pricing(
             api_key="sk-test", base_url=BASE,
-            cache_ttl_seconds=_NOUS_CATALOG_TTL_SECONDS,
+            cache_ttl_seconds=ttl,
         )
         assert len(catalog) == 2, "expired entry should be re-read"
 
@@ -197,15 +197,14 @@ class TestNousCatalogExpiry:
 
     def test_peek_skips_an_expired_entry(self, catalog, monkeypatch):
         """Reading _pricing_cache directly walked straight past the TTL."""
-        from hermes_cli.models_pricing import _NOUS_CATALOG_TTL_SECONDS
-
+        ttl = 120
         fetch_models_with_pricing(
             api_key="sk-test", base_url=BASE,
-            cache_ttl_seconds=_NOUS_CATALOG_TTL_SECONDS,
+            cache_ttl_seconds=ttl,
         )
         now = models_mod.time.monotonic()
         monkeypatch.setattr(
             models_mod.time, "monotonic",
-            lambda: now + _NOUS_CATALOG_TTL_SECONDS + 1,
+            lambda: now + ttl + 1,
         )
         assert peek_cached_pricing(BASE) == {}

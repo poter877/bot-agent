@@ -336,8 +336,6 @@ def test_auth_json_only_login_explains_instead_of_wizard(monkeypatch, capsys, tm
     ladder swallows the AuthError and falls through to a keyless OpenRouter fallback; the gate
     must still explain the real failure rather than treat the profile as a blank install.
     Control: the resolver's ``no_provider_configured`` still reaches the wizard."""
-    import dataclasses
-
     import hermes_cli.runtime_provider as rp
 
     monkeypatch.setenv("HERMES_HOME", str(tmp_path))
@@ -345,13 +343,12 @@ def test_auth_json_only_login_explains_instead_of_wizard(monkeypatch, capsys, tm
     for key in [k for k in os.environ if k.endswith("_API_KEY")]:
         monkeypatch.delenv(key, raising=False)
 
-    def _nous_fail():
-        raise AuthError("Hermes is not logged into Nous Portal.", provider="nous",
-                        code="nous_auth_missing", relogin_required=True)
+    def _qwen_fail():
+        raise AuthError("Qwen OAuth credentials failed.", provider="qwen-oauth",
+                        code="invalid_grant", relogin_required=True)
 
-    monkeypatch.setattr(rp, "resolve_provider", lambda *a, **kw: "nous")
-    monkeypatch.setitem(rp._OAUTH_RUNTIME_PROVIDERS, "nous",
-                        dataclasses.replace(rp._OAUTH_RUNTIME_PROVIDERS["nous"], resolve=_nous_fail))
+    monkeypatch.setattr(rp, "resolve_provider", lambda *a, **kw: "qwen-oauth")
+    monkeypatch.setattr(rp, "_resolve_oauth_runtime", lambda provider, *a, **k: (_ for _ in ()).throw(_qwen_fail()))
 
     cli = _import_cli()
     shell = _make_shell(cli, monkeypatch)
@@ -363,7 +360,7 @@ def test_auth_json_only_login_explains_instead_of_wizard(monkeypatch, capsys, tm
 
     shell._maybe_offer_first_run_setup()
     out = capsys.readouterr().out
-    assert "not logged into Nous Portal" in out
+    assert "Qwen OAuth credentials failed" in out
     assert t("cli.startup.first_run_no_provider") not in out
 
     offered = []
@@ -372,4 +369,4 @@ def test_auth_json_only_login_explains_instead_of_wizard(monkeypatch, capsys, tm
         AuthError("Hermes is not connected to any AI provider yet.", code="no_provider_configured")))
     shell._maybe_offer_first_run_setup()
     assert offered == [True]
-    assert "not logged into" not in capsys.readouterr().out
+    assert "credentials failed" not in capsys.readouterr().out

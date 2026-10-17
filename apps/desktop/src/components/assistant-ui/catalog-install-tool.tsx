@@ -1,40 +1,34 @@
 import type { ToolCallMessagePartProps } from '@assistant-ui/react'
 import { useStore } from '@nanostores/react'
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 
 import { useSessionView } from '@/app/chat/session-view'
-import { CatalogAdvancedDialog } from '@/components/assistant-ui/catalog-advanced-dialog'
-import { connectionRequestOwnsPart, useConnectorFocusHandoff } from '@/components/assistant-ui/connector-tool'
 import { ToolFallback } from '@/components/assistant-ui/tool/fallback'
+import { sessionOwnerFor } from '@/components/assistant-ui/use-connection-owner'
 import { WIDGET_SHELL_CLASS } from '@/components/chat/widget-shell'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { useI18n } from '@/i18n'
+import type { CatalogInstallTranslations, InstallPhase } from '@/i18n/types_catalog_install'
 import { Book, Loader2, Plug } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import { type AgentPluginInstallResult, installAgentPlugin } from '@/store/agent-plugins'
-import {
-  type CatalogEntry,
-  connectionOpOf,
-  connectionOwnerFor,
-  type ConnectionRequest,
-  type ConnectionTarget,
-  continueConnectionRequest,
-  respondToConnectionRequest,
-  toolConnectionRequest
-} from '@/store/connection-request'
 import { requestGatewayForAgent } from '@/store/gateway'
 import { notifyError } from '@/store/notifications'
 import { profileLabel } from '@/store/profile'
 
-type CatalogCopy = ReturnType<typeof useI18n>['t']['assistant']['catalogInstall']
-type CatalogTarget = ConnectionTarget & { catalog: CatalogEntry; kind: 'plugin' | 'skill' }
+import { parseMaybeObject } from './tool/fallback-model/format'
+
+type CatalogCopy = CatalogInstallTranslations
 
 const SHELL_CLASS = `${WIDGET_SHELL_CLASS} text-[length:var(--conversation-text-font-size)] text-(--ui-text-primary)`
 const CAPTION = 'text-[length:var(--conversation-caption-font-size)] leading-(--conversation-caption-line-height)'
 const PILL = 'inline-flex items-center rounded-full px-1.5 py-0.5 text-[0.62rem] font-medium leading-[0.93rem]'
 
 const KIND_GLYPH = { plugin: Plug, skill: Book } as const
+
+const TIERS = ['official', 'community'] as const
+const PHASES: readonly InstallPhase[] = ['downloading', 'python_packages', 'loading_tools']
 
 function platformName(platform: string): string {
   switch (platform.toLowerCase()) {
@@ -54,169 +48,188 @@ function platformName(platform: string): string {
   }
 }
 
-const isCatalogTarget = (target: ConnectionTarget): target is CatalogTarget => Boolean(target.catalog)
+/** One catalog row as the settled result carries it (`tools_mcp_plugins` catalog row contract). The
+ *  backend resolved the model's id; every word on a row is the backend's answer. */
+interface CatalogTarget {
+  alreadyInstalled: boolean
+  approved: { enable: boolean; force: boolean; ref: null | string } | null
+  description: string
+  detail: string
+  display: string
+  enabled: null | boolean
+  kind: 'plugin' | 'skill'
+  missingEnv: string[]
+  name: string
+  phase: InstallPhase | null
+  platforms: string[]
+  resolved: boolean
+  serverErrors: { error: string; name: string }[]
+  skill: null | string
+  state: string
+  targetProfile: null | string
+  tier: (typeof TIERS)[number] | null
+  tools: string[]
+}
 
-/** The row a successful settled Try again draws: the backend's install result for that retry, in the
- *  fields the runner's installed row carries (`tools/connectors/catalog.py::_installed_row`). */
-function retriedRow(target: CatalogTarget, result: AgentPluginInstallResult): CatalogTarget {
-  const servers = result.live.mcpServers
+const text = (value: unknown): string => (typeof value === 'string' ? value : '')
+
+const strings = (value: unknown): string[] =>
+  Array.isArray(value) ? value.flatMap(entry => (typeof entry === 'string' && entry ? [entry] : [])) : []
+
+/** Parse one settled row of a `manage_catalog` result. Rows the backend did not name are dropped. */
+function parseCatalogTarget(raw: unknown): CatalogTarget | null {
+  const row = parseMaybeObject(raw)
+  const name = text(row.name).trim()
+
+  if (!name) {
+    return null
+  }
+
+  const approvedRaw = parseMaybeObject(row.approved)
 
   return {
-    ...target,
-    catalog: {
-      ...target.catalog,
-      alreadyInstalled: false,
-      enabled: result.enabled ?? null,
-      missingEnv: result.missingEnv ?? [],
-      serverErrors: servers
-        .filter(server => !server.connected)
-        .map(({ error, name }) => ({ error: error ?? '', name })),
-      skill: result.skillIds?.[0] ?? null
-    },
-    detail: '',
-    state: 'connected',
-    tools: servers.filter(server => server.connected).flatMap(server => server.tools)
+    alreadyInstalled: row.already_installed === true,
+    approved:
+      approvedRaw.force === undefined && approvedRaw.enable === undefined
+        ? null
+        : {
+            enable: approvedRaw.enable === true,
+            force: approvedRaw.force === true,
+            ref: typeof approvedRaw.ref === 'string' ? approvedRaw.ref : null
+          },
+    description: text(row.description),
+    detail: text(row.detail),
+    display: text(row.display).trim() || name,
+    enabled: typeof row.enabled === 'boolean' ? row.enabled : null,
+    kind: text(row.kind) === 'skill' ? 'skill' : 'plugin',
+    missingEnv: strings(row.missing_env),
+    name,
+    phase: PHASES.find(candidate => candidate === row.phase) ?? null,
+    platforms: strings(row.platforms),
+    resolved: row.resolved === true,
+    serverErrors: (Array.isArray(row.server_errors) ? row.server_errors : []).flatMap(entry => {
+      const error = parseMaybeObject(entry)
+
+      return text(error.name) || text(error.error) ? [{ error: text(error.error), name: text(error.name) }] : []
+    }),
+    skill: text(row.skill) || null,
+    state: text(row.state) || 'pending',
+    targetProfile: text(row.target_profile).trim() || null,
+    tier: TIERS.find(candidate => candidate === row.tier) ?? null,
+    tools: strings(row.tools)
   }
 }
 
-/** `manage_catalog`: the host's catalog-install card. The model named ids; every word on a row is the
- *  host's resolution of that id. The card lives on the tool row that opened the operation only. */
+function readCatalogTargets(result: unknown): CatalogTarget[] {
+  const row = parseMaybeObject(result)
+  const targets = Array.isArray(row.targets) ? row.targets : []
+
+  return targets.flatMap(target => {
+    const parsed = parseCatalogTarget(target)
+
+    return parsed ? [parsed] : []
+  })
+}
+
+/** `manage_catalog`: the host's catalog-install rows, drawn from the call's own settled result. The
+ *  live consent card rode `connection.request`/`connection.respond`, which the gateway no longer
+ *  speaks — the approval flow covers that today, and this renders the operation's outcome. */
 export function CatalogInstallTool(props: ToolCallMessagePartProps) {
   const { t } = useI18n()
   const view = useSessionView()
   const runtimeId = useStore(view.$runtimeId)
-  const opId = connectionOpOf(props.args)
-  const running = props.result === undefined
-  // Only an install opens an operation; a search row that reuses an install's call id draws no card.
-  const opens = opId !== null || props.args.action === 'install'
 
-  const $request = useMemo(
-    () => toolConnectionRequest(runtimeId, props.toolCallId, opId, running),
-    [opId, props.toolCallId, running, runtimeId]
-  )
+  const rows = useMemo(() => (props.result === undefined ? [] : readCatalogTargets(props.result)), [props.result])
 
-  const request = useStore($request)
-
-  if (opens && request && connectionRequestOwnsPart(props, request)) {
-    return <CatalogInstallCard request={request} />
+  if (props.result !== undefined && !props.isError && rows.length > 0) {
+    return <CatalogInstallCard rows={rows} runtimeId={runtimeId} />
   }
 
-  // `tool.start` arrives before `connection.request`; a finished call with no card is plain history.
+  // While the call runs, consent rides the approval card; a finished call with no parsable rows is
+  // plain history and takes the generic row.
   if (props.result !== undefined || props.status?.type !== 'running') {
     return <ToolFallback {...props} />
   }
 
   return (
-    <div className={cn(SHELL_CLASS, 'my-1.5 flex max-w-lg items-center gap-2')} data-slot="connector-card">
+    <div className={cn(SHELL_CLASS, 'my-1.5 flex max-w-lg items-center gap-2')} data-catalog-card>
       <Loader2 aria-hidden className="size-4 animate-spin text-(--ui-text-tertiary) motion-reduce:animate-none" />
       <span className="text-(--ui-text-tertiary)">{t.assistant.catalogInstall.preparing}</span>
     </div>
   )
 }
 
-export function CatalogInstallCard({ request }: { request: ConnectionRequest }) {
+function CatalogInstallCard({ rows, runtimeId }: { rows: CatalogTarget[]; runtimeId: null | string }) {
   const { t } = useI18n()
-  const cardRef = useRef<HTMLDivElement | null>(null)
-  const rows = request.targets.filter(isCatalogTarget)
-  const unresolved = rows.some(target => !target.catalog.resolved)
-  const profile = rows[0]?.catalog.targetProfile
-
-  useConnectorFocusHandoff(request.targets, cardRef)
+  const profile = rows[0]?.targetProfile
 
   return (
-    <div className="my-2 grid min-w-0 max-w-lg gap-4.5" data-catalog-card data-connector-offer ref={cardRef}>
+    <div className="my-2 grid min-w-0 max-w-lg gap-4.5" data-catalog-card>
       {rows.map(target => (
-        <CatalogRow key={target.name} request={request} target={target} />
+        <CatalogRow key={target.name} runtimeId={runtimeId} target={target} />
       ))}
-      <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 px-3.5">
-        {unresolved && !request.settled ? (
-          <Button onClick={() => void continueConnectionRequest(request)} size="xs" variant="textStrong">
-            {t.common.continue}
-          </Button>
-        ) : null}
-        {profile ? (
+      {profile ? (
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 px-3.5">
           <span className={cn(CAPTION, 'text-(--ui-text-tertiary)')}>
             {t.assistant.catalogInstall.targetProfile(profileLabel({ name: profile }))}
           </span>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
     </div>
   )
 }
 
 interface CatalogRowProps {
-  request: ConnectionRequest
+  runtimeId: null | string
   target: CatalogTarget
 }
 
-/** One catalog item: what it is, what the agent can do with it, and one decision. */
-export function CatalogRow({ request, target }: CatalogRowProps) {
+/** One catalog item: what it is, and what happened to it. */
+function CatalogRow({ runtimeId, target: initialTarget }: CatalogRowProps) {
   const { t } = useI18n()
   const copy = t.assistant.catalogInstall
-  const { catalog } = target
-  const [advancedOpen, setAdvancedOpen] = useState(false)
-  // The operation and seq an answer was sent at; the verbs stay held until a newer frame of that
-  // operation answers it, so a second click cannot send the answer twice. Keyed by op so a seq from
-  // another operation can never hold this row.
-  const [sentAt, setSentAt] = useState<null | { opId: string; seq: number }>(null)
-  // Try again on a failed plugin row after the operation settled: a fresh host install (which enables a
-  // plugin already on disk). The settled operation is frozen, so the row draws that install's result.
-  const [retry, setRetry] = useState<null | { row: CatalogTarget; status: 'done' } | { status: 'running' }>(null)
-  const sending = (sentAt?.opId === request.opId && request.seq <= sentAt.seq) || retry?.status === 'running'
+  // Try again on a failed plugin row redraws the row with the fresh install's result.
+  const [target, setTarget] = useState(initialTarget)
+  const [retrying, setRetrying] = useState(false)
   const Glyph = KIND_GLYPH[target.kind]
 
-  const answer = async (status: 'approved' | 'skipped', env: Record<string, string> | null = null) => {
-    setSentAt({ opId: request.opId, seq: request.seq })
-
-    try {
-      const sent = await respondToConnectionRequest(request, { targets: [{ env, name: target.name, status }] })
-
-      if (!sent) {
-        setSentAt(null)
-      }
-    } catch (error) {
-      notifyError(error, copy.sendFailed)
-      setSentAt(null)
-    }
-  }
-
-  const retrySettled = async () => {
-    setRetry({ status: 'running' })
-    const owner = request.sessionId ? await connectionOwnerFor(request.sessionId, 'plugins.manage') : null
-
-    if (!owner) {
-      setRetry({ row: { ...target, detail: copy.sendFailed }, status: 'done' })
-
+  const retry = () => {
+    if (runtimeId === null) {
       return
     }
 
-    // The choices the user approved on this row, so the retry installs what they asked for.
-    const approved = catalog.approved
+    setRetrying(true)
 
-    const result = await installAgentPlugin(
-      (method, params, timeoutMs) =>
-        requestGatewayForAgent(owner.connectionId, owner.profile, method, params, timeoutMs),
-      {
-        catalogName: target.name,
-        enable: approved?.enable,
-        force: approved?.force,
-        identifier: '',
-        profile: catalog.targetProfile,
-        ref: approved?.ref ?? undefined
-      }
-    )
+    sessionOwnerFor(runtimeId, 'plugins.manage')
+      .then(async owner => {
+        if (!owner) {
+          setTarget(current => ({ ...current, detail: copy.sendFailed }))
 
-    const row = result.ok ? retriedRow(target, result) : { ...target, detail: result.error || target.detail }
-    setRetry({ row, status: 'done' })
+          return
+        }
+
+        const result = await installAgentPlugin(
+          (method, params, timeoutMs) =>
+            requestGatewayForAgent(owner.connectionId, owner.profile, method, params, timeoutMs),
+          {
+            catalogName: target.name,
+            enable: target.approved?.enable,
+            force: target.approved?.force,
+            identifier: '',
+            profile: target.targetProfile,
+            ref: target.approved?.ref ?? undefined
+          }
+        )
+
+        if (result.ok) {
+          setTarget(current => installedRow(current, result))
+        } else {
+          setTarget(current => ({ ...current, detail: result.error || current.detail }))
+        }
+      })
+      .catch(error => notifyError(error, copy.sendFailed))
+      .finally(() => setRetrying(false))
   }
-
-  const shown = retry?.status === 'done' ? retry.row : target
-
-  const onRetry = !request.settled
-    ? () => void answer('approved')
-    : target.kind === 'plugin'
-      ? () => void retrySettled()
-      : undefined
 
   return (
     <div className={cn(SHELL_CLASS, 'grid min-w-0 gap-1.5')} data-connector-row={target.name} tabIndex={-1}>
@@ -229,21 +242,19 @@ export function CatalogRow({ request, target }: CatalogRowProps) {
         </span>
         <div className="grid min-w-0 flex-1 gap-0.5">
           <div className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-1">
-            <span className="font-medium leading-4.5 wrap-anywhere">{catalog.display}</span>
+            <span className="font-medium leading-4.5 wrap-anywhere">{target.display}</span>
             <span className={cn(PILL, 'bg-(--ui-bg-quaternary) text-muted-foreground')}>{copy.kind[target.kind]}</span>
-            {catalog.tier ? (
-              <span className={cn(PILL, 'bg-(--ui-bg-quaternary) text-muted-foreground')}>
-                {copy.tier[catalog.tier]}
-              </span>
+            {target.tier ? (
+              <span className={cn(PILL, 'bg-(--ui-bg-quaternary) text-muted-foreground')}>{copy.tier[target.tier]}</span>
             ) : null}
-            {catalog.platforms.map(platform => (
+            {target.platforms.map(platform => (
               <span className={cn(PILL, 'bg-primary/8 text-primary')} key={platform}>
                 {platformName(platform)}
               </span>
             ))}
           </div>
-          {catalog.description ? (
-            <p className="leading-4.5 text-(--ui-text-secondary) wrap-anywhere">{catalog.description}</p>
+          {target.description ? (
+            <p className="leading-4.5 text-(--ui-text-secondary) wrap-anywhere">{target.description}</p>
           ) : null}
         </div>
       </div>
@@ -251,51 +262,20 @@ export function CatalogRow({ request, target }: CatalogRowProps) {
       <div className="min-w-0 pl-13">
         <RowOutcome
           copy={copy}
-          onAdvanced={() => setAdvancedOpen(true)}
-          onInstall={() => void answer('approved')}
-          onRetry={onRetry}
-          onSkip={() => void answer('skipped')}
+          onRetry={target.kind === 'plugin' ? retry : undefined}
+          retrying={retrying}
           retryLabel={t.connectors.retry}
-          sending={sending}
-          settled={request.settled}
           skippedLabel={t.connectors.skipped}
-          target={shown}
+          target={target}
           toolCount={t.assistant.mcpSetup.toolCount}
         />
       </div>
-
-      <CatalogAdvancedDialog
-        entry={catalog}
-        fields={target.requiredEnv}
-        kind={target.kind}
-        onCancel={() => setAdvancedOpen(false)}
-        onInstall={env => {
-          setAdvancedOpen(false)
-          void answer('approved', env)
-        }}
-        open={advancedOpen}
-      />
     </div>
   )
 }
 
-interface RowOutcomeProps {
-  copy: CatalogCopy
-  onAdvanced: () => void
-  onInstall: () => void
-  /** Try again on a failed row; absent when nothing can run it again. */
-  onRetry?: () => void
-  onSkip: () => void
-  retryLabel: string
-  sending: boolean
-  skippedLabel: string
-  settled: boolean
-  target: CatalogTarget
-  toolCount: (count: number) => string
-}
-
 /** What an installed row still needs, worded from the backend's facts. */
-function installedNotes(catalog: CatalogEntry, copy: CatalogCopy): string[] {
+function installedNotes(catalog: CatalogTarget, copy: CatalogCopy): string[] {
   return [
     ...catalog.serverErrors.map(({ error, name }) => copy.serverNotConnected(name, error)),
     ...(catalog.enabled === false ? [copy.notEnabled] : []),
@@ -304,31 +284,55 @@ function installedNotes(catalog: CatalogEntry, copy: CatalogCopy): string[] {
   ]
 }
 
-/** The third line: the verbs while the row waits on the user, else what happened to it. */
+/** The row a successful retry draws: the install's result, in the fields the settled row carries. */
+function installedRow(previous: CatalogTarget, result: AgentPluginInstallResult): CatalogTarget {
+  const servers = result.live.mcpServers
+
+  return {
+    ...previous,
+    alreadyInstalled: false,
+    detail: '',
+    enabled: result.enabled ?? null,
+    missingEnv: result.missingEnv ?? [],
+    serverErrors: servers
+      .filter(server => !server.connected)
+      .map(({ error, name }) => ({ error: error ?? '', name })),
+    skill: result.skillIds?.[0] ?? null,
+    state: 'connected',
+    tools: servers.filter(server => server.connected).flatMap(server => server.tools)
+  }
+}
+
+/** Try again on a failed plugin row draws a fresh host install's result; the state lives on the row. */
+
+/** The third line: what happened to the row. */
 function RowOutcome({
   copy,
-  onAdvanced,
-  onInstall,
   onRetry,
-  onSkip,
+  retrying,
   retryLabel,
-  sending,
-  settled,
   skippedLabel,
   target,
   toolCount
-}: RowOutcomeProps) {
+}: {
+  copy: CatalogCopy
+  onRetry?: () => void
+  retrying: boolean
+  retryLabel: string
+  skippedLabel: string
+  target: CatalogTarget
+  toolCount: (count: number) => string
+}) {
   const [namesOpen, setNamesOpen] = useState(false)
 
   if (target.state === 'connected') {
-    const { skill } = target.catalog
-    const notes = installedNotes(target.catalog, copy)
-
     const parts = [
       copy.installed,
       target.tools.length > 0 ? toolCount(target.tools.length) : '',
-      skill ? copy.skill(skill) : ''
+      target.skill ? copy.skill(target.skill) : ''
     ]
+
+    const notes = installedNotes(target, copy)
 
     return (
       <div className="grid min-w-0 gap-1">
@@ -370,11 +374,11 @@ function RowOutcome({
         <p className={cn(CAPTION, 'min-w-0 text-destructive wrap-anywhere')} role="status">
           {target.detail ? `${copy.failed} · ${target.detail}` : copy.failed}
         </p>
-        {onRetry ? (
+        {target.kind === 'plugin' && onRetry ? (
           <Button
             className="h-6 px-1.5 text-(--ui-text-tertiary)"
-            disabled={sending}
-            loading={sending}
+            disabled={retrying}
+            loading={retrying}
             onClick={onRetry}
             size="xs"
             variant="ghost"
@@ -394,40 +398,19 @@ function RowOutcome({
     )
   }
 
-  if (settled) {
-    return <p className={cn(CAPTION, 'text-(--ui-text-tertiary)')}>{copy.notInstalled}</p>
-  }
-
-  if (target.state === 'initiated' || sending) {
+  if (target.state === 'initiated' && target.phase) {
     return (
       <div className="grid min-w-0 gap-1.5" role="status">
         <p className={cn(CAPTION, 'text-(--ui-text-tertiary)')}>{copy.installing}</p>
         <Progress animated aria-label={copy.installing} className="h-0.5 bg-primary/15" indeterminate />
-        {target.state === 'initiated' && target.catalog.phase ? (
-          <p className={cn(CAPTION, 'text-(--ui-text-quaternary)')}>{copy.phase[target.catalog.phase]}</p>
-        ) : null}
+        <p className={cn(CAPTION, 'text-(--ui-text-quaternary)')}>{copy.phase[target.phase]}</p>
       </div>
     )
   }
 
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
-      <span className="inline-flex h-6 items-stretch overflow-hidden rounded-md border border-primary/25 bg-primary/10 text-primary">
-        <Button
-          className="h-full rounded-none px-2 text-xs font-medium text-primary hover:bg-primary/15 hover:text-primary"
-          onClick={onInstall}
-          size="xs"
-          variant="ghost"
-        >
-          {copy.install}
-        </Button>
-      </span>
-      <Button className="h-6 px-1.5 text-(--ui-text-tertiary)" onClick={onAdvanced} size="xs" variant="ghost">
-        {copy.advanced}
-      </Button>
-      <Button className="h-6 px-1.5 text-(--ui-text-tertiary)" onClick={onSkip} size="xs" variant="ghost">
-        {copy.skip}
-      </Button>
-    </div>
+    <p className={cn(CAPTION, 'text-(--ui-text-tertiary)')} role="status">
+      {copy.notInstalled}
+    </p>
   )
 }

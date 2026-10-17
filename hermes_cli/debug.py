@@ -394,10 +394,6 @@ def collect_debug_report(
     return buf.getvalue()
 
 
-# Nous-S3 envelope format id; the discord-support viewer keys off it.
-_NOUS_BUNDLE_FORMAT = "hermes-debug-share/1"
-
-
 def collect_share_bundle(log_lines: int = 200, redact: bool = True) -> dict[str, str]:
     """Collect the debug report + full logs as a label→text mapping.
 
@@ -416,15 +412,6 @@ def collect_share_bundle(log_lines: int = 200, redact: bool = True) -> dict[str,
             filename = LOG_FILES.get(name, f"{name}.log")
             bundle[filename] = banner + dump_text + f"\n\n--- full {filename} ---\n" + full
     return bundle
-
-
-def build_nous_bundle(bundle: dict[str, str], redact: bool = True) -> bytes:
-    """Gzip a :func:`collect_share_bundle` mapping into the Nous envelope (shape parsed by the
-    discord-support viewer — keep it stable)."""
-    envelope = {"format": _NOUS_BUNDLE_FORMAT, "redacted": bool(redact),
-                "created": datetime.datetime.now(datetime.UTC).isoformat(),
-                "files": bundle}
-    return gzip.compress(json.dumps(envelope).encode("utf-8"))
 
 
 @dataclass
@@ -525,8 +512,6 @@ def run_debug_share(args):
                 print(body)
         return
 
-    if getattr(args, "nous", False):
-        return _run_debug_share_nous(args, log_lines=log_lines, redact=redact)
     print(_PRIVACY_NOTICE)
     if not _confirm_upload(args):
         return
@@ -555,61 +540,6 @@ def run_debug_share(args):
         print(f"\n⏱  Pastes will auto-delete in {result.auto_delete_seconds // 3600} hours.\n"
               "To delete now:  hermes debug delete <url>\n"
               "\nShare these links with the Hermes team for support.")
-
-
-_NOUS_PRIVACY_NOTICE = """\
-⚠️  --nous: This uploads your debug bundle to Nous-INTERNAL storage (AWS S3),
-    NOT a public paste service. The following is included:
-  • System info (OS, Python/Hermes version, provider, which API keys are
-    configured — NOT the actual keys)
-  • Full agent.log, gateway.log, and desktop.log (up to 512 KB each — likely
-    contains conversation content, tool outputs, and file paths), plus
-    update.log and desktop-update-handoff.log when present (update/hand-off
-    output — the root cause of update failures)
-
-  • The bundle is viewable only by Nous staff (and allowlisted Discord mods)
-    via a Google-login-gated viewer.
-  • It is NOT a public paste — there is no public URL to the contents.
-  • It auto-deletes after 14 days.
-"""
-
-
-def _run_debug_share_nous(args, *, log_lines: int, redact: bool) -> None:
-    """``hermes debug share --nous``: gzip the same bundle into the Nous envelope → Nous-S3."""
-    from hermes_cli.diagnostics_upload import share_to_nous
-    print(_NOUS_PRIVACY_NOTICE)
-    if not _confirm_upload(args):
-        return
-    if not redact:
-        print("⚠️  --no-redact is set: secrets in your logs will NOT be redacted before upload.\n")
-    print("Collecting debug report...")
-    _best_effort_sweep_expired_pastes()
-    bundle = collect_share_bundle(log_lines=log_lines, redact=redact)
-    if redact:
-        logger.info("hermes debug share --nous: applied force-mode redaction before upload")
-    print("Uploading to Nous diagnostics storage...")
-    try:
-        res = share_to_nous(build_nous_bundle(bundle, redact=redact))
-    except Exception as exc:
-        error = redact_debug_support_text(exc)
-        print(f"\nNous upload failed: {error}\n"
-              "\nThe Nous diagnostics service may be unavailable or not yet provisioned.\n"
-              "Run `hermes debug share --local` to print the report instead, "
-              "or `hermes debug share` to upload to a public paste service.\n", file=sys.stderr)
-        sys.exit(1)
-    view_url = res.get("viewUrl") or res.get("view_url")
-    expires_at = res.get("expiresAt") or res.get("expires_at")
-    print("\nDebug bundle uploaded to Nous (private):")
-    print(f"  View URL  {view_url}" if view_url
-          else f"  (no view URL returned; upload id: {res.get('id', '?')})")
-    print(f"\n⏱  Auto-deletes at {expires_at} (14-day retention)." if expires_at
-          else "\n⏱  Auto-deletes after 14 days.")
-    print("\nShare this private link with the Nous team — only Nous staff "
-          "(via Google login) can open it.\n"
-          "\nPick up the discussion in:\n"
-          "  GitHub Issues        https://github.com/NousResearch/hermes-agent/issues\n"
-          "  Nous Portal Support  https://portal.nousresearch.com/help\n"
-          "  Discord              https://discord.gg/NousResearch")
 
 
 def run_debug_delete(args):
@@ -657,8 +587,6 @@ Options (share):
   --lines N    Number of log lines to include (default: 200)
   --expire N   dpaste.com fallback retention in days (default: 1)
   --local      Print report locally instead of uploading
-  --nous       Upload to Nous-internal storage (private, staff-only,
-               auto-deletes in 14 days) instead of a public paste
   --no-redact  Disable upload-time secret redaction (default: redact)
 
 Options (delete):

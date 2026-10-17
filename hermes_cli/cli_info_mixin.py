@@ -201,13 +201,6 @@ class CLIInfoMixin:
                 fix = t("cli.banner.fix_config")
             self._console_print(f"[dim]   {fix}[/]")
 
-        from hermes_cli.model_switch import is_nous_hermes_non_agentic
-        if is_nous_hermes_non_agentic(getattr(self, "model", "") or ""):
-            self._console_print()
-            self._console_print(f"[bold yellow]{t('cli.banner.hermes_models_not_agentic')}[/]")
-            self._console_print(f"[dim]   {t('cli.banner.hermes_models_lack_tools')}[/]")
-            self._console_print(f"[dim]   {t('cli.banner.hermes_models_switch_hint')}[/]")
-
         # Project-local skills one-liner: trusted → count; untrusted-with-skills → point at
         # `hermes skills trust`. Never raises.
         try:
@@ -695,20 +688,13 @@ class CLIInfoMixin:
         print()
 
     def _show_usage(self):
-        """Rate limits + session token usage (when a live agent exists) + Nous credits.
-
-        The Nous credits block is agent-independent (portal fetch), so it runs even with no live
-        agent — the TUI's /usage slash-worker resumes the session WITHOUT building an agent.
-        """
+        """Rate limits + session token usage (when a live agent exists)."""
         from cli import datetime, format_duration_compact
 
         def _credits_or(fallback: str) -> None:
             # Account limits (e.g. Codex subscription windows) need only the configured provider
             # plus on-disk credentials, so they render without a live agent too (#42904).
-            shown = self._print_account_limits()
-            if self._print_nous_credits_block():
-                self._print_usage_cta()
-            elif not shown:
+            if not self._print_account_limits():
                 print(fallback)
 
         if not self.agent:
@@ -762,9 +748,6 @@ class CLIInfoMixin:
         print(f"  {t('cli.usage.label_compressions'):<17} {compressor.compression_count}")
 
         self._print_account_limits()
-
-        if self._print_nous_credits_block():
-            self._print_usage_cta()
 
         if self.verbose:
             logging.getLogger().setLevel(logging.DEBUG)

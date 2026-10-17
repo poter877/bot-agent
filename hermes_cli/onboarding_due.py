@@ -5,7 +5,7 @@ with every other boot thread for the same provider reads. The serve boot works i
 thread (:func:`begin_boot`), and ``onboarding.state`` reads the cached answer, waiting a bounded
 time for a boot computation still in flight. Every writer that can move the answer calls
 :func:`invalidate`: the root ``onboarding.run`` (``onboarding_run.set_run``), the OS user's marker
-(``install_state``) and the setup record (``free_tier_bootstrap``). The next reader then computes
+(``install_state``) and the setup record. The next reader then computes
 live once and caches that. A *stamp* the caller passes (the files the answer reads) catches edits
 no writer in this process saw, such as a key typed into ``.env`` by hand. It is taken before and
 after each computation, and an answer is cached only when the files held still in between: one

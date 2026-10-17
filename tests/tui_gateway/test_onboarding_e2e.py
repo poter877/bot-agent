@@ -72,6 +72,8 @@ def test_every_beat_from_the_name_card_to_done(chat):
     observe_tool_result(chat.agent, "set_theme", {"layout": "terminal-deck"},
                         json.dumps({"success": True, "applied": {"layout": "terminal-deck"}}))
 
+    # One call offers the look-around (the pinned slugs ride the tool args) and the desktop's
+    # reply carries the user's answer once the card is up.
     connectors = beat(chat, {"answer": {"connected": ["slack"], "newly_connected": ["slack"]}},
                       beat="connectors", suggest=["slack", "outlook"])
     assert connectors["next"] == "plugins"

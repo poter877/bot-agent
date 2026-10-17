@@ -81,8 +81,9 @@ def _post_enroll(
             pass
         if exc.code == 401:
             message = (
-                "Connector rejected the caller identity (401). Your Nous Portal "
-                "token could not be verified — try `hermes auth add nous` and retry."
+                "Connector rejected the caller identity (401). Your relay identity "
+                "token could not be verified — check your configured identity provider "
+                "(gateway.idp.token_url) and retry."
             )
         elif exc.code == 403:
             message = detail or "Enrollment token invalid, expired, already used, or tenant mismatch (403)."
@@ -138,7 +139,7 @@ def cmd_gateway_enroll(args) -> None:
 
     # Caller-identity token (proves the tenant). ``gateway.relay`` owns the ONE resolver shared with
     # the runtime self-provision path: generic OIDC client-credentials when ``gateway.idp.token_url``
-    # is set (air-gapped / self-hosted IdP), otherwise Nous Portal.
+    # is set (air-gapped / self-hosted IdP).
     try:
         from gateway.relay import _resolve_relay_identity_token
 
@@ -146,10 +147,10 @@ def cmd_gateway_enroll(args) -> None:
     except AuthError as exc:
         if getattr(exc, "relogin_required", False):
             _fail(
-                "✗ You're not logged into Nous Portal.",
-                "  Run `hermes setup` (or `hermes auth add nous`) first, then retry.",
+                "✗ Your relay identity sign-in has expired.",
+                "  Re-authenticate with your provider (`hermes model`), then retry.",
             )
-        _fail(f"✗ Could not resolve a Nous Portal access token: {exc}")
+        _fail(f"✗ Could not resolve a caller-identity token: {exc}")
     except Exception as exc:
         _fail(f"✗ Could not resolve a caller-identity token: {exc}")
 

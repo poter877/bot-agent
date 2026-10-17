@@ -9,24 +9,13 @@ import {
   quickActionById,
   sameSet
 } from './derive-tools'
-import type {
-  QuickAction,
-  QuickActionId,
-  ToolRowModel,
-  ToolsEditorCounts,
-  ToolsEditorPhase,
-  ToolsEditorStatus
-} from './types'
+import type { QuickAction, QuickActionId, ToolRowModel, ToolsEditorCounts, ToolsEditorPhase, ToolsEditorStatus } from './types'
 
-export type SaveResult = 'conflict' | 'failed' | 'saved'
-
-export interface SaveOptions {
-  overwrite: boolean
-}
+export type SaveResult = 'failed' | 'saved'
 
 export interface UseToolsEditorOptions {
   editorKey?: string
-  onSave: (disabled: string[], options: SaveOptions) => Promise<SaveResult>
+  onSave: (disabled: string[]) => Promise<SaveResult>
   savedDisabled: readonly string[]
   status?: ToolsEditorStatus | null
   tools: readonly ToolRowModel[]
@@ -39,7 +28,6 @@ export interface ToolsEditor {
   dirty: boolean
   discard: () => void
   isOn: (slug: string) => boolean
-  keepMine: () => Promise<SaveResult>
   local: string[]
   phase: ToolsEditorPhase
   save: () => Promise<SaveResult>
@@ -47,18 +35,11 @@ export interface ToolsEditor {
   toggleFacet: (facet: string, on: boolean) => void
 }
 
-export function useToolsEditor({
-  editorKey,
-  onSave,
-  savedDisabled,
-  status,
-  tools
-}: UseToolsEditorOptions): ToolsEditor {
+export function useToolsEditor({ editorKey, onSave, savedDisabled, status, tools }: UseToolsEditorOptions): ToolsEditor {
   const [local, setLocal] = useState<string[]>([...savedDisabled])
   const [baseline, setBaseline] = useState<string[]>([...savedDisabled])
-  const [editing, setEditing] = useState<'conflict' | 'ready' | 'saving'>('ready')
+  const [editing, setEditing] = useState<'ready' | 'saving'>('ready')
   const [pressed, setPressed] = useState<QuickActionId | null>(null)
-  const [overwrite, setOverwrite] = useState(false)
 
   const savedKey = `${editorKey ?? ''}\u0000${[...savedDisabled].sort().join('\u0000')}`
 
@@ -67,7 +48,6 @@ export function useToolsEditor({
     setBaseline([...savedDisabled])
     setEditing('ready')
     setPressed(null)
-    setOverwrite(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedKey])
 
@@ -79,14 +59,10 @@ export function useToolsEditor({
 
   const toggle = useCallback(
     (slug: string) => {
-      if (byslug.get(slug)?.lockedBy) {
-        return
-      }
-
       setPressed(null)
       setLocal(previous => (previous.includes(slug) ? previous.filter(s => s !== slug) : [...previous, slug]))
     },
-    [byslug]
+    []
   )
 
   const toggleFacet = useCallback(
@@ -112,7 +88,7 @@ export function useToolsEditor({
         const kept = previous.filter(slug => {
           const tool = byslug.get(slug)
 
-          return tool !== undefined && (isUntouchedByQuickActions(tool) || tool.lockedBy !== null)
+          return tool !== undefined && isUntouchedByQuickActions(tool)
         })
 
         return [...new Set([...kept, ...expandQuickAction(action, tools)])]
@@ -125,39 +101,23 @@ export function useToolsEditor({
     setLocal(baseline)
     setEditing('ready')
     setPressed(null)
-    setOverwrite(false)
   }, [baseline])
 
-  const write = useCallback(
-    async (asOverwrite: boolean) => {
-      setEditing('saving')
+  const save = useCallback(async () => {
+    setEditing('saving')
 
-      const result = await onSave(local, { overwrite: asOverwrite })
+    const result = await onSave(local)
 
-      setEditing(result === 'conflict' ? 'conflict' : 'ready')
+    if (result === 'saved') {
+      setBaseline(local)
+    }
 
-      if (result === 'saved') {
-        setBaseline(local)
-        setOverwrite(false)
-      }
+    setEditing('ready')
 
-      return result
-    },
-    [local, onSave]
-  )
+    return result
+  }, [local, onSave])
 
-  const keepMine = useCallback(() => {
-    setOverwrite(true)
-
-    return write(true)
-  }, [write])
-
-  const save = useCallback(() => write(overwrite), [overwrite, write])
-
-  const isOn = useCallback(
-    (slug: string) => byslug.get(slug)?.lockedBy === null && !disabledSet.has(slug),
-    [byslug, disabledSet]
-  )
+  const isOn = useCallback((slug: string) => !disabledSet.has(slug), [disabledSet])
 
   return {
     applyQuickAction,
@@ -166,7 +126,6 @@ export function useToolsEditor({
     dirty,
     discard,
     isOn,
-    keepMine,
     local,
     phase: status ?? editing,
     save,

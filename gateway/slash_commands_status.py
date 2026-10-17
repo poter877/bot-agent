@@ -1,4 +1,4 @@
-"""Read-only gateway introspection commands: /status, /context, /usage, /agents, /insights, /topup.
+"""Read-only gateway introspection commands: /status, /context, /usage, /agents, /insights.
 Bound onto ``GatewayRunner`` through ``GatewaySlashCommandsMixin``."""
 
 from __future__ import annotations
@@ -199,13 +199,9 @@ def _agents_delegation_lines(d: dict) -> list[str]:
 
 
 def _usage_agent_stats_lines(agent) -> list[str]:
-    """/usage session block for a live agent: rate limits, token breakdown (matches the CLI),
+    """/usage session block for a live agent: token breakdown (matches the CLI),
     context window and compression count."""
     lines: list[str] = []
-    rl_state = agent.get_rate_limit_state()
-    if rl_state and rl_state.has_data:
-        from agent.rate_limit_tracker import format_rate_limit_compact
-        lines += [t("gateway.usage.rate_limits", state=format_rate_limit_compact(rl_state)), ""]
     lines += [
         t("gateway.usage.header_session"),
         t("gateway.usage.label_model", model=agent.model),
@@ -237,7 +233,7 @@ def _capped_rows(items: list, render) -> list[str]:
 
 
 class GatewayStatusCommandsMixin:
-    """Read-only gateway introspection commands: /status, /context, /usage, /agents, /insights, /topup."""
+    """Read-only gateway introspection commands: /status, /context, /usage, /agents, /insights."""
 
     async def _handle_status_command(self, event: MessageEvent) -> str:
         """Handle /status command."""
@@ -482,21 +478,6 @@ class GatewayStatusCommandsMixin:
             lines += ["", t("gateway.agents.none")]
         return "\n".join(lines)
 
-    async def _handle_topup_command(self, event: MessageEvent) -> str:
-        """Handle /topup -- show the Nous balance and hand off to the portal. Does NOT charge, confirm,
-        or track payment (that happens in the browser; the next /topup shows the new balance)."""
-        from agent.account_usage import build_credits_view
-        view = await _quiet(lambda: asyncio.to_thread(build_credits_view, markdown=True))
-        if view is None or not view.logged_in:
-            return t("gateway.credits.not_logged_in")
-        # Drop the helper's 📈 header; we print our own.
-        lines = [t("gateway.topup.header")] + [ln for ln in view.balance_lines if not ln.lstrip().startswith("📈")]
-        if view.identity_line:
-            lines += ["", view.identity_line]
-        if view.topup_url:
-            lines += ["", t("gateway.topup.portal_link", url=view.topup_url), t("gateway.topup.hint")]
-        return "\n".join(lines)
-
     def _context_breakdown_block(self, agent, source, expanded: bool) -> list[str]:
         """/context per-category block (plain text, chars/4 estimate, same engine as /usage).
         Runs in a thread; returns [] and never raises."""
@@ -598,19 +579,11 @@ class GatewayStatusCommandsMixin:
             render_account_usage_lines(account_snapshot, markdown=True) if account_snapshot else []
         )
 
-        # Nous credits + monthly-grant gauge (shared with CLI/TUI). Gates on "a Nous account is
-        # logged in" — NOT the inference provider — so a Nous user inferring elsewhere still sees
-        # a balance. Fail-open: never break /usage.
-        from agent.account_usage import nous_credits_lines
-        credits_lines = await _quiet(lambda: asyncio.to_thread(nous_credits_lines, markdown=True), [])
-
         def _with_account_blocks(lines: list[str]) -> str:
-            # Each block is preceded by a blank divider only when something precedes it.
-            for block in (account_lines, credits_lines):
-                if block:
-                    if lines:
-                        lines.append("")
-                    lines.extend(block)
+            if account_lines:
+                if lines:
+                    lines.append("")
+                lines.extend(account_lines)
             return "\n".join(lines)
         if agent and hasattr(agent, "session_total_tokens") and agent.session_api_calls > 0:
             lines = _usage_agent_stats_lines(agent)
@@ -635,7 +608,7 @@ class GatewayStatusCommandsMixin:
                 t("gateway.usage.label_estimated_context", count=_fmt(approx)),
                 t("gateway.usage.detailed_after_first"),
             ])
-        if account_lines or credits_lines:
+        if account_lines:
             return _with_account_blocks([])
         return t("gateway.usage.no_data")
 

@@ -118,22 +118,6 @@ def _restore_auth_json(src: Path, dst: Path) -> bool:
     ):
         logger.error("Refusing auth.json restore from %s: unrecognized auth-store shape", src)
         return False
-    # Legacy "systems" stores are still valid snapshot input. Mirror auth._load_auth_store's
-    # migration without asking that loader to create a .corrupt sidecar inside the snapshot.
-    if (
-        not isinstance(snapshot_store.get("providers"), dict)
-        and not isinstance(snapshot_store.get("credential_pool"), dict)
-        and isinstance(snapshot_store.get("systems"), dict)
-    ):
-        systems = snapshot_store["systems"]
-        providers = {"nous": systems["nous_portal"]} if "nous_portal" in systems else {}
-        # Match auth._load_auth_store's migration shape exactly: the legacy
-        # "systems" container itself is obsolete and must not be written back.
-        snapshot_store = {
-            "providers": providers,
-            "active_provider": "nous" if providers else None,
-        }
-
     try:
         from hermes_cli.auth import _auth_store_lock, _load_auth_store, _save_auth_store
         from hermes_cli.auth_oauth_grants import (

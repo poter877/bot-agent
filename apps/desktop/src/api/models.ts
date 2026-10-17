@@ -64,13 +64,11 @@ export function getGlobalModelOptions(
 export interface RecommendedDefaultModel {
   provider: string
   model: string
-  /** True/false for Nous (free vs paid tier); null for other providers. */
-  free_tier: boolean | null
 }
 
 // Recommended default model for a freshly-authenticated provider. Mirrors the
-// curation `hermes model` does — for Nous it honors the free/paid tier so a
-// free user gets a free model instead of a paid default.
+// curation `hermes model` does, so onboarding lands on the curated silent
+// default instead of the aggregator list's priciest flagship.
 export function getRecommendedDefaultModel(provider: string, profile?: ProfileScope): Promise<RecommendedDefaultModel> {
   return window.hermesDesktop.api<RecommendedDefaultModel>({
     ...capabilityScoped(profile),

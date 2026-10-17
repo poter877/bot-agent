@@ -13,7 +13,6 @@ from typing import Any, Dict, Optional, Tuple
 from tools.tts_command_provider import (
     BUILTIN_TTS_PROVIDERS, DEFAULT_COMMAND_TTS_OUTPUT_FORMAT, _get_named_provider_config,
     _is_command_provider_config)
-from tools.tool_backend_helpers import NOUS_MANAGED_PROVIDER
 
 logger = logging.getLogger("tools.tts_tool")
 
@@ -37,7 +36,7 @@ def _plugin_route_key(provider: str, tts_config: dict[str, Any]) -> Optional[str
     """Normalized *provider* when a plugin may service it, else None: built-in names never reach the
     registry and a same-named ``type: command`` provider wins (config is more local than a plugin)."""
     key = (provider or "").lower().strip()
-    if not key or key in BUILTIN_TTS_PROVIDERS or key == NOUS_MANAGED_PROVIDER:  # nous = the openai path
+    if not key or key in BUILTIN_TTS_PROVIDERS:
         return None
     if _is_command_provider_config(_get_named_provider_config(tts_config, key)):
         return None

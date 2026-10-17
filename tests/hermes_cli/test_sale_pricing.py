@@ -16,103 +16,11 @@ def test_free_model_gets_flat_100_percent_discount():
     assert compute_sale_discount(
         "0", "0", {"prompt": "0.000002", "completion": "0.00001"}
     ) == (100, "0.000002", "0.00001")
-    # "0.0000000000" strings (Nous portal shape) count as free too.
     assert compute_sale_discount("0.0000000000", "0.0000000000", None) == (100, "", "")
 
 
 def test_paid_model_without_original_shows_no_sale():
     assert compute_sale_discount("0.000002", "0.00001", None) is None
-
-
-
-
-
-
-def test_fetch_models_with_pricing_copies_nested_original(monkeypatch):
-    models_pricing._pricing_cache.clear()
-    payload = {
-        "data": [
-            {
-                "id": "anthropic/claude-sonnet-5",
-                "pricing": {
-                    "prompt": "0.0000016",
-                    "completion": "0.000008",
-                    "input_cache_read": "0.00000016",
-                    "original": {
-                        "prompt": "0.000002",
-                        "completion": "0.00001",
-                        "input_cache_read": "0.0000002",
-                    },
-                },
-            },
-            {
-                "id": "free/model",
-                "pricing": {"prompt": "0", "completion": "0"},
-            },
-        ]
-    }
-    body = json.dumps(payload).encode()
-    resp = MagicMock()
-    resp.read.return_value = body
-    resp.__enter__ = lambda self: self
-    resp.__exit__ = lambda *a: False
-
-    monkeypatch.setattr(
-        models_mod,
-        "_urlopen_model_catalog_request",
-        lambda req, timeout=8.0: resp,
-    )
-
-    # Nous Portal opts in via include_sale_original=True.
-    result = fetch_models_with_pricing(
-        api_key="sk-test",
-        base_url="https://example.test",
-        force_refresh=True,
-        include_sale_original=True,
-    )
-    paid = result["anthropic/claude-sonnet-5"]
-    assert paid["prompt"] == "0.0000016"
-    assert paid["completion"] == "0.000008"
-    assert paid["original"] == {
-        "prompt": "0.000002",
-        "completion": "0.00001",
-        "input_cache_read": "0.0000002",
-    }
-    assert "original" not in result["free/model"]
-
-
-def test_fetch_models_with_pricing_copies_billing_mode_for_nous_only(monkeypatch):
-    payload = {"data": [{"id": "a/b", "billing_mode": "subscription", "pricing": {"prompt": "0.000002", "completion": "0.00001"}}]}
-    resp = MagicMock()
-    resp.read.return_value = json.dumps(payload).encode()
-    resp.__enter__ = lambda self: self
-    resp.__exit__ = lambda *a: False
-    monkeypatch.setattr(models_mod, "_urlopen_model_catalog_request", lambda req, timeout=8.0: resp)
-
-    fetch = lambda **kw: fetch_models_with_pricing(api_key="sk-test", base_url="https://example.test", force_refresh=True, **kw)
-    assert fetch(include_sale_original=True)["a/b"]["billing_mode"] == "subscription"
-    assert "billing_mode" not in fetch()["a/b"]
-
-
-
-
-
-
-def test_resolve_nous_pricing_credentials_normalizes_either_suffix(monkeypatch):
-    """``/v1`` on the override is optional and must not change the result."""
-    monkeypatch.setattr(
-        "hermes_cli.auth.resolve_nous_runtime_credentials", lambda: None
-    )
-    for override in (
-        "https://stg-inference-api.nousresearch.com",
-        "https://stg-inference-api.nousresearch.com/",
-        "https://stg-inference-api.nousresearch.com/v1",
-        "https://stg-inference-api.nousresearch.com/v1/",
-    ):
-        monkeypatch.setenv("NOUS_INFERENCE_BASE_URL", override)
-        assert models_pricing._resolve_nous_pricing_credentials()[1] == (
-            "https://stg-inference-api.nousresearch.com"
-        )
 
 
 def test_a_failed_catalog_fetch_is_not_cached_forever(monkeypatch):
@@ -177,4 +85,3 @@ def test_a_successful_catalog_fetch_stays_cached(monkeypatch):
     )
     assert "a/b" in fetch_models_with_pricing(base_url="https://example.test")
     assert len(calls) == 1
-

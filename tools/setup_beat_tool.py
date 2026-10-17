@@ -23,13 +23,6 @@ logger = logging.getLogger(__name__)
 BEATS = ("next", *flow.BEAT_IDS, "done")
 
 
-def _connected() -> dict:
-    from tools.connectors.display import connected_slugs
-    from tools.connectors.gateway.client import ConnectorClient
-
-    return {"connected": sorted(connected_slugs(ConnectorClient()))}
-
-
 def _installed() -> dict:
     from hermes_cli.plugin_catalog_presence import onboarding_names
     from hermes_cli.plugins_cmd import _catalog_installed_dir
@@ -38,7 +31,7 @@ def _installed() -> dict:
 
 
 # A card closed without its own answer (words, a value, a skip, the deadline) still reports these.
-_PRESENT = {"connectors": _connected, "plugins": _installed}
+_PRESENT = {"plugins": _installed}
 
 
 def _present(beat: str) -> dict | None:
@@ -85,38 +78,12 @@ def _skill_resolver() -> Callable[[str], str | None]:
     return lambda name: catalog_plugin_skill(name) if ":" in name else (name if name in bundled else None)
 
 
-def _result(step: flow.Step, beat: str | None = None, extra: str = "") -> str:
+def _result(step: flow.Step, beat: str | None = None) -> str:
     facts = flow.Facts.from_stored(step.record["facts"])
     # Only a first task's reminder names skills; the skills scan is skipped for every other result.
     resolve_skill = _skill_resolver() if step.reminder.startswith("build_") else (lambda name: name)
-    text = reminder(step.reminder, step.record, facts, beat, resolve_skill) + extra
+    text = reminder(step.reminder, step.record, facts, beat, resolve_skill)
     return json.dumps({**step.result, **({"reminder": text} if text else {})}, ensure_ascii=False)
-
-
-def _connector_slugs() -> set[str] | None:
-    """The connectors this account can connect, as the card lists them; None when the list is unreachable."""
-    from tools.connectors.targets import hosted_names
-
-    return hosted_names()
-
-
-def _suggest_from(slugs: set[str] | None) -> str:
-    # The model guesses an app's connector from what is installed (GitHub from the gh CLI); the card shows
-    # only listed ones, so it names its suggestions from this list.
-    return f" Suggest only connectors from this list, by these slugs: {', '.join(sorted(slugs))}." if slugs else ""
-
-
-def _unlisted_suggestions(args: Mapping[str, Any]) -> str | None:
-    """The refusal for connector suggestions the card cannot show, or None when every one is listed."""
-    wanted = [str(slug).strip().lower() for slug in args.get("suggest") or () if str(slug).strip()]
-    slugs = _connector_slugs() if wanted else None
-    unlisted = [slug for slug in wanted if slugs is not None and slug not in slugs]
-    if not unlisted:
-        return None
-    return json.dumps({"error": "not connectors here", "reminder": (
-        f"No card shown: {', '.join(unlisted)} cannot be connected here. Do not mention them as connections."
-        f"{_suggest_from(slugs)} Then call setup_beat(beat=\"connectors\", suggest=[...]) again, or without "
-        "suggest when none fits.")}, ensure_ascii=False)
 
 
 def _card(beat: str, step: flow.Step, args: Mapping[str, Any]) -> dict:
@@ -127,8 +94,10 @@ def _card(beat: str, step: flow.Step, args: Mapping[str, Any]) -> dict:
 
         # The account name goes to the card only; the model reads it if the user picks it.
         card = {"suggested": name} if (name := suggested_name()) else {}
-    if beat == "connectors":
-        card = {"suggested": [str(slug) for slug in args.get("suggest") or () if str(slug).strip()]}
+    elif beat == "connectors":
+        # The connector slugs the model pinned after its look-around go to the card only.
+        suggested = [str(s).strip() for s in (args.get("suggest") or []) if str(s).strip()]
+        card = {"suggested": suggested} if suggested else {}
     return card
 
 
@@ -155,12 +124,10 @@ def setup_beat_tool(args: Mapping[str, Any], *, db=None, session_id: str = "", t
                               else {"error": "Onboarding is over in this chat; it is a normal chat now."})
     if callback is None:
         return tool_error("setup_beat cards show only in the Hermes desktop app.")
-    if beat == "connectors" and (refused := _unlisted_suggestions(args)):
-        return refused
-    shown = records.advance(db, session_id, flow.Shown(beat, tool_call_id, args.get("options"), args.get("suggest")))
-    if shown.result:  # refused, or a beat this machine skips
-        extra = _suggest_from(_connector_slugs()) if shown.reminder == "offer_first" else ""
-        return _result(shown, extra=extra)
+    shown = records.advance(db, session_id, flow.Shown(
+        beat, tool_call_id, args.get("options"), args.get("suggest")))
+    if shown.result:  # a beat this machine skips
+        return _result(shown)
     question = str(args.get("question") or "").strip() or beat_question(beat, (record.get("facts") or {}).get("locale"))
     reply = callback({"beat": beat, "question": question, "card": _card(beat, shown, args),
                       "tool_call_id": tool_call_id or None})
@@ -194,8 +161,6 @@ SETUP_BEAT_SCHEMA = {
             "question": {"type": "string", "description": "Your line above the card."},
             "value": {"type": "string", "description": "Record an answer given in words (a name, or an option id). No card."},
             "skip": {"type": "boolean", "description": "They skipped this beat in words. No card."},
-            "suggest": {"type": "array", "items": {"type": "string"},
-                        "description": "connectors only: slugs pinned as Suggested."},
             "options": {"type": "array", "maxItems": 4, "description": "build only: up to four picks, ids from the list.",
                         "items": {"type": "object", "required": ["id", "label"],
                                   "properties": {"id": {"type": "string"},

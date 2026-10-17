@@ -317,7 +317,7 @@ def _waiting_beat(record) -> str | None:
 
 _REMINDERS = {
     "after_name": lambda r, f: f"They go by {r['picks']['name']}. Greet them by name in a few words. {_next(r)}",
-    "after_theme": lambda r, f: (f"Accent {r['picks']['accent'] or 'Nous blue'} is on, already applied. Do not call "
+    "after_theme": lambda r, f: (f"Accent {r['picks']['accent'] or 'blue'} is on, already applied. Do not call "
                                  f"set_theme for it again. React in three words or fewer. {_next(r)}"),
     "after_layout": _after_layout,
     "offer_first": lambda r, f: f"The connectors card is not shown yet. {_LOOK_AROUND}",

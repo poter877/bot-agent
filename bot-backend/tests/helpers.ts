@@ -5,6 +5,8 @@ import { closeDatabase, createDatabase, type Database } from '../src/db/client.j
 import { closeRedisConnections, createRedisConnections, type RedisConnections } from '../src/redis/client.js'
 import { createLogger, type Logger } from '../src/shared/logger.js'
 import { createApp } from '../src/app.js'
+import type { MediaCatalogEntry } from '../src/modules/media/catalog.js'
+import type { createMediaRoutes } from '../src/modules/media/media.routes.js'
 import type { Hono } from 'hono'
 import type { AppEnv } from '../src/shared/context.js'
 import type { CloudComputerService } from '../src/modules/cloud-computer/service.js'
@@ -37,6 +39,7 @@ export async function createTestApp(
   overrides: Record<string, string> = {},
   llm?: Parameters<typeof createApp>[0]['llm'],
   cloudComputer?: Parameters<typeof createApp>[0]['cloudComputer'],
+  media?: Pick<Parameters<typeof createMediaRoutes>[0], 'imageGenerator' | 'videoGenerator' | 'imageCatalog' | 'videoCatalog'>,
 ): Promise<TestApp> {
   const infra = testInfra()
   const config = loadConfig({
@@ -54,7 +57,7 @@ export async function createTestApp(
   })
   const redis = await createRedisConnections(config.REDIS_URL)
   const logger = createLogger(config)
-  const { hono, cloudComputers } = await createApp({ config, database, redis, logger, llm, cloudComputer })
+  const { hono, cloudComputers } = await createApp({ config, database, redis, logger, llm, cloudComputer, media })
   return {
     config,
     database,

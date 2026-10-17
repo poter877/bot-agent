@@ -2,7 +2,7 @@
 
 ``get_catalog()`` returns the parsed manifest: in-process cache (TTL) → disk cache at
 ``~/.hermes/cache/model_catalog.json`` → master URL fetch; any fetch failure keeps the stale copy
-(or ``{}``). ``get_curated_openrouter_models()`` / ``get_curated_nous_models()`` are thin accessors
+(or ``{}``). ``get_curated_openrouter_models()`` is a thin accessor
 whose callers fall back to the in-repo lists on ``None``.
 """
 
@@ -250,17 +250,16 @@ def refresh_interval_seconds() -> float:
 
 
 def refresh_catalogs() -> bool:
-    """Force-refresh every remote catalog the picker reads (manifest, OpenRouter live list, Nous Portal
-    recommendations), writing each disk cache so the next ``/model`` open in ANY process sees them.
-    Blocking; run it off the event loop."""
+    """Force-refresh every remote catalog the picker reads (manifest, OpenRouter live list), writing
+    each disk cache so the next ``/model`` open in ANY process sees them. Blocking; run it off the
+    event loop."""
     if not _load_catalog_config()["enabled"]:
         return False
     catalog = get_catalog(force_refresh=True)
     try:
-        from hermes_cli.models import fetch_nous_recommended_models, fetch_openrouter_models
+        from hermes_cli.models import fetch_openrouter_models
 
         fetch_openrouter_models(force_refresh=True)
-        fetch_nous_recommended_models(force_refresh=True)
     except Exception:
         logger.debug("provider catalog refresh failed", exc_info=True)
     return bool(catalog)
@@ -301,11 +300,6 @@ def get_curated_openrouter_models() -> list[tuple[str, str]] | None:
     """OpenRouter's curated ``[(id, description), ...]`` from the manifest."""
     rows = _block_ids(_get_provider_block("openrouter"))
     return [(mid, str(m.get("description") or "")) for mid, m in rows] or None
-
-
-def get_curated_nous_models() -> list[str] | None:
-    """Nous Portal's curated model ids from the manifest."""
-    return [mid for mid, _ in _block_ids(_get_provider_block("nous"))] or None
 
 
 def _default_model_from_block(block: dict[str, Any] | None) -> str | None:

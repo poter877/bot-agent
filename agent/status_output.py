@@ -6,12 +6,27 @@ Extracted from ``run_agent.py``; every method resolves through ``AIAgent``'s MRO
 """
 import logging
 import sys
+from dataclasses import dataclass
+from typing import Optional
 
 from agent.i18n import t
 from agent.session_activity import ActivityProvenance
 
 # Same logger name as the origin module so log records / caplog filters are unchanged.
 logger = logging.getLogger("run_agent")
+
+
+@dataclass
+class AgentNotice:
+    """Driver-agnostic out-of-band notice (``AIAgent.notice_callback`` / ``notice_clear_callback``); each driver
+    renders its own way. ``kind``/``ttl_ms`` stay expressive so a future config can switch v1's sticky notices to TTL."""
+
+    text: str
+    level: str = "info"            # info | warn | error | success
+    kind: str = "sticky"           # sticky | ttl
+    ttl_ms: Optional[int] = None   # honored only when kind == "ttl"
+    key: Optional[str] = None      # dedupe / fired-once-latch / clear key
+    id: Optional[str] = None
 
 
 class StatusOutputMixin:
@@ -116,8 +131,6 @@ class StatusOutputMixin:
             self._emit_warning(message)
             return
         import zlib
-
-        from agent.credits_tracker import AgentNotice
 
         key = f"startup-warning.{zlib.crc32(message.encode()):08x}"
         level = "success" if message.startswith("✓") else "warn"  # a recovered provider is good news

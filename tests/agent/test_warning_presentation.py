@@ -115,21 +115,6 @@ def test_operator_callbacks_keep_diagnostics_and_logs(tmp_path, monkeypatch, cap
 
 
 @pytest.mark.parametrize("suppress", [None, False, True])
-def test_entitlement_guidance_is_classified_at_direct_print(tmp_path, monkeypatch, suppress):
-    import hermes_yaml as yaml
-    from agent import conversation_loop
-    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
-    (tmp_path / "config.yaml").write_text(yaml.safe_dump(
-        {} if suppress is None else {"display": {"suppress_warning_notifications": suppress}}))
-    monkeypatch.setattr(conversation_loop, "_nous_entitlement_message", lambda capability: "entitlement detail\nnext step")
-    agent = Emitter()
-    printed = []
-    agent._print_fn = lambda *a, **k: printed.append(a)
-    assert conversation_loop._print_nous_entitlement_guidance(agent, "model access") is True
-    assert printed == ([] if suppress is True else [("   💡 entitlement detail",), ("   💡 next step",)])
-
-
-@pytest.mark.parametrize("suppress", [None, False, True])
 def test_missing_key_banner_is_classified_without_hiding_initialization(tmp_path, monkeypatch, capsys, suppress):
     from agent import agent_init
     import hermes_yaml as yaml

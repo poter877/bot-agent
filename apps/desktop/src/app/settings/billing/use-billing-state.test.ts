@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
 import { TRANSLATIONS } from '@/i18n'
 
@@ -19,7 +19,6 @@ import {
 } from './fixtures.test-util'
 import { buildManageSubscriptionUrl, deriveBillingView, formatMonthlyCreditsDelta } from './use-billing-state'
 
-vi.mock('@/store/onboarding', () => ({ startManualProviderOAuth: vi.fn() }))
 
 function usageRowFor(
   fixtureName: keyof typeof billingDevFixtures,
@@ -232,7 +231,7 @@ describe('deriveBillingView', () => {
     expect(view.status).toBe('logged_out')
     expect(view.summary.map(item => item.value)).toEqual(['—', '—', '—'])
     expect(view.notice).toMatchObject({
-      title: 'Connect your Nous account'
+      title: 'Connect your account'
     })
     expect(view.paymentRow).toBeUndefined()
     expect(view.topupRow).toBeUndefined()
@@ -240,15 +239,10 @@ describe('deriveBillingView', () => {
     expect(view.usageRows).toEqual([])
   })
 
-  it('signs in from the logged-out notice in-app, not a portal link', async () => {
-    // A plain portal link never writes a credential, so the page would stay logged out forever
-    // (#87792). The action must open the in-app Nous OAuth flow.
-    const { startManualProviderOAuth } = await import('@/store/onboarding')
+  it('derives a logged-out notice with no portal action', () => {
     const view = deriveBillingView(okBilling(loggedOutBillingState), okSubscription(loggedOutSubscriptionState))
 
-    expect(view.notice?.action?.url).toBeUndefined()
-    view.notice?.action?.onSelect?.()
-    expect(startManualProviderOAuth).toHaveBeenCalledWith('nous')
+    expect(view.notice?.action).toBeUndefined()
   })
 
   it('derives a refusal notice when billing.state is unavailable', () => {

@@ -211,6 +211,19 @@ auxiliary:
 账号接口仍使用原来的 16 KiB 限制。大视频优先用模型支持的文件 URL，避免重复内联。
 本节针对媒体输入与理解；图片／视频生成输出仍遵循 v1 的显式 unsupported 事件约定。
 
+## 媒体生成：POST /api/media/image、POST /api/media/video
+
+图像/视频生成与模型流同一准入梯：Better Auth 会话 + `Origin` 校验 + 服务端目录
+（`LLM_IMAGE_CATALOG` / `LLM_VIDEO_CATALOG`，形状同 llm 目录）+ 每用户媒体预算
+（`RATE_LIMIT_MEDIA_*`）+ 每媒体树独立处理预算（`MEDIA_REQUEST_TIMEOUT_MS`，默认 10 分钟，
+视频生成合法耗时远超普通请求）。厂商密钥（`FAL_KEY` / `XAI_API_KEY` /
+`GOOGLE_GENERATIVE_AI_API_KEY` / `OPENAI_API_KEY`）只在服务端；client 只能点名目录 id。
+响应为普通 JSON（非流式）：`{ok, images|videos: [{media_type, base64}]}`；目录/参数错误
+在响应头前以 400/403/404/503 拒绝，厂商失败以 502 返回（错误信息脱敏）。
+每次请求按用户/日计入 `media:usage:*`（Redis），生成的字节不落服务端存储——
+调用方收 base64 自行落盘。视频当前仅 fal（队列轮询由 SDK 内部处理）；
+图像支持 fal/openai/google/xai。
+
 ## 请求边界（共同安全配置，两棵树都生效）
 
 请求 ID（服务端生成，不采信外部 X-Request-Id）→ 安全响应头 + no-store → CORS

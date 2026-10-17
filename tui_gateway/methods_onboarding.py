@@ -31,8 +31,8 @@ def _run_state(*, assume_fresh: bool = False) -> dict:
     carry the first chat (公司模式：公司后端本身就是那个 provider). On the local backend the answer
     comes from the boot computation (``onboarding_due``); ``--fresh-install`` asks live."""
     from hermes_cli import onboarding_due
-    from hermes_cli.anon_auth import on_local_desktop_backend
     from hermes_cli.onboarding_run import should_run
+    from hermes_cli.process_identity import on_local_desktop_backend
 
     if not on_local_desktop_backend():
         return {"run": should_run(assume_fresh=assume_fresh), "eligible": False, **_active_run()}
@@ -61,17 +61,8 @@ def _due_stamp() -> tuple:
     home = Path(_profile_home("default") or get_default_hermes_root())
     managed = managed_scope.get_managed_dir()
     paths = (get_default_hermes_root() / "config.yaml", home / "config.yaml", home / ".env", home / "auth.json",
-             *_shared_nous_store(), *((managed / "config.yaml", managed / ".env") if managed else ()))
+             *((managed / "config.yaml", managed / ".env") if managed else ()))
     return tuple(file_signature(st) if (st := _stat(path)) else None for path in paths)
-
-
-def _shared_nous_store() -> tuple[Path, ...]:
-    """The shared Nous store as ``_read_shared_nous_state`` finds it: none when the test seat belt trips."""
-    from hermes_cli.auth_nous import _nous_shared_store_path
-    try:
-        return (_nous_shared_store_path(),)
-    except RuntimeError:
-        return ()
 
 
 def _stat(path):
@@ -85,7 +76,7 @@ def start_due_boot() -> None:
     """Serve boot, desktop's local backend: work out the due answer off the RPC path."""
     from agent.memory_provider import spawn_context_thread
     from hermes_cli import onboarding_due
-    from hermes_cli.anon_auth import on_local_desktop_backend
+    from hermes_cli.process_identity import on_local_desktop_backend
 
     if not on_local_desktop_backend():
         return

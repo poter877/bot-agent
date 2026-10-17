@@ -7,8 +7,6 @@ must follow the same precedence, otherwise a vendor that is genuinely serving on
 capability is displayed as inactive (#132511).
 """
 
-import types
-
 import pytest
 
 from hermes_cli.tools_config_providers import _is_provider_active
@@ -44,20 +42,6 @@ def test_row_active_iff_it_serves_a_capability(web, active, inactive):
     tiered = {"web": {"search_backend": "parallel", "provider_tier": {"parallel": "paid"}}}
     assert _is_provider_active(_row("parallel", web_tier="paid"), tiered) is True
     assert _is_provider_active(_row("parallel", web_tier="free"), tiered) is False
-
-
-def test_managed_row_active_for_a_nous_capability_pin(monkeypatch):
-    """``extract_backend: nous`` (Desktop "Use for Extract" on Nous Subscription): the managed row serves
-    extract and must be active alongside the BYOK row serving search; a vendor-only config leaves it off."""
-    from hermes_cli import tools_config
-
-    monkeypatch.setattr(tools_config, "get_nous_subscription_features", lambda *a, **k: types.SimpleNamespace(
-        features={"web": types.SimpleNamespace(managed_by_nous=True)}))
-    nous = _row("firecrawl", managed_nous_feature="web")
-    split = {"web": {"search_backend": "firecrawl", "extract_backend": "nous"}}
-    assert _is_provider_active(nous, split) is True
-    assert _is_provider_active(_row("firecrawl"), split) is True
-    assert _is_provider_active(nous, {"web": {"search_backend": "firecrawl", "extract_backend": "tavily"}}) is False
 
 
 def _web_rows():

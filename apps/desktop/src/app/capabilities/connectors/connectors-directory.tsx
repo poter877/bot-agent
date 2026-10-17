@@ -2,14 +2,13 @@ import { type ReactNode } from 'react'
 
 import { PanelEmpty } from '@/app/overlays/panel'
 import { Button } from '@/components/ui/button'
-import { ErrorBanner } from '@/components/ui/error-state'
 import { SearchField } from '@/components/ui/search-field'
 import { SegmentedControl } from '@/components/ui/segmented-control'
 import { useI18n } from '@/i18n'
 
 import { ConnectorRowCard } from './connector-row-card'
 import { cardKey, EMPTY_CONNECTORS_FILTER } from './derive'
-import { derivePage, showsAttentionFirst } from './derive-page'
+import { derivePage } from './derive-page'
 import { ToolsWash } from './tools-status'
 import type { ConnectorCardModel, ConnectorGroupModel, ConnectorSegmentId, ConnectorsFilter } from './types'
 
@@ -18,13 +17,9 @@ export interface ConnectorsDirectoryProps {
   busyKey?: null | string
   cards: ConnectorCardModel[]
   filter: ConnectorsFilter
-  hostedFailed?: boolean
   loading?: boolean
-  notices?: ReactNode
   onFilterChange: (next: ConnectorsFilter) => void
   onOpen: (card: ConnectorCardModel) => void
-  onPrefetch?: (card: ConnectorCardModel) => void
-  onRetryHosted?: () => void
   onServerToggle?: (card: ConnectorCardModel, next: boolean) => void
   onVerb?: (card: ConnectorCardModel) => void
   selectedKey?: null | string
@@ -35,13 +30,9 @@ export function ConnectorsDirectory({
   busyKey = null,
   cards,
   filter,
-  hostedFailed = false,
   loading = false,
-  notices,
   onFilterChange,
   onOpen,
-  onPrefetch,
-  onRetryHosted,
   onServerToggle,
   onVerb,
   selectedKey = null
@@ -108,20 +99,6 @@ export function ConnectorsDirectory({
         </>
       )}
 
-      {notices}
-
-      {hostedFailed && onRetryHosted ? (
-        <ErrorBanner className="shrink-0 items-center">
-          <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
-            <span className="font-medium">{copy.page.hostedFailedTitle}</span>
-            <span className="opacity-80">{copy.page.hostedFailedBody}</span>
-            <Button className="text-destructive" onClick={onRetryHosted} size="xs" variant="text">
-              {copy.page.retry}
-            </Button>
-          </span>
-        </ErrorBanner>
-      ) : null}
-
       {loading ? (
         <ToolsWash label={copy.page.loading} rows={10} />
       ) : groups.length > 0 ? (
@@ -132,7 +109,6 @@ export function ConnectorsDirectory({
               group={group}
               key={group.id}
               onOpen={onOpen}
-              onPrefetch={onPrefetch}
               onServerToggle={onServerToggle}
               onVerb={onVerb}
               selectedKey={selectedKey}
@@ -141,9 +117,7 @@ export function ConnectorsDirectory({
           ))}
         </div>
       ) : cards.length === 0 ? (
-        hostedFailed ? null : (
-          <PanelEmpty action={addYourOwn} icon="plug" title={copy.page.emptyTitle} />
-        )
+        <PanelEmpty action={addYourOwn} icon="plug" title={copy.page.emptyTitle} />
       ) : (
         <PanelEmpty
           action={
@@ -167,7 +141,6 @@ function Group({
   busyKey,
   group,
   onOpen,
-  onPrefetch,
   onServerToggle,
   onVerb,
   selectedKey,
@@ -176,7 +149,6 @@ function Group({
   busyKey: null | string
   group: ConnectorGroupModel
   onOpen: (card: ConnectorCardModel) => void
-  onPrefetch?: (card: ConnectorCardModel) => void
   onServerToggle?: (card: ConnectorCardModel, next: boolean) => void
   onVerb?: (card: ConnectorCardModel) => void
   selectedKey: null | string
@@ -192,9 +164,6 @@ function Group({
           {group.id === 'local' ? where : copy[group.id]}
         </h3>
         <span className="tabular-nums text-xs text-(--ui-text-tertiary)">{group.cards.length}</span>
-
-        {group.id === 'connected' && showsAttentionFirst(group) ? <Note>{copy.connectedNote}</Note> : null}
-        {group.id === 'off' ? <Note>{copy.offNote}</Note> : null}
       </header>
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -207,7 +176,6 @@ function Group({
               card={card}
               key={key}
               onOpen={() => onOpen(card)}
-              onPrefetch={onPrefetch ? () => onPrefetch(card) : undefined}
               onServerToggle={onServerToggle ? next => onServerToggle(card, next) : undefined}
               onVerb={onVerb ? () => onVerb(card) : undefined}
               selected={selectedKey === key}
@@ -217,8 +185,4 @@ function Group({
       </div>
     </section>
   )
-}
-
-function Note({ children }: { children: ReactNode }) {
-  return <span className="truncate text-[0.65rem] text-(--ui-text-tertiary)">{children}</span>
 }

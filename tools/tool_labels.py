@@ -4,12 +4,10 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from tools.connectors.gateway.names import parse_connector_name
 from tools.mcp_tool_schema import MCP_TOOL_NAME_PREFIX
 
 logger = logging.getLogger("tools.tool_labels")
 
-CONNECTOR_EMOJI = "🔗"
 MCP_EMOJI = "🔌"
 SEARCH_EMOJI = "🔎"
 DESCRIBE_EMOJI = "📖"
@@ -35,7 +33,7 @@ _APP_TITLES = {
 BRIDGE_TOOL_NAMES = frozenset({"tool_call", "tool_search", "tool_describe"})
 
 __all__ = [
-    "BRIDGE_TOOL_NAMES", "CONNECTOR_EMOJI", "DEFAULT_TOOL_EMOJI", "MCP_EMOJI", "ToolLabel",
+    "BRIDGE_TOOL_NAMES", "DEFAULT_TOOL_EMOJI", "MCP_EMOJI", "ToolLabel",
     "app_title", "label_for_tool_name", "labels_for_call"]
 
 
@@ -114,14 +112,6 @@ def _unnamed_label(arguments: Any) -> ToolLabel:
 def label_for_tool_name(name: str, arguments: Any = None) -> Optional[ToolLabel]:
     if not isinstance(name, str) or not name.strip():
         return None
-    connector = parse_connector_name(name)
-    if connector is not None:
-        action = _action_phrase(connector.tool, connector.connector)
-        alias = arguments.get("connector_alias") if isinstance(arguments, dict) else None
-        if isinstance(alias, str) and alias.strip():
-            action = f"{action} ({alias.strip()})"
-        return ToolLabel(kind="connector", app=app_title(connector.connector), action=action,
-                         emoji=CONNECTOR_EMOJI, name=name, preview=_arg_preview(name, arguments))
     if name.startswith(MCP_TOOL_NAME_PREFIX):
         server, _, tool = name[len(MCP_TOOL_NAME_PREFIX):].partition("__")
         if tool:

@@ -1,4 +1,4 @@
-"""Centralized Nous Portal request tags.
+"""Centralized outbound request tags (originally the Nous Portal; now also the OpenRouter affinity scope).
 
 Every Hermes request to the Nous Portal (main loop, auxiliary client, fallback
 paths) must carry the same product-attribution tags, sent in OpenAI-compatible

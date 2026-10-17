@@ -432,9 +432,6 @@ async def test_internal_event_never_reuses_prompt_pin_from_another_privacy_polic
 # config reads are substituted), not the ``_capture`` stub above.
 # ---------------------------------------------------------------------------
 
-_WELCOME = "https://welcome-api.nousresearch.com/v1"
-
-
 class _TurnAgent:
     """AIAgent stand-in: keeps the resolved route, answers without an API call."""
 
@@ -448,10 +445,8 @@ class _TurnAgent:
         self.session_id = kwargs.get("session_id")
         self.tools = []
         self.request_overrides = dict(kwargs.get("request_overrides") or {})
-        # Mirror AIAgent.__init__: the welcome host pins its one model, and the primary
-        # route is snapshotted for the post-turn fallback classifier.
-        from hermes_cli.anon_auth import pin_model_for_route
-        self.model = pin_model_for_route(self.provider, self.base_url, self.model)
+        # Mirror AIAgent.__init__: the primary route is snapshotted for the post-turn
+        # fallback classifier.
         self._primary_runtime = {"model": self.model, "provider": self.provider, "base_url": self.base_url}
 
     def run_conversation(self, user_message, conversation_history=None, task_id=None, **kwargs):
@@ -469,9 +464,8 @@ class _TurnAgent:
     "runtime, global_model, expected_model",
     [
         ({"api_key": "fake", "provider": "openrouter"}, "default/model", "chan/model"),
-        ({"api_key": "fake", "provider": "nous", "base_url": _WELCOME}, "nous/welcome", "nous/welcome"),
     ],
-    ids=["named-channel-model", "welcome-host-pins-over-channel-model"],
+    ids=["named-channel-model"],
 )
 @pytest.mark.asyncio
 async def test_channel_override_turns_keep_one_cached_agent_and_the_pin(

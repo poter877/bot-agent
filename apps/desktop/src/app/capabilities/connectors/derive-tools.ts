@@ -7,7 +7,6 @@ import type {
   ToolInput,
   ToolRowModel,
   ToolsEditorCounts,
-  ToolsEditorStatus,
   ToolsFilter
 } from './types'
 
@@ -133,31 +132,8 @@ export function deprecatedCount(tools: readonly ToolRowModel[]): number {
   return tools.filter(tool => tool.deprecated).length
 }
 
-export interface ToolReadInput {
-  hasData: boolean
-  listHasApp: boolean
-  pending: boolean
-  reason: null | string
-}
-
-export function toolReadStatus({ hasData, listHasApp, pending, reason }: ToolReadInput): ToolsEditorStatus | null {
-  if (reason === 'CONNECTOR_NOT_FOUND') {
-    return listHasApp ? 'unavailable' : 'gone'
-  }
-
-  if (hasData) {
-    return null
-  }
-
-  if (reason !== null) {
-    return reason === 'NEEDS_NOUS_AUTH' ? 'signedOut' : 'unavailable'
-  }
-
-  return pending ? 'loading' : null
-}
-
 export function facetTools(tools: readonly ToolRowModel[], facet: string): string[] {
-  return tools.filter(tool => tool.facet === facet && !tool.deprecated && tool.lockedBy === null).map(tool => tool.slug)
+  return tools.filter(tool => tool.facet === facet && !tool.deprecated).map(tool => tool.slug)
 }
 
 export function facetSummary(tools: readonly ToolRowModel[], isOn: (slug: string) => boolean): FacetSummaryRow[] {
@@ -207,7 +183,7 @@ export function isUntouchedByQuickActions(tool: ToolRowModel): boolean {
 
 export function expandQuickAction(action: QuickAction, tools: readonly ToolRowModel[]): string[] {
   return tools
-    .filter(tool => !isUntouchedByQuickActions(tool) && action.facets.includes(tool.facet) && tool.lockedBy === null)
+    .filter(tool => !isUntouchedByQuickActions(tool) && action.facets.includes(tool.facet))
     .map(tool => tool.slug)
 }
 
@@ -293,20 +269,15 @@ export function conflictDifference(theirs: readonly string[], mine: readonly str
   }
 }
 
-export function toolRows(
-  tools: readonly ToolInput[],
-  disabled: ReadonlySet<string>,
-  orgDisabled: ReadonlySet<string> = new Set()
-): ToolRowModel[] {
+export function toolRows(tools: readonly ToolInput[], disabled: ReadonlySet<string>): ToolRowModel[] {
   return tools.map(tool => ({
     categories: tool.categories,
     deprecated: tool.deprecated,
     description: tool.description,
     facet: tool.facet,
     hints: tool.hints,
-    lockedBy: orgDisabled.has(tool.slug) ? 'org' : null,
     name: tool.name,
-    on: !orgDisabled.has(tool.slug) && !disabled.has(tool.slug),
+    on: !disabled.has(tool.slug),
     slug: tool.slug
   }))
 }

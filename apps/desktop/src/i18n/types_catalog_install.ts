@@ -1,6 +1,7 @@
-import type { InstallPhase } from '@hermes/shared'
+/** The install steps a catalog row reports while its backend runs (`tools_mcp_plugins` contract). */
+export type InstallPhase = 'downloading' | 'python_packages' | 'loading_tools'
 
-/** Copy for the desktop catalog-install card (`manage_catalog`) and its Advanced dialog. */
+/** Copy for the desktop catalog-install card (`manage_catalog`). */
 export interface CatalogInstallTranslations {
   preparing: string
   install: string

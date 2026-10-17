@@ -21,8 +21,10 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "4.0.80",
-    "@ai-sdk/google": "4.0.96",
+    "@ai-sdk/fal": "3.0.62",
+    "@ai-sdk/google": "4.0.98",
     "@ai-sdk/openai": "4.0.94",
+    "@ai-sdk/xai": "5.0.23",
     "@hono/node-server": "^2.1.5",
     "ai": "7.0.140",
     "better-auth": "^1.7.7",

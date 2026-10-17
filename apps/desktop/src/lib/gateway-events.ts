@@ -25,7 +25,6 @@ function asRecord(payload: unknown): Record<string, unknown> {
 export const UNSCOPED_STREAM_EVENT_TYPES = new Set([
   'browser.progress',
   'clarify.request',
-  'connection.request',
   'error',
   'message.complete',
   'message.delta',

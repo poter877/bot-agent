@@ -20,7 +20,6 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, NamedTuple, Optional
 
 from hermes_constants import get_hermes_home
-from utils import is_truthy_value
 
 logger = logging.getLogger(__name__)
 
@@ -202,20 +201,6 @@ def _read_browser_cfg() -> dict:
         return {}
 
 
-def _use_gateway(browser_cfg: dict) -> bool:
-    """True when the browser section selects the Nous Tool Gateway — by the current ``hermes tools``
-    picker row (``cloud_provider: nous``) or the pre-picker ``use_gateway: true`` flag. Reading only
-    the legacy flag missed every picker-configured gateway, and the direct-API branch it fell into
-    holds no credentials in managed mode (#108310)."""
-    if is_truthy_value(browser_cfg.get("use_gateway"), default=False):
-        return True
-    try:
-        from tools.tool_backend_helpers import NOUS_MANAGED_PROVIDER
-    except Exception:  # pragma: no cover — helper ships with the package
-        return False
-    return str(browser_cfg.get("cloud_provider") or "").strip().lower() == NOUS_MANAGED_PROVIDER
-
-
 def get_browser_backend() -> str:
     """Configured browser backend key ("" = unset → default). YAML 1.1 parses an
     unquoted ``off`` as False — that must mean BACKEND_DISABLED, not "unset"."""
@@ -241,7 +226,7 @@ def is_legacy_browser_use_cloud_config(browser_cfg: dict) -> bool:
     if not isinstance(browser_cfg, dict) or browser_cfg.get("backend"):
         return False
     provider = str(browser_cfg.get("cloud_provider") or "").strip().lower()
-    if provider not in {"browser-use", ""} or _use_gateway(browser_cfg) or _camofox_active(" during migration"):
+    if provider not in {"browser-use", ""} or _camofox_active(" during migration"):
         return False
     return _browser_use_api_key_set()
 
@@ -473,7 +458,7 @@ def _resolve_backend_cdp(env: dict, task_id: Optional[str], session_name: str = 
     (4) the local engine — ``browser.engine: lightpanda`` or Hermes' packaged Chromium via agent-browser
     (never the harness's own discovery of the user's installed Chrome); (5) BU direct-API configs WITH
     ``BROWSER_USE_API_KEY`` → None (checked before (3)): the CLI reaches BU cloud natively (BU_AUTOSPAWN); a
-    keyless ``browser-use`` provider (managed-gateway autodetect, or a selection missing its key) takes (3).
+    ``browser-use`` selection missing its key takes (3).
     ``session_name`` (BU_NAME) keys the session cache so each name gets its OWN browser — what makes named
     sessions concurrent-safe.
 
@@ -500,14 +485,11 @@ def _resolve_backend_cdp(env: dict, task_id: Optional[str], session_name: str = 
         return _resolve_local_engine_cdp(env, task_id, session_name)
 
     # Browser Use direct-API configs: the CLI talks to BU cloud natively (BU_AUTOSPAWN) — the
-    # legacy provider would create a second, redundant session. Nous-gateway configs (cloud_provider: nous
-    # from the picker, or the pre-picker use_gateway: true) DO resolve through the provider: the gateway
-    # provisions the browser server-side and returns its CDP URL. Without BROWSER_USE_API_KEY the CLI cannot
-    # autospawn, and the provider is either the managed gateway (autodetect on a never-configured install) or
-    # a selection missing its key; both go through the session path (gateway CDP, or the session layer's
-    # local-Chromium fallback) instead of leaving the harness to hunt for an installed Chrome.
+    # legacy provider would create a second, redundant session. Configs WITHOUT BROWSER_USE_API_KEY
+    # resolve through the provider session path (or the session layer's local-Chromium fallback)
+    # instead of leaving the harness to hunt for an installed Chrome.
     provider_key = str(getattr(provider, "name", "") or "").strip().lower()
-    if provider_key == _BACKEND_KEY and not _use_gateway(_read_browser_cfg()) and _browser_use_api_key_set():
+    if provider_key == _BACKEND_KEY and _browser_use_api_key_set():
         env[_PRIVATE_BROWSER_SENTINEL] = "1"  # named BU cloud browsers are exclusive to their daemon
         return None
 

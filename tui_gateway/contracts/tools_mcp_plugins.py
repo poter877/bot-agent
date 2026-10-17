@@ -10,11 +10,56 @@ from __future__ import annotations
 
 from pydantic import Field
 
-from .base import JsonValue, Params, Result, WireEnum
+from .base import JsonValue, Params, Payload, Result, WireEnum
 from .common import OpenModel, ProfileParams, SessionLiveInfo
-from .connectors_operation import CatalogAppState, CatalogTier
 from .registry import method
 
+
+
+# ── catalog plugin card state (moved out of the retired connectors contracts) ─────────────────
+
+
+class CatalogTier(WireEnum):
+    official = "official"
+    community = "community"
+
+
+class CatalogAppState(WireEnum):
+    """The desktop app a catalog plugin drives, from its ``hermes_platform`` declaration."""
+
+    present = "present"
+    missing_app = "missing_app"
+    app_not_running = "app_not_running"
+    unknown = "unknown"
+
+
+class CatalogScanStatus(WireEnum):
+    passed = "passed"
+    warnings = "warnings"
+    failed = "failed"
+
+
+class CatalogScan(Payload):
+    """The catalog's security scan of the pinned commit; read-only on the card."""
+
+    status: CatalogScanStatus
+    summary: str
+
+
+class CatalogApproved(Payload):
+    """The non-secret Advanced choices the user approved on a catalog row; a Try again after the
+    operation settled repeats them."""
+
+    force: bool
+    enable: bool
+    ref: str | None = None
+
+
+class CatalogServerError(Payload):
+    """An MCP server an installed plugin brought that did not connect, with the raw reason."""
+
+    name: str
+    error: str
 
 class _SessionScoped(Params):
     """Handlers that look a live session up with ``_sessions.get(params.get("session_id"))``: an

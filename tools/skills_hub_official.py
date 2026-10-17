@@ -32,7 +32,7 @@ def _entry_provider(entry: dict) -> str:
 
 
 class OptionalSkillSource(SkillSource):
-    """Skills from the repo's ``optional-skills/`` directory: official (Nous-maintained) but not
+    """Skills from the repo's ``optional-skills/`` directory: official (maintained in-tree) but not
     activated by default — absent from the system prompt and not copied to ~/.hermes/skills/ at
     setup. Discoverable via the Skills Hub as source "official" with "builtin" trust."""
 

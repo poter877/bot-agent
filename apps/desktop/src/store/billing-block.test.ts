@@ -16,7 +16,6 @@ import {
 function makeBlock(overrides: Partial<BillingBlock> = {}): BillingBlock {
   return {
     billing_url: 'https://platform.openai.com/settings/organization/billing',
-    is_nous: false,
     message: 'You are out of credits.',
     model: 'gpt-5',
     provider: 'openai',
@@ -44,12 +43,6 @@ test('clearBillingBlock with no arg clears any active block', () => {
   setBillingBlock('s1', makeBlock())
   clearBillingBlock()
   expect($billingBlock.get()).toBeNull()
-})
-
-test('runBillingRecovery routes Nous to in-app Settings, never an external link', () => {
-  runBillingRecovery(makeBlock({ is_nous: true, provider: 'nous', provider_label: 'Nous Portal' }))
-  expect($billingSettingsRequest.get()).toBe(1)
-  expect(openExternalLink).not.toHaveBeenCalled()
 })
 
 test('runBillingRecovery deep-links a third-party provider to its billing page', () => {

@@ -32,9 +32,10 @@ class TestState:
 class TestMenuLabel:
 
 
-    def test_sending_state_names_the_destination(self):
+    def test_sending_state_is_named(self):
         label = _shared_metrics_menu_label(_config(enabled=True, send=True))
-        assert "sending to Nous" in label
+        assert "collecting + sending" in label
+        assert "collecting locally" not in label
 
 
 class TestToggle:

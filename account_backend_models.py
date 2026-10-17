@@ -66,3 +66,17 @@ def resolve_company_model(requested: str | None, task: str | None = None) -> dic
     if required and not model["capabilities"][required]:
         raise CompanyModelCatalogError(f"The selected company model does not support {required}.")
     return model
+
+
+_MEDIA_TIMEOUT_SECONDS = 600.0
+
+
+def generate_media(kind: str, payload: dict) -> dict:
+    """Image/video generation through the company backend (``/api/media/{kind}``).
+
+    ``kind`` is ``"image"`` or ``"video"``. Returns the backend envelope
+    ``{ok, images|videos: [{media_type, base64}], ...}``; auth/backend failures
+    raise :class:`AccountBackendError` (the tools surface them as copy)."""
+    if kind not in ("image", "video"):
+        raise ValueError(f"unknown media kind {kind!r}")
+    return request_account_backend(f"/api/media/{kind}", payload=payload, timeout=_MEDIA_TIMEOUT_SECONDS)

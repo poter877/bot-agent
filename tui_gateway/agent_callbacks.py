@@ -174,9 +174,6 @@ def _agent_cbs(sid: str) -> dict:
         "drive_preview_callback": lambda payload: _preview_action_request(sid, dict(payload)),
         # read_window_below (desktop GUI): main process enumerates native windows.
         "read_window_below_callback": lambda: _ask("window.read", sid, {}, timeout=30),
-        # manage_connections card. Fire-and-forget: the tool thread waits on its own operation
-        # (tools/connectors/run.py), and the card drives it through connection.respond by op_id.
-        "connection_callback": lambda payload: _emit("connection.request", sid, dict(payload)) and None,
         # tour (desktop GUI): renderer drives driver.js and answers the ``tour`` request.
         "tour_callback": lambda payload: _tour_request(sid, payload),
         # set_theme (desktop GUI): theme.apply with the tour probe ladder, or a theme.pick card.

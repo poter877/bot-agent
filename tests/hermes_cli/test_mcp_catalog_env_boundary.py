@@ -135,39 +135,6 @@ def test_catalog_cannot_declare_reserved_control_key(
     assert not env_path.exists() or "HERMES_YOLO_MODE" not in env_path.read_text(
         encoding="utf-8"
     )
-
-
-def test_catalog_accepts_declared_credential(
-    client: TestClient,
-    catalog_env: Path,
-    monkeypatch: pytest.MonkeyPatch,
-):
-    from hermes_cli import mcp_config
-    from agent.secret_scope import get_secret
-    from tools.connectors.mcp import _CatalogBackend
-
-    probes: list[str] = []
-
-    def probe(name, cfg, **_kwargs):
-        # The credential is in scope for the probe, and nothing is saved before it answers.
-        assert get_secret("DEMO_API_KEY") == "valid-demo-value"
-        assert not (catalog_env / ".env").exists()
-        assert "demo" not in mcp_config._get_mcp_servers()
-        probes.append(name)
-        return [("demo_tool", "")]
-
-    monkeypatch.setattr(mcp_config, "_probe_single_server", probe)
-
-    assert _CatalogBackend().install(
-        "demo", {"DEMO_API_KEY": "valid-demo-value"}
-    ) == ["demo_tool"]
-    assert probes == ["demo"]
-    assert "demo" in mcp_config._get_mcp_servers()
-    assert "DEMO_API_KEY=valid-demo-value" in (
-        catalog_env / ".env"
-    ).read_text(encoding="utf-8")
-
-
 def test_catalog_non_secret_env_never_lands_in_env_file(
     client: TestClient,
     catalog_env: Path,
@@ -322,32 +289,3 @@ def test_preexisting_copilot_controls_remain_usable(
     assert _resolve_args() == ["--acp", "--stdio", "--operator-mode"]
 
 
-def test_connection_card_install_keeps_env_file_secrets_only(
-    client: TestClient,
-    catalog_env: Path,
-    monkeypatch: pytest.MonkeyPatch,
-):
-    """The connector-card backend (Desktop/TUI/CLI setup card) makes the same secrets-only split
-    as the terminal install: a declared non-secret lands in the server block, never in .env."""
-    from hermes_cli import mcp_config
-    from tools.connectors.mcp import _CatalogBackend
-
-    catalog_root = Path(os.environ["HERMES_OPTIONAL_MCPS"])
-    manifest_path = catalog_root / "demo" / "manifest.yaml"
-    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
-    manifest["transport"]["env"] = {"DEMO_BASE_URL": "${DEMO_BASE_URL}"}
-    manifest["auth"]["env"] = [
-        {"name": "DEMO_API_KEY", "prompt": "Demo API key", "secret": True},
-        {"name": "DEMO_BASE_URL", "prompt": "Demo base URL", "secret": False},
-    ]
-    manifest_path.write_text(yaml.safe_dump(manifest), encoding="utf-8")
-    monkeypatch.setattr(mcp_config, "_probe_single_server", lambda name, cfg, **_k: [("demo_tool", "")])
-
-    _CatalogBackend().install(
-        "demo", {"DEMO_API_KEY": "valid-demo-value", "DEMO_BASE_URL": "https://demo.example.test"}
-    )
-
-    env_text = (catalog_env / ".env").read_text(encoding="utf-8")
-    assert "DEMO_API_KEY=valid-demo-value" in env_text
-    assert "DEMO_BASE_URL" not in env_text and "https://demo.example.test" not in env_text
-    assert mcp_config._get_mcp_servers()["demo"]["env"]["DEMO_BASE_URL"] == "https://demo.example.test"

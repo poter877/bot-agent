@@ -67,6 +67,23 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   GOOGLE_GENERATIVE_AI_API_KEY: z.string().optional(),
+  XAI_API_KEY: z.string().optional(),
+  FAL_KEY: z.string().optional(),
+
+  // Media generation (image/video) catalogs — same shape and bootstrap story
+  // as LLM_MODEL_CATALOG: env seeds the id→provider/model mapping while the
+  // provider keys stay server-side (doc《流式服务端重构》§6).
+  LLM_IMAGE_CATALOG: z.string().default('[]'),
+  LLM_VIDEO_CATALOG: z.string().default('[]'),
+  RATE_LIMIT_MEDIA_MAX: z.coerce.number().int().min(1).default(60),
+  RATE_LIMIT_MEDIA_WINDOW_SECONDS: z.coerce.number().int().min(1).default(3600),
+  MEDIA_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(1000).max(1_800_000).default(600_000),
+  MEDIA_BODY_LIMIT_BYTES: z.coerce.number().int().min(1024).max(1024 * 1024).default(64 * 1024),
+  // Internal service token for media routes: ai-drama 等内部服务以
+  // `Authorization: Bearer <MEDIA_SERVICE_TOKEN>` 调用 /api/media/*，
+  // 用量与预算记在 MEDIA_SERVICE_USER_ID 名下。未设置则仅接受用户会话。
+  MEDIA_SERVICE_TOKEN: z.string().min(24).optional(),
+  MEDIA_SERVICE_USER_ID: z.string().min(1).default('company-media'),
 
   // A private worker owns Docker. The public API never mounts its socket.
   CLOUD_COMPUTER_ENABLED: z.enum(['true', 'false']).default('false').transform((value) => value === 'true'),

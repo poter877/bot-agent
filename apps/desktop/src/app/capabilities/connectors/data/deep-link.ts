@@ -1,52 +1,6 @@
 import { type ProfileScope, profileScopeKey } from '@/hermes'
 import { activeGatewayConnectionId } from '@/store/gateway'
 
-import { CAPABILITIES_ROUTE } from '../../../routes'
-
-import { $accountOperations } from './account-operations'
-import { wakeAccountOperation } from './rpc'
-
-const connectorRoute = (slug: string): string =>
-  `${CAPABILITIES_ROUTE}?tab=connectors&connector=${encodeURIComponent(slug)}`
-
-/** The Connectors tab, scoped to the chat's own profile and connection, with one app's dialog and that
- *  account's rename editor open. The account goes by id: its name can change and be reused by another. */
-export function accountRenameRoute(
-  slug: string,
-  connectionId: string,
-  owner: { connectionId: null | string; profile: string }
-) {
-  const params = new URLSearchParams({ profile: owner.profile, rename: connectionId })
-
-  if (owner.connectionId) {
-    params.set('connection', owner.connectionId)
-  }
-
-  return `${connectorRoute(slug)}&${params.toString()}`
-}
-
-export async function resumeAccountConnect(opId: string, navigate: (to: string) => void): Promise<boolean> {
-  const operation = $accountOperations.get()[opId]
-
-  if (!operation) {
-    return false
-  }
-
-  if (operation.settled) {
-    return true
-  }
-
-  navigate(operation.returnRoute ?? connectorRoute(operation.connectors[0] ?? ''))
-
-  try {
-    await wakeAccountOperation(operation.scope, opId)
-  } catch {
-    // The operation can settle and leave the live registry between the link and this RPC.
-  }
-
-  return true
-}
-
 /** The scope a link names: the profile, pinned to its connection when that is not the active one. */
 export function linkedScope(params: URLSearchParams): null | string | { connectionId: string; profile: string } {
   const profile = params.get('profile')?.trim()
