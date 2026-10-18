@@ -102,11 +102,13 @@ const providerBases: Record<string, { label: string; baseUrl: string }> = {
   archive_org: { label: 'Internet Archive', baseUrl: 'https://archive.org' },
   loc: { label: 'Library of Congress', baseUrl: 'https://www.loc.gov' },
 }
-/** Fal 队列改走公司后端透传代理：厂商密钥在公司侧，本侧只带内部服务令牌。
- *  未配置公司后端时不暴露预设（工具显式不可用），避免落到必然失败的直连地址。 */
+/** fal 不再是独立服务商：它只是公司后端队列端点背后的一种模型来源，
+ *  连接数据与 provider='company' 同源（{COMPANY} 根地址，路径由 runFal 拼）。
+ *  厂商密钥在公司侧，本侧只带内部服务令牌。未配置公司后端时不暴露预设
+ * （工具显式不可用），避免落到必然失败的直连地址。 */
 function providerBase(provider: string): { label: string; baseUrl: string } | undefined {
   if (provider === 'fal')
-    return companyBackendUrl() ? { label: 'Fal', baseUrl: `${companyBackendUrl()}/api/media/fal-queue` } : undefined
+    return companyBackendUrl() ? { label: 'Fal', baseUrl: companyBackendUrl() } : undefined
   return providerBases[provider]
 }
 

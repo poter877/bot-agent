@@ -23,7 +23,7 @@ const VIDEO_CATALOG = [{ id: 'company-video', provider: 'fal' as const, model: '
 
 interface FakeImageFile {
   type: 'file'
-  mediaType: string
+  media_type: string
   base64: string
 }
 
@@ -35,7 +35,7 @@ function mediaSetup() {
 describe('POST /api/media/*', () => {
   let testApp: TestApp
   let user: RegisteredUser
-  const seam: { image?: (req: unknown, entry: unknown) => Promise<Array<{ mediaType: string; base64: string }>>; video?: (req: unknown, entry: unknown) => Promise<Array<{ mediaType: string; base64: string }>>; failImage?: boolean } = {}
+  const seam: { image?: (req: unknown, entry: unknown) => Promise<Array<{ media_type: string; base64: string }>>; video?: (req: unknown, entry: unknown) => Promise<Array<{ media_type: string; base64: string }>>; failImage?: boolean } = {}
 
   beforeAll(async () => {
     testApp = await createTestApp(
@@ -47,9 +47,9 @@ describe('POST /api/media/*', () => {
         videoCatalog: VIDEO_CATALOG,
         imageGenerator: async () => {
           if (seam.failImage) throw new Error('quota exhausted upstream')
-          return seam.image ? await seam.image({}, {}) : [{ mediaType: 'image/png', base64: 'AQID' }]
+          return seam.image ? await seam.image({}, {}) : [{ media_type: 'image/png', base64: 'AQID' }]
         },
-        videoGenerator: async () => seam.video ? await seam.video({}, {}) : [{ mediaType: 'video/mp4', base64: 'ZA==' }],
+        videoGenerator: async () => seam.video ? await seam.video({}, {}) : [{ media_type: 'video/mp4', base64: 'ZA==' }],
       },
     )
   })
@@ -99,9 +99,9 @@ describe('POST /api/media/*', () => {
   it('generates an image and counts usage per user/day', async () => {
     const response = await mediaPost('/api/media/image', { model: 'company-image', prompt: '一只猫' })
     expect(response.status).toBe(200)
-    const body = (await response.json()) as { ok: boolean; images: Array<{ mediaType: string; base64: string }> }
+    const body = (await response.json()) as { ok: boolean; images: Array<{ media_type: string; base64: string }> }
     expect(body.ok).toBe(true)
-    expect(body.images).toEqual([{ mediaType: 'image/png', base64: 'AQID' }])
+    expect(body.images).toEqual([{ media_type: 'image/png', base64: 'AQID' }])
 
     const day = new Date().toISOString().slice(0, 10).replaceAll('-', '')
     const usage = await testApp.redis.commands.hGetAll(`media:usage:${user.userId}:${day}`)
@@ -112,8 +112,8 @@ describe('POST /api/media/*', () => {
   it('generates a video through the video catalog', async () => {
     const response = await mediaPost('/api/media/video', { model: 'company-video', prompt: '海浪' })
     expect(response.status).toBe(200)
-    const body = (await response.json()) as { ok: boolean; videos: Array<{ mediaType: string; base64: string }> }
-    expect(body.videos).toEqual([{ mediaType: 'video/mp4', base64: 'ZA==' }])
+    const body = (await response.json()) as { ok: boolean; videos: Array<{ media_type: string; base64: string }> }
+    expect(body.videos).toEqual([{ media_type: 'video/mp4', base64: 'ZA==' }])
   })
 
   it('accepts the internal service token as a media principal', async () => {

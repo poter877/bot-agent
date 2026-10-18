@@ -52,7 +52,7 @@ test('new model providers use the original image task lifecycle and write back r
         serviceType: 'image',
         provider: 'fal',
         name: 'Fal shared',
-        baseUrl: 'https://company.invalid/api/media/fal-queue',
+        baseUrl: 'https://company.invalid',
         apiKey: 'company-token',
         model: JSON.stringify([model]),
         createdAt: now,
@@ -68,16 +68,21 @@ test('new model providers use the original image task lifecycle and write back r
     if (init?.method === 'POST') {
       posts++
       assert.equal(new Headers(init.headers).get('authorization'), 'Bearer company-token')
-      return Response.json({ request_id: 'known-job' })
+      assert.match(String(url), /\/api\/media\/queue$/)
+      assert.equal(JSON.parse(String(init.body)).model, model)
+      return Response.json({
+        ok: true,
+        request_id: 'known-job',
+        assets: [{ media_type: 'image/png', base64: image.toString('base64') }],
+      })
     }
-    if (String(url).endsWith('/status')) return Response.json({ status: 'COMPLETED' })
-    return Response.json({ images: [{ url: 'https://fal.media/image.png' }] })
+    throw new Error(`unexpected ${init?.method ?? 'GET'} ${url}`)
   }
-  providerDependencies.download = async () => image
   const id = await generateImage({ dramaId: projectId, characterId, prompt: '测试人物', configId })
   const row = await terminal(id)
   assert.equal(row.status, 'completed')
   assert.equal(posts, 1)
+  assert.equal(row.taskId, 'known-job')
   assert.match(row.localPath!, /^static\/production\//)
   assert.equal(
     db.select().from(schema.characters).where(eq(schema.characters.id, characterId)).get()!.imageUrl,
@@ -87,30 +92,37 @@ test('new model providers use the original image task lifecycle and write back r
   assert.equal((await fs.stat(path.join(dir, row.localPath!))).size, image.length)
 })
 
-test('restarting a failed provider query uses its saved account and remote ID without a second generation POST', async () => {
+test('rerunning a failed queue generation uses its saved account snapshot and posts afresh', async () => {
   const previous = db.select().from(schema.aiServiceConfigs).get()!,
     now = new Date().toISOString()
-  let posts = 0,
-    fail = true
+  const image = await sharp({ create: { width: 48, height: 48, channels: 3, background: '#123321' } })
+    .png()
+    .toBuffer()
+  let posts = 0
   providerDependencies.fetch = async (url, init) => {
     if (init?.method === 'POST') {
       posts++
-      return Response.json({ request_id: 'resume-job' })
+      if (posts === 1) return new Response('', { status: 500 })
+      assert.match(String(url), /\/api\/media\/queue$/)
+      return Response.json({
+        ok: true,
+        request_id: `retry-job-${posts}`,
+        assets: [{ media_type: 'image/png', base64: image.toString('base64') }],
+      })
     }
-    if (fail) return new Response('', { status: 500 })
-    if (String(url).endsWith('/status')) return Response.json({ status: 'COMPLETED' })
-    return Response.json({ images: [{ url: 'https://fal.media/recovered.png' }] })
+    throw new Error(`unexpected ${init?.method ?? 'GET'} ${url}`)
   }
   const id = await generateImage({ prompt: '恢复', configId: previous.id })
   let row = await terminal(id)
   assert.equal(row.status, 'failed')
-  assert.equal(row.taskId, 'resume-job')
+  // 同步队列失败没有远端任务号：恢复走明确重发，而不是续查
+  await assert.rejects(resumeGenerationTask(id), /没有服务商编号/)
   db.insert(schema.aiServiceConfigs)
     .values({
       serviceType: 'image',
       provider: 'fal',
       name: 'Other account',
-      baseUrl: 'https://company.invalid/api/media/fal-queue',
+      baseUrl: 'https://company.invalid',
       apiKey: 'company-token',
       model: previous.model,
       priority: 100,
@@ -118,11 +130,11 @@ test('restarting a failed provider query uses its saved account and remote ID wi
       updatedAt: now,
     })
     .run()
-  fail = false
-  await resumeGenerationTask(id)
-  row = await terminal(id)
+  const rerun = await generateImage({ prompt: '恢复', configId: previous.id })
+  row = await terminal(rerun)
   assert.equal(row.status, 'completed')
-  assert.equal(posts, 1)
+  assert.equal(posts, 2)
+  assert.equal(row.taskId, 'retry-job-2')
 })
 
 test('unified generation keeps the snapshotted model when the saved account model changes', async () => {
@@ -138,11 +150,19 @@ test('unified generation keeps the snapshotted model when the saved account mode
     .run()
   providerDependencies.fetch = async (url, init) => {
     if (init?.method === 'POST') {
-      assert.ok(String(url).includes(model))
-      return Response.json({ request_id: 'snapshot-job' })
+      assert.match(String(url), /\/api\/media\/queue$/)
+      // 快照模型随任务走：配置行后来改成 changed-model 也不影响本次提交
+      assert.equal(JSON.parse(String(init.body)).model, model)
+      const image = await sharp({ create: { width: 32, height: 32, channels: 3, background: '#445566' } })
+        .png()
+        .toBuffer()
+      return Response.json({
+        ok: true,
+        request_id: 'snapshot-job',
+        assets: [{ media_type: 'image/png', base64: image.toString('base64') }],
+      })
     }
-    if (String(url).endsWith('/status')) return Response.json({ status: 'COMPLETED' })
-    return Response.json({ images: [{ url: 'https://fal.media/snapshot.png' }] })
+    throw new Error(`unexpected ${init?.method ?? 'GET'} ${url}`)
   }
   const result = await runUnifiedGeneration(
     {

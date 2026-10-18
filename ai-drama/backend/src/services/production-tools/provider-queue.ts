@@ -21,6 +21,12 @@ import {
   type ProviderDependencies,
   type ProviderResult,
 } from './provider-runtime.js'
+/** 工具预设里的模型 id 只是默认回落：模型服务配置行的 model 优先
+ *  （executor 已把它解析为 args.model ?? spec.model，工具间不会串模型），
+ *  恢复任务时 ctx.state.queueModel 钉住原提交的模型。队列调用统一走公司后端
+ *  的 {COMPANY}/api/media/queue：submit→poll→download 在公司侧内化，服务端
+ *  持厂商密钥，同步返回 {ok, request_id, assets:[{media_type, base64}]}——
+ *  fal 只是该端点背后的一种模型来源，本侧没有"fal 直连/代理"的概念。 */
 export const falToolModels: Record<string, { model: string; kind: OutputKind }> = {
   flux_image: { model: 'fal-ai/flux/schnell', kind: 'image' },
   gemini_fal_image: { model: 'fal-ai/nano-banana', kind: 'image' },
@@ -46,130 +52,127 @@ export const falToolModels: Record<string, { model: string; kind: OutputKind }> 
     kind: 'video',
   },
 }
-const falDomains = ['fal.media', 'fal.run', 'storage.googleapis.com']
 function modelId(model: string) {
   if (!/^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_./-]+$/.test(model) || model.includes('..') || model.includes('//'))
     throw new Error('模型 ID 无效，请选择服务预设')
   return model
 }
-/** Fal 队列走公司后端透传代理（{COMPANY}/api/media/fal-queue），不再直连 queue.fal.run。 */
-function queueUrl(config: NonNullable<ProviderContext['config']>, model: string) {
-  const base = serviceUrl(config, '').replace(/\/+$/, '')
-  if (!/\/api\/media\/fal-queue$/.test(base)) throw new Error('Fal 队列服务地址须为公司后端 fal-queue 代理')
-  return `${base}/${modelId(model)}`
+/** 公司队列端点的同步等待要覆盖服务端的媒体预算（默认 600s），超时留给
+ *  服务端先给出明确的 502，而不是客户端先掐断传输。 */
+const QUEUE_CALL_TIMEOUT_MS = 720000
+/** 队列响应是 base64 JSON：给足多文件大资产的余量（服务端单资产上限 200MB）。 */
+const QUEUE_RESPONSE_MAX_BYTES = 1024 * 1024 * 1024
+const ASSET_EXTENSIONS: Record<string, string> = {
+  png: 'png', jpeg: 'jpg', webp: 'webp', gif: 'gif', avif: 'avif',
+  mpeg: 'mp3', mp3: 'mp3', wav: 'wav', 'x-wav': 'wav', wave: 'wav', ogg: 'ogg', flac: 'flac', m4a: 'm4a',
+  mp4: 'mp4', webm: 'webm',
 }
-/** 代理按原样透传 fal 的 JSON，返回的队列地址仍是 queue.fal.run 绝对 URL；
- *  密钥在公司侧，必须把这些地址改写回代理路径再轮询。 */
-function proxiedQueueUrl(value: string, config: NonNullable<ProviderContext['config']>, context: string) {
-  const next = new URL(value)
-  const proxy = serviceUrl(config, '').replace(/\/+$/, '')
-  if (next.hostname === 'queue.fal.run') return `${proxy}${next.pathname}`
-  if (next.origin !== new URL(proxy).origin || !next.pathname.startsWith('/'))
-    throw new Error(`Fal 返回了不受信任的${context}地址`)
-  return next.href
+const KIND_EXTENSIONS: Record<OutputKind, string> = {
+  image: 'png', video: 'mp4', audio: 'mp3', subtitle: 'srt', model: 'glb', archive: 'zip', data: 'json',
 }
-function falResultFiles(data: any, kind: OutputKind) {
-  if (kind === 'image')
-    return (Array.isArray(data.images) ? data.images : [data.image])
-      .filter(Boolean)
-      .map((v: any) => (typeof v === 'string' ? v : v.url))
-  if (kind === 'video') return [data.video?.url || data.video_url].filter(Boolean)
-  if (kind === 'audio') return [data.audio?.url || data.audio_url || data.music?.url].filter(Boolean)
-  return [
-    data.model_glb?.url ||
-      data.model_mesh?.url ||
-      data.model?.url ||
-      data.glb?.url ||
-      data.model_glb ||
-      data.model_mesh,
-  ].filter((v) => typeof v === 'string')
+function assetExtension(mediaType: unknown, kind: OutputKind) {
+  if (kind === 'model') return 'glb'
+  const subtype = typeof mediaType === 'string' && mediaType.includes('/')
+    ? mediaType.slice(mediaType.indexOf('/') + 1).split(';')[0]!.toLowerCase()
+    : ''
+  return ASSET_EXTENSIONS[subtype] ?? KIND_EXTENSIONS[kind]
+}
+function assetBytes(asset: unknown): Buffer {
+  const base64 = (asset as any)?.base64
+  if (
+    typeof base64 !== 'string' ||
+    !base64.length ||
+    base64.length > 300 * 1024 * 1024 ||
+    !/^[A-Za-z0-9+/=\r\n]+$/.test(base64)
+  )
+    throw new Error('云端队列返回了无效的媒体资产')
+  return Buffer.from(base64, 'base64')
 }
 export async function runFal(ctx: ProviderContext, deps: ProviderDependencies): Promise<ProviderResult> {
   const spec = falToolModels[ctx.toolId]
   if (!spec) throw new Error('没有对应的 Fal 工具')
   const config = ctx.config!,
-    model = typeof ctx.state.queueModel === 'string' ? ctx.state.queueModel : spec.model,
-    url = queueUrl(config, model),
-    headers = {
-      Authorization: `Bearer ${config.apiKey}`,
-      'Content-Type': 'application/json',
+    configured = typeof ctx.state.queueModel === 'string' && ctx.state.queueModel.trim() !== ''
+      ? ctx.state.queueModel
+      : typeof config.model === 'string' && config.model.trim() !== ''
+        ? config.model
+        : spec.model,
+    model = modelId(configured)
+  const input: Record<string, unknown> = {}
+  const p = str(ctx.args, ['prompt', 'description', 'text'])
+  if (!p && spec.kind !== 'model') throw new Error('请填写生成描述或朗读文本')
+  if (ctx.toolId === 'fal_elevenlabs_tts') {
+    input.text = p
+    input.voice = str(ctx.args, ['voice', 'voice_id'], 'Rachel')
+    input.speed = num(ctx.args, 'speed', 1, 0.7, 1.2)
+  } else if (ctx.toolId === 'fal_elevenlabs_music') {
+    input.prompt = p
+    input.music_length_ms = Math.round(num(ctx.args, ['duration', 'duration_seconds'], 30, 3, 600) * 1000)
+    input.force_instrumental = ctx.args.instrumental !== false
+  } else if (spec.kind === 'model') {
+    input.input_image_url = await mediaDataUri(
+      ctx,
+      deps,
+      required(ctx.args, ['image', 'image_url', 'input_image'], '三维模型参考图片'),
+      'image',
+    )
+  } else {
+    input.prompt = p
+    if (spec.kind === 'image') {
+      input.num_images = Math.round(num(ctx.args, ['num_images', 'count'], 1, 1, 4))
+      if (ctx.toolId === 'flux_image') input.image_size = str(ctx.args, 'image_size', 'landscape_16_9')
+      else input.aspect_ratio = str(ctx.args, 'aspect_ratio', '16:9')
     }
-  if (!ctx.state.remoteId) {
-    const input: Record<string, unknown> = {}
-    const p = str(ctx.args, ['prompt', 'description', 'text'])
-    if (!p && spec.kind !== 'model') throw new Error('请填写生成描述或朗读文本')
-    if (ctx.toolId === 'fal_elevenlabs_tts') {
-      input.text = p
-      input.voice = str(ctx.args, ['voice', 'voice_id'], 'Rachel')
-      input.speed = num(ctx.args, 'speed', 1, 0.7, 1.2)
-    } else if (ctx.toolId === 'fal_elevenlabs_music') {
-      input.prompt = p
-      input.music_length_ms = Math.round(num(ctx.args, ['duration', 'duration_seconds'], 30, 3, 600) * 1000)
-      input.force_instrumental = ctx.args.instrumental !== false
-    } else if (spec.kind === 'model') {
-      input.input_image_url = await mediaDataUri(
+    if (spec.kind === 'video' && ctx.toolId === 'gemini_omni_fal') {
+      input.aspect_ratio = str(ctx.args, 'aspect_ratio', '16:9')
+      input.duration = Math.round(num(ctx.args, 'duration', 8, 3, 10))
+    }
+    if (ctx.toolId === 'h3_max_video')
+      input.image_url = await mediaDataUri(
         ctx,
         deps,
-        required(ctx.args, ['image', 'image_url', 'input_image'], '三维模型参考图片'),
+        required(ctx.args, ['image', 'image_url', 'input_image'], '首帧参考图片'),
         'image',
       )
-    } else {
-      input.prompt = p
-      if (spec.kind === 'image') {
-        input.num_images = Math.round(num(ctx.args, ['num_images', 'count'], 1, 1, 4))
-        if (ctx.toolId === 'flux_image') input.image_size = str(ctx.args, 'image_size', 'landscape_16_9')
-        else input.aspect_ratio = str(ctx.args, 'aspect_ratio', '16:9')
-      }
-      if (spec.kind === 'video' && ctx.toolId === 'gemini_omni_fal') {
-        input.aspect_ratio = str(ctx.args, 'aspect_ratio', '16:9')
-        input.duration = Math.round(num(ctx.args, 'duration', 8, 3, 10))
-      }
-      if (ctx.toolId === 'h3_max_video')
-        input.image_url = await mediaDataUri(
-          ctx,
-          deps,
-          required(ctx.args, ['image', 'image_url', 'input_image'], '首帧参考图片'),
-          'image',
-        )
-      if (ctx.toolId === 'minimax_fal_video') input.duration = String(num(ctx.args, 'duration', 6, 6, 10))
-    }
-    if (ctx.args.seed !== undefined) input.seed = num(ctx.args, 'seed', 0, 0, 4294967295)
-    const submitted = await submitJson(ctx, deps, url, input, headers, (v) => v.request_id)
-    // Fal may remove endpoint subpaths in returned queue URLs. Persist the authoritative URLs,
-    // rewritten onto the company proxy so polling never bypasses it.
-    const statusUrl = typeof submitted.status_url === 'string' ? proxiedQueueUrl(submitted.status_url, config, '查询') : undefined
-    const responseUrl = typeof submitted.response_url === 'string' ? proxiedQueueUrl(submitted.response_url, config, '结果') : undefined
-    checkpoint(ctx, {
-      ...(statusUrl ? { statusUrl } : {}),
-      ...(responseUrl ? { responseUrl } : {}),
-      queueModel: model,
-    })
+    if (ctx.toolId === 'minimax_fal_video') input.duration = String(num(ctx.args, 'duration', 6, 6, 10))
   }
-  const id = encodeURIComponent(String(ctx.state.remoteId)),
-    statusUrl =
-      typeof ctx.state.statusUrl === 'string' ? ctx.state.statusUrl : `${url}/requests/${id}/status`,
-    resultUrl = typeof ctx.state.responseUrl === 'string' ? ctx.state.responseUrl : `${url}/requests/${id}`
-  const safeStored = (value: string) => {
-    if (new URL(value).origin !== new URL(url).origin) throw new Error('保存的服务查询地址无效')
-    return value
-  }
-  const status = await poll(
-    ctx,
-    deps,
-    () => jsonRequest(ctx, deps, safeStored(statusUrl), { headers }),
-    (v) => v.status === 'COMPLETED',
-    (v) => v.status === 'FAILED' || v.status === 'ERROR' || !!v.error,
-  )
-  if (status.error) throw new Error('Fal 任务失败，请查看服务控制台')
-  const data = await jsonRequest(ctx, deps, safeStored(resultUrl), { headers }),
-    urls = falResultFiles(data, spec.kind)
-  if (!urls.length || urls.some((u: unknown) => typeof u !== 'string'))
-    throw new Error('Fal 任务未返回可用的输出文件')
-  const files = []
-  for (const remote of urls.slice(0, 4))
-    files.push(
-      await outputRemote(ctx, deps, remote, spec.kind, falDomains, spec.kind === 'model' ? 'glb' : undefined),
+  if (ctx.args.seed !== undefined) input.seed = num(ctx.args, 'seed', 0, 0, 4294967295)
+  ensureCanSubmit(ctx)
+  checkpoint(ctx, {
+    submissionStarted: true,
+    provider: ctx.config?.provider,
+    configId: ctx.config?.id,
+    model,
+    queueModel: model,
+  })
+  let data: any
+  try {
+    data = await jsonRequest(
+      ctx,
+      deps,
+      serviceUrl(config, '/api/media/queue'),
+      {
+        method: 'POST',
+        headers: bearer(config.apiKey),
+        body: jsonBody({ model, input }),
+        timeoutMs: QUEUE_CALL_TIMEOUT_MS,
+      },
+      QUEUE_RESPONSE_MAX_BYTES,
     )
+  } catch (error) {
+    // 队列端点是同步事务：请求失败即结果不可恢复（资产不会回投），重试按新任务提交
+    checkpoint(ctx, { submissionStarted: false })
+    throw error
+  }
+  const assets = Array.isArray(data.assets) ? data.assets : []
+  if (!assets.length) throw new Error('云端生成未返回可用的输出文件')
+  const files = []
+  for (const asset of assets.slice(0, 4))
+    files.push(await outputBytes(ctx, assetBytes(asset), spec.kind, assetExtension(asset?.media_type, spec.kind)))
+  checkpoint(ctx, {
+    submissionStarted: false,
+    ...(typeof data.request_id === 'string' && data.request_id ? { remoteId: data.request_id } : {}),
+  })
   ctx.progress(100)
   return {
     summary: '云端生成完成，文件已保存到项目',

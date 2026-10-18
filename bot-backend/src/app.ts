@@ -22,7 +22,6 @@ import { createHealthRoutes } from './modules/health/health.routes.js'
 import { createLlmRoutes } from './modules/llm/llm.routes.js'
 import { createMediaRoutes } from './modules/media/media.routes.js'
 import { createAudioRoutes } from './modules/media/audio.routes.js'
-import { createFalQueueProxyRoutes } from './modules/media/fal-proxy.js'
 import type { MediaCatalogEntry } from './modules/media/catalog.js'
 import { CatalogStore, parseModelCatalog } from './modules/llm/catalog.js'
 import { createAdminRoutes } from './modules/admin/admin.routes.js'
@@ -229,28 +228,28 @@ export async function createApp(deps: AppDeps): Promise<App> {
   )
   app.route('/api/llm', createLlmRoutes({ config, db, redis: redis.commands, logger, catalogStore, ...deps.llm }))
 
-  // Media generation (image/video/audio): same Better Auth session, own per-user
-  // request budget, small JSON bodies, generation errors answer as 502.
-  // The fal queue proxy carries submit payloads with inline data URIs and the
-  // transcription route takes multipart audio — both get the stream-sized
-  // body budget (and, for transcription, the multipart allowance) instead of
-  // the small JSON-only media one.
+  // Media generation (image/video/audio/queue): same Better Auth session or
+  // internal service token, own per-user request budget, generation errors
+  // answer as 502. The queue route carries submit payloads with inline data
+  // URIs and the transcription route takes multipart audio — both get the
+  // stream-sized body budget (and, for transcription, the multipart
+  // allowance) instead of the small JSON-only media one.
   const mediaBodyPolicy = bodyPolicyMiddleware(config.MEDIA_BODY_LIMIT_BYTES)
   const mediaUploadBodyPolicy = bodyPolicyMiddleware(config.LLM_STREAM_BODY_LIMIT_BYTES, ['application/json', 'multipart/form-data'])
   app.use('/api/media/*', (c, next) =>
-    c.req.path.startsWith('/api/media/fal-queue/') || c.req.path.startsWith('/api/media/transcription')
+    c.req.path.startsWith('/api/media/queue') || c.req.path.startsWith('/api/media/transcription')
       ? mediaUploadBodyPolicy(c, next)
       : mediaBodyPolicy(c, next),
   )
   app.use(
     '/api/media/*',
-    (c, next) => (c.req.path.startsWith('/api/media/fal-queue/') ? next() : rateLimitMiddleware({
+    rateLimitMiddleware({
       redis: redis.commands,
       scope: 'entry-ip',
       limit: config.RATE_LIMIT_ENTRY_MAX,
       windowSeconds: config.RATE_LIMIT_ENTRY_WINDOW_SECONDS,
       subject: (c) => c.get('realIp'),
-    })(c, next)),
+    }),
   )
   // Media accepts two principals: a Better Auth user session, or an internal
   // service token (ai-drama 等内部服务) attributed to MEDIA_SERVICE_USER_ID —
@@ -265,23 +264,18 @@ export async function createApp(deps: AppDeps): Promise<App> {
     }
     await authenticate(auth)(c, next)
   })
-  // 队列代理只服务内部主体（提交 + 轮询频率远高于媒体路由的按小时预算），
-  // 不走媒体限流；滥用边界是令牌本身。
+  // 队列端点由公司侧内化轮询（一次请求 = 一次生成），与媒体路由同享按小时
+  // 预算；服务令牌门在路由内收紧为仅内部主体。
   app.use(
     '/api/media/*',
-    (c, next) => (c.req.path.startsWith('/api/media/fal-queue/') ? next() : rateLimitMiddleware({
+    rateLimitMiddleware({
       redis: redis.commands,
       scope: 'media',
       limit: config.RATE_LIMIT_MEDIA_MAX,
       windowSeconds: config.RATE_LIMIT_MEDIA_WINDOW_SECONDS,
       subject: byAuthUserId,
-    })(c, next)),
+    }),
   )
-  // The queue proxy mounts only when this deployment holds a fal key; without
-  // one there is nothing to proxy and the route must not exist.
-  if (config.FAL_KEY) {
-    app.route('/api/media/fal-queue', createFalQueueProxyRoutes({ config, logger }))
-  }
   app.route('/api/media', createMediaRoutes({ config, redis: redis.commands, logger, ...deps.media }))
   app.route('/api/media', createAudioRoutes({ config, redis: redis.commands, logger, ...deps.audio }))
 

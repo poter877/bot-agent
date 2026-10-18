@@ -201,50 +201,50 @@ test("external speech caches completed provider audio across concurrent project 
   assert.equal(saved.title, "保留并发修改");
   assert.equal(calls, 1);
 });
-test("pipeline restores a submitted Fal speech job after transport failure without another POST", async () => {
+test("a failed Fal queue call resolves its attempt and the retry posts a fresh job", async () => {
   const p = project();
-  let posts = 0,
-    gets = 0;
+  let posts = 0;
   const deps = {
     config: async () => ({
       id: 23,
       provider: "fal",
-      baseUrl: "https://company.invalid/api/media/fal-queue",
+      baseUrl: "https://company.invalid",
       apiKey: "company-token",
       model: "fal-ai/elevenlabs/tts/multilingual-v2",
     }),
     fetch: async (_url: RequestInfo | URL, init?: RequestInit) => {
       if (init?.method === "POST") {
         posts++;
-        return Response.json({ request_id: "fal-existing" });
+        // 队列端点是同步事务：一次失败的请求结果不可恢复，重试即新任务
+        if (posts === 1) throw new Error("connection reset");
+        assert.match(String(_url), /\/api\/media\/queue$/);
+        return Response.json({
+          ok: true,
+          request_id: "fal-fresh",
+          assets: [{ media_type: "audio/wav", base64: wav.toString("base64") }],
+        });
       }
-      gets++;
-      throw new Error("connection reset");
+      throw new Error("unexpected GET");
     },
   };
   await assert.rejects(
     synthesizeCreativeShot(p.id, p.revision, p.shots[0].id, deps),
     /连接中断/,
   );
-  await assert.rejects(
-    synthesizeCreativeShot(p.id, p.revision, p.shots[0].id, deps),
-    /连接中断/,
-  );
   assert.equal(posts, 1);
-  assert.equal(gets, 2);
-  const files = await fs.readdir(
-      path.join(directory, "static", "creative", String(p.id)),
-    ),
-    stateFile = files.find((name) => name.startsWith("speech-state-"))!;
-  assert.equal(
-    JSON.parse(
-      await fs.readFile(
-        path.join(directory, "static", "creative", String(p.id), stateFile),
-        "utf8",
-      ),
-    ).remoteId,
-    "fal-existing",
+  const saved = await synthesizeCreativeShot(
+    p.id,
+    p.revision,
+    p.shots[0].id,
+    deps,
   );
+  assert.equal(posts, 2);
+  const info = await inspectCreativeSource(
+    p.id,
+    saved.shots[0].audioUrl!,
+    false,
+  );
+  assert.ok(info.duration! > 0);
 });
 test("pipeline rejects text-only ASR output and never creates synthetic subtitle timing", async () => {
   const p = project();

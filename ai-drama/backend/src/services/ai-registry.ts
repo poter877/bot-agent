@@ -46,8 +46,10 @@ export function configModels(raw: string | null): string[] {
 }
 
 /**
- * Transactional, repeatable upgrade. v1 imports legacy tool secrets; v2 switches
- * the core capabilities to the company backend once env credentials exist.
+ * Transactional, repeatable upgrade. v1 imported legacy tool secrets; v2
+ * switches the core capabilities to the company backend and retargets the fal
+ * tool rows once env credentials exist (marker bump re-runs the idempotent
+ * block on deployments that already migrated).
  */
 export function migrateServiceConfigs() {
   db.transaction(tx => {
@@ -73,9 +75,13 @@ export function migrateServiceConfigs() {
       }
       tx.delete(schema.appSettings).where(eq(schema.appSettings.key, key)).run()
     }
-    // 公司后端收敛：历史厂商直连配置只改活跃行（历史行保留），模型置空待选。
-    const marker = 'company_backend_registry_v1'
+    // 公司后端收敛（v2：fal 队列在公司后端内化，v1 的 fal-queue 透传代理已
+    // 删除）：历史厂商直连配置只改活跃行（历史行保留），模型置空待选；fal
+    // 工具行只换连接数据——地址与 company 行同源、密钥换成内部服务令牌。
+    // 整段幂等，标记更名让已迁移部署再跑一遍，把 fal 行迁到新地址。
+    const marker = 'company_backend_registry_v2'
     if (!companyConfigured() || tx.select().from(schema.appSettings).where(eq(schema.appSettings.key, marker)).get()) return
+    tx.delete(schema.appSettings).where(eq(schema.appSettings.key, 'company_backend_registry_v1')).run()
     const rows = tx.select().from(schema.aiServiceConfigs).all()
     for (const type of companyTypes) {
       const active = rows.filter(r => r.serviceType === type && r.isActive)
@@ -91,10 +97,9 @@ export function migrateServiceConfigs() {
         }).run()
       }
     }
-    // fal 工具行只换连接数据：队列走公司代理，密钥换成内部服务令牌（模型 id 不变）
     for (const row of rows.filter(r => r.isActive && r.provider === 'fal')) {
       tx.update(schema.aiServiceConfigs).set({
-        baseUrl: `${companyBackendUrl()}/api/media/fal-queue`, apiKey: companyServiceToken(), updatedAt: now,
+        baseUrl: companyBackendUrl(), apiKey: companyServiceToken(), updatedAt: now,
       }).where(eq(schema.aiServiceConfigs.id, row.id)).run()
     }
     tx.insert(schema.appSettings).values({ key: marker, value: companyBackendUrl(), updatedAt: now }).run()

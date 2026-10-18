@@ -6,6 +6,8 @@ import type { MediaCatalogEntry } from './catalog.js'
  * keeps the synchronous media envelope and vendor task queues never leak to
  * clients. Per-vendor request shapes are ported from ai-drama's adapters;
  * the keys are ours, model ids come from the catalog entry — never the client.
+ * The fal queue is the one deliberate exception: directory model ids arrive
+ * from the caller's own config (the directory is that surface's model list).
  */
 
 export interface VendorVideoRequest {
@@ -44,6 +46,7 @@ const DOWNLOAD_MAX_BYTES = 200 * 1024 * 1024
 const VOLCENGINE_BASE = 'https://ark.cn-beijing.volces.com'
 const MINIMAX_BASE = 'https://api.minimax.chat'
 const DASHSCOPE_BASE = 'https://dashscope.aliyuncs.com'
+const FAL_QUEUE_BASE = 'https://queue.fal.run'
 
 const asString = (value: unknown): string => (typeof value === 'string' ? value.trim() : '')
 
@@ -99,7 +102,9 @@ async function getJson(
 
 /** Download the finished asset. Bytes stream through a hard cap so a vendor
  * cannot pin server memory with a giant content-length lie or trickle. */
-async function downloadAsBase64(fetchImpl: typeof fetch, url: string, signal: AbortSignal): Promise<VendorMediaResult> {
+async function downloadAsBase64(
+  fetchImpl: typeof fetch, url: string, signal: AbortSignal, fallbackType = 'video/mp4',
+): Promise<VendorMediaResult> {
   const response = await fetchImpl(url, { signal })
   if (!response.ok) throw new Error(`asset download failed: HTTP ${response.status}`)
   const declared = Number(response.headers.get('content-length') ?? 0)
@@ -107,7 +112,7 @@ async function downloadAsBase64(fetchImpl: typeof fetch, url: string, signal: Ab
   const buffer = Buffer.from(await response.arrayBuffer())
   if (buffer.byteLength > DOWNLOAD_MAX_BYTES) throw new Error('asset exceeds the download size cap')
   return {
-    media_type: response.headers.get('content-type')?.split(';')[0]?.trim() || 'video/mp4',
+    media_type: response.headers.get('content-type')?.split(';')[0]?.trim() || fallbackType,
     base64: buffer.toString('base64'),
   }
 }
@@ -336,4 +341,65 @@ export async function generateVolcengineImage(
   }
   const asset = await downloadAsBase64(fetchImpl, url, signal)
   return [{ ...asset, media_type: asset.media_type.startsWith('image/') ? asset.media_type : 'image/png' }]
+}
+
+// ── fal queue (directory models; the model id comes from the caller's config) ──
+
+export interface FalQueueResult {
+  requestId: string
+  assets: VendorMediaResult[]
+}
+
+/** fal results hang CDN URLs off model-specific keys (image groups, audio, 3D
+ * glb), so extraction stays a depth-first URL sweep instead of a per-model
+ * field list. Capped: no fal model returns more, and the download loop below
+ * is serial. */
+function collectAssetUrls(value: unknown, found: string[] = []): string[] {
+  if (found.length >= 8) return found
+  if (typeof value === 'string') {
+    if (/^https:\/\//i.test(value) && value.length <= 2048) found.push(value)
+  } else if (Array.isArray(value)) {
+    for (const item of value) collectAssetUrls(item, found)
+  } else if (value && typeof value === 'object') {
+    for (const item of Object.values(value as Record<string, unknown>)) collectAssetUrls(item, found)
+  }
+  return found
+}
+
+/** Internalized fal queue: submit → poll → download → base64, all with the
+ * server-held key, answering the synchronous media envelope. The model id is
+ * a fal directory id (`fal-ai/flux/schnell`) taken from the caller's config —
+ * deliberately NOT a catalog entry: the directory is the model surface here.
+ * `input` passes through to the vendor untouched. */
+export async function generateFalQueue(
+  key: string,
+  model: string,
+  input: Record<string, unknown>,
+  timeoutMs: number,
+  signal: AbortSignal,
+  deps: PollingProviderDeps = {},
+): Promise<FalQueueResult> {
+  const fetchImpl = deps.fetchImpl ?? fetch
+  const intervalMs = deps.intervalMs ?? POLL_INTERVAL_MS
+  const startedAt = Date.now()
+  const headers = { Authorization: `Key ${key}`, Accept: 'application/json' }
+  const base = `${FAL_QUEUE_BASE}/${model}`
+
+  const submitted = await postJson(fetchImpl, base, headers, input, signal)
+  const requestId = firstUrl(submitted['request_id'])
+  if (requestId === undefined) throw new Error('fal did not return a request id')
+  const requestUrl = `${base}/requests/${encodeURIComponent(requestId)}`
+  await pollUntilDone(async (): Promise<PollOutcome> => {
+    const poll = await getJson(fetchImpl, `${requestUrl}/status`, headers, signal)
+    if (poll['status'] === 'COMPLETED') return { url: requestUrl }
+    if (poll['error'] !== undefined) return { failed: errorText(poll['error']) }
+    return {}
+  }, { intervalMs }, startedAt, startedAt + timeoutMs, signal)
+
+  const payload = await getJson(fetchImpl, requestUrl, headers, signal)
+  const urls = collectAssetUrls(payload)
+  if (urls.length === 0) throw new Error('fal queue finished without an asset URL')
+  const assets: VendorMediaResult[] = []
+  for (const url of urls) assets.push(await downloadAsBase64(fetchImpl, url, signal, 'application/octet-stream'))
+  return { requestId, assets }
 }

@@ -7,6 +7,7 @@ import { createLogger, type Logger } from '../src/shared/logger.js'
 import { createApp } from '../src/app.js'
 import type { MediaCatalogEntry } from '../src/modules/media/catalog.js'
 import type { createMediaRoutes } from '../src/modules/media/media.routes.js'
+import type { AudioRoutesDeps } from '../src/modules/media/audio.routes.js'
 import type { Hono } from 'hono'
 import type { AppEnv } from '../src/shared/context.js'
 import type { CloudComputerService } from '../src/modules/cloud-computer/service.js'
@@ -40,7 +41,7 @@ export async function createTestApp(
   llm?: Parameters<typeof createApp>[0]['llm'],
   cloudComputer?: Parameters<typeof createApp>[0]['cloudComputer'],
   media?: Pick<Parameters<typeof createMediaRoutes>[0], 'imageGenerator' | 'videoGenerator' | 'imageCatalog' | 'videoCatalog' | 'pollingDeps'>,
-  audio?: Pick<Parameters<typeof createApp>[0]['audio'], 'speechGenerator' | 'transcriber'>,
+  audio?: Pick<AudioRoutesDeps, 'speechGenerator' | 'transcriber'>,
 ): Promise<TestApp> {
   const infra = testInfra()
   const config = loadConfig({

@@ -164,20 +164,24 @@ export async function responseBytes(response: Response, max = 8 * 1024 * 1024) {
   }
   return Buffer.concat(parts)
 }
+/** RequestInit 加 timeoutMs：个别同步端点（公司媒体队列）服务端要跑几分钟轮询，
+ *  默认的 120s JSON 预算会把还在生成的请求掐断。 */
+export type RequestOptions = RequestInit & { timeoutMs?: number }
 export async function request(
   ctx: ProviderContext,
   deps: ProviderDependencies,
   url: string,
-  init: RequestInit = {},
+  init: RequestOptions = {},
   binary = false,
 ) {
   ctx.signal.throwIfAborted()
+  const { timeoutMs, ...options } = init
   let res: Response
   try {
     res = await deps.fetch(url, {
-      ...init,
+      ...options,
       redirect: 'error',
-      signal: AbortSignal.any([ctx.signal, AbortSignal.timeout(binary ? 300000 : 120000)]),
+      signal: AbortSignal.any([ctx.signal, AbortSignal.timeout(timeoutMs ?? (binary ? 300000 : 120000))]),
     })
   } catch (error) {
     if (ctx.signal.aborted) throw ctx.signal.reason
@@ -206,7 +210,7 @@ export async function jsonRequest(
   ctx: ProviderContext,
   deps: ProviderDependencies,
   url: string,
-  init: RequestInit = {},
+  init: RequestOptions = {},
   maxBytes = 64 * 1024 * 1024,
 ) {
   const res = await request(ctx, deps, url, init)

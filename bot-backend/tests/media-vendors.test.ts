@@ -4,8 +4,9 @@ import { createTestApp, flushRateLimits, registerUser, truncateAll, uniqueEmail,
 /**
  * Contract tests for the vendor-facing media surfaces: the async-poll video
  * providers (volcengine/minimax/aliyun — submit/poll/download internalized
- * server-side), the fal queue proxy (key stays here, service principals only),
- * and the audio routes (speech/transcription over the AI SDK).
+ * server-side), the internalized fal queue (key stays here, service
+ * principals only, synchronous base64 assets), and the audio routes
+ * (speech/transcription over the AI SDK).
  */
 
 const VIDEO_CATALOG = [
@@ -63,10 +64,10 @@ describe('POST /api/media/video — polling providers', () => {
     })
 
     expect(response.status).toBe(200)
-    const body = await response.json()
+    const body = (await response.json()) as { ok: boolean; videos: Array<{ media_type: string; base64: string }> }
     expect(body.ok).toBe(true)
-    expect(body.videos[0].media_type).toBe('video/mp4')
-    expect(body.videos[0].base64).toBe(VIDEO_MP4)
+    expect(body.videos[0]!.media_type).toBe('video/mp4')
+    expect(body.videos[0]!.base64).toBe(VIDEO_MP4)
     // The upstream key never appears in the wire; the vendor auth does.
     expect(calls.some((call) => call.url.includes('queue.fal.run'))).toBe(false)
   })
@@ -81,19 +82,49 @@ describe('POST /api/media/video — polling providers', () => {
   })
 })
 
-describe('fal queue proxy', () => {
+describe('POST /api/media/queue — internalized fal queue', () => {
   let testApp: TestApp
   let user: RegisteredUser
-  const upstreamCalls: Array<{ url: string; auth: string | undefined; method: string }> = []
+  const upstream: Array<{ url: string; auth: string | undefined; method: string; body?: unknown }> = []
+  const PNG_BYTES = Buffer.from('fake-png-bytes')
 
   beforeAll(async () => {
-    const fakeFetch = vi.fn(async (input: unknown, init?: { method?: string; headers?: Record<string, string> }) => {
-      const headers = init?.headers ?? {}
-      upstreamCalls.push({ url: String(input), auth: headers['Authorization'], method: init?.method ?? 'GET' })
-      return new Response(JSON.stringify({ request_id: 'rid-1', status: 'IN_QUEUE' }), { status: 200 })
+    const fakeFetch = vi.fn(async (input: unknown, init?: { method?: string; headers?: Record<string, string>; body?: string }) => {
+      const url = String(input)
+      upstream.push({
+        url,
+        auth: init?.headers?.['Authorization'],
+        method: init?.method ?? 'GET',
+        ...(init?.body !== undefined ? { body: JSON.parse(init.body) } : {}),
+      })
+      if (url === 'https://queue.fal.run/fal-ai/flux/schnell' && init?.method === 'POST') {
+        if (JSON.parse(init.body!).prompt === 'reject me') {
+          return new Response(JSON.stringify({ detail: 'quota exceeded' }), { status: 422 })
+        }
+        return new Response(JSON.stringify({ status: 'IN_QUEUE', request_id: 'rid-1' }), { status: 200 })
+      }
+      if (url === 'https://queue.fal.run/fal-ai/flux/schnell/requests/rid-1/status') {
+        const done = upstream.filter((call) => call.url === url).length > 1
+        return new Response(JSON.stringify({ status: done ? 'COMPLETED' : 'IN_QUEUE', queue_position: 1 }), { status: 200 })
+      }
+      if (url === 'https://queue.fal.run/fal-ai/flux/schnell/requests/rid-1') {
+        return new Response(
+          JSON.stringify({ images: [{ url: 'https://cdn.example.com/a.png' }], extra: 'https://cdn.example.com/b.png' }),
+          { status: 200 },
+        )
+      }
+      if (url === 'https://cdn.example.com/a.png' || url === 'https://cdn.example.com/b.png') {
+        return new Response(PNG_BYTES, { status: 200, headers: { 'content-type': 'image/png' } })
+      }
+      return new Response('unexpected', { status: 500 })
     })
     vi.stubGlobal('fetch', fakeFetch)
-    testApp = await createTestApp({ FAL_KEY: 'test-fal-key', MEDIA_SERVICE_TOKEN: 'svc-token-0123456789abcdef' })
+    testApp = await createTestApp(
+      { FAL_KEY: 'test-fal-key', MEDIA_SERVICE_TOKEN: 'svc-token-0123456789abcdef' },
+      undefined,
+      undefined,
+      { pollingDeps: { intervalMs: 1 } },
+    )
   })
 
   afterAll(async () => {
@@ -102,37 +133,81 @@ describe('fal queue proxy', () => {
   })
 
   beforeEach(async () => {
+    upstream.length = 0
     await truncateAll(testApp.database)
     await flushRateLimits(testApp.redis)
     user = await registerUser(testApp.app, testApp.database, uniqueEmail(), 'password-123456')
   })
 
-  it('forwards service-token calls to queue.fal.run with the server-held key', async () => {
-    const response = await testApp.app.request('/api/media/fal-queue/fal-ai/flux/schnell', {
+  it('internalizes submit/poll/download for directory models and answers base64 assets', async () => {
+    const response = await testApp.app.request('/api/media/queue', {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: 'Bearer svc-token-0123456789abcdef' },
-      body: JSON.stringify({ prompt: 'a cat' }),
+      body: JSON.stringify({ model: 'fal-ai/flux/schnell', input: { prompt: 'a cat', num_images: 2 } }),
     })
 
     expect(response.status).toBe(200)
-    expect(await response.json()).toEqual({ request_id: 'rid-1', status: 'IN_QUEUE' })
-    expect(upstreamCalls[0].url).toBe('https://queue.fal.run/fal-ai/flux/schnell')
-    expect(upstreamCalls[0].auth).toBe('Key test-fal-key')
+    const body = (await response.json()) as { ok: boolean; request_id: string; assets: Array<{ media_type: string; base64: string }> }
+    expect(body.ok).toBe(true)
+    expect(body.request_id).toBe('rid-1')
+    const base64 = PNG_BYTES.toString('base64')
+    expect(body.assets).toEqual([
+      { media_type: 'image/png', base64 },
+      { media_type: 'image/png', base64 },
+    ])
+    expect(upstream[0]).toMatchObject({ url: 'https://queue.fal.run/fal-ai/flux/schnell', method: 'POST' })
+    expect(upstream[0]!.auth).toBe('Key test-fal-key')
+    expect(upstream[0]!.body).toEqual({ prompt: 'a cat', num_images: 2 })
+    expect(upstream.some((call) => call.url.endsWith('/requests/rid-1/status'))).toBe(true)
+    // The vendor key rides only the server-to-vendor hop.
+    expect(JSON.stringify(body)).not.toContain('test-fal-key')
   })
 
-  it('rejects browser sessions and walks off the queue path', async () => {
-    const session = await testApp.app.request('/api/media/fal-queue/fal-ai/flux/schnell', {
+  it('rejects browser sessions and malformed model ids before any vendor call', async () => {
+    const session = await testApp.app.request('/api/media/queue', {
       method: 'POST',
-      headers: { 'content-type': 'application/json', cookie: user.cookie },
-      body: '{}',
+      headers: { 'content-type': 'application/json', cookie: user.cookie, origin: 'http://127.0.0.1:3100' },
+      body: JSON.stringify({ model: 'fal-ai/flux/schnell', input: {} }),
     })
     expect(session.status).toBe(403)
 
-    const escaped = await testApp.app.request('/api/media/fal-queue/../admin', {
-      method: 'GET',
-      headers: { authorization: 'Bearer svc-token-0123456789abcdef' },
+    const escaped = await testApp.app.request('/api/media/queue', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer svc-token-0123456789abcdef' },
+      body: JSON.stringify({ model: '../admin', input: {} }),
     })
-    expect(escaped.status).toBe(404)
+    expect(escaped.status).toBe(400)
+    expect(upstream).toHaveLength(0)
+  })
+
+  it('answers 502 when the vendor refuses the submission', async () => {
+    const response = await testApp.app.request('/api/media/queue', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer svc-token-0123456789abcdef' },
+      body: JSON.stringify({ model: 'fal-ai/flux/schnell', input: { prompt: 'reject me' } }),
+    })
+    expect(response.status).toBe(502)
+  })
+})
+
+describe('POST /api/media/queue — without a fal key', () => {
+  let testApp: TestApp
+
+  beforeAll(async () => {
+    testApp = await createTestApp({ MEDIA_SERVICE_TOKEN: 'svc-token-0123456789abcdef' })
+  })
+
+  afterAll(async () => {
+    await testApp.close()
+  })
+
+  it('answers 503 instead of exposing a dead route', async () => {
+    const response = await testApp.app.request('/api/media/queue', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer svc-token-0123456789abcdef' },
+      body: JSON.stringify({ model: 'fal-ai/flux/schnell', input: {} }),
+    })
+    expect(response.status).toBe(503)
   })
 })
 
@@ -147,11 +222,11 @@ describe('POST /api/media/speech|transcription', () => {
       undefined,
       undefined,
       {
-        speechGenerator: async (request) => {
+        speechGenerator: async (request: { model: string; input: string }) => {
           if (request.model !== 'gpt-4o-mini-tts') throw new Error('unexpected model')
           return { media_type: 'audio/mpeg', base64: 'QXVkaW8=' }
         },
-        transcriber: async ({ filename }) => {
+        transcriber: async ({ filename }: { filename: string }) => {
           if (!filename.endsWith('.mp3')) throw new Error('unexpected file')
           return { text: '全片对白', segments: [{ start: 0, end: 1.5, text: '第一句' }] }
         },

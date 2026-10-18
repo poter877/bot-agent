@@ -45,10 +45,11 @@ test('core service types collapse to the company provider with tool rows exempt'
 test('company migration switches active rows and keeps the one-time marker', () => {
   const registrySource = read('src/services/ai-registry.ts')
 
-  assert.match(registrySource, /company_backend_registry_v1/)
+  // v2：fal 队列在公司后端内化，标记更名让已迁移部署把 fal 行再迁一次
+  assert.match(registrySource, /company_backend_registry_v2/)
   assert.match(registrySource, /legacyDirectVendors/)
   assert.match(registrySource, /只改活跃行/)
-  assert.match(registrySource, /fal 工具行只换连接数据/)
+  assert.match(registrySource, /工具行只换连接数据/)
 })
 
 test('AI config routes reject unsupported service/provider pairs in create, test, and update paths', () => {

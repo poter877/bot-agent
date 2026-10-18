@@ -118,46 +118,49 @@ async function withFixture(
   }
 }
 
-test('Fal persists authoritative queue URLs and downloads completed output', async () =>
+test('Fal submits the directory model to the company queue and saves every returned asset', async () =>
   withFixture('gemini_fal_image', { prompt: 'rainy street' }, async (f) => {
     f.queue.push(
       json({
+        ok: true,
         request_id: 'r1',
-        status_url: 'https://queue.fal.run/fal-ai/nano-banana/requests/r1/status',
-        response_url: 'https://queue.fal.run/fal-ai/nano-banana/requests/r1',
+        assets: [
+          { media_type: 'image/png', base64: png.toString('base64') },
+          { media_type: 'image/png', base64: png.toString('base64') },
+        ],
       }),
-      json({ status: 'COMPLETED' }),
-      json({ images: [{ url: 'https://v3.fal.media/a.png' }] }),
     )
     const result = await runProviderTool(f.ctx, f.deps)
+    assert.equal(result.files.length, 2)
     assert.equal(result.files[0].kind, 'image')
+    assert.equal(f.calls.length, 1)
+    assert.match(f.calls[0]!.url, /\/api\/media\/queue$/)
+    assert.equal(new Headers(f.calls[0]!.init.headers).get('Authorization'), 'Bearer test-secret')
+    const body = JSON.parse(String(f.calls[0]!.init.body))
+    assert.equal(body.model, 'fal-ai/nano-banana')
+    assert.equal(body.input.prompt, 'rainy street')
     assert.equal(f.ctx.state.remoteId, 'r1')
-    assert.equal(f.calls.length, 3)
-    assert.match(f.calls[0].url, /fal-queue\/fal-ai\/nano-banana$/)
-    assert.equal(new Headers(f.calls[0].init.headers).get('Authorization'), 'Bearer test-secret')
-    // 代理返回的 fal 绝对队列地址必须改写回公司代理，密钥不落地
-    assert.match(f.calls[1].url, /fal-queue\/fal-ai\/nano-banana\/requests\/r1\/status$/)
-    assert.match(f.calls[2].url, /fal-queue\/fal-ai\/nano-banana\/requests\/r1$/)
-    assert.deepEqual(await fs.readFile(result.files[0].path), png)
+    assert.equal(f.ctx.state.queueModel, 'fal-ai/nano-banana')
+    assert.deepEqual(await fs.readFile(result.files[0]!.path), png)
   }))
-test('a shared Fal config does not run the wrong tool model', async () =>
+test('the configured service row model overrides the tool default on the queue call', async () =>
   withFixture('gemini_fal_image', { prompt: 'street' }, async (f) => {
     f.ctx.config!.model = 'fal-ai/flux/schnell'
     f.queue.push(
-      json({ request_id: 'r2' }),
-      json({ status: 'COMPLETED' }),
-      json({ images: [{ url: 'https://fal.media/file.png' }] }),
+      json({ ok: true, request_id: 'r2', assets: [{ media_type: 'image/png', base64: png.toString('base64') }] }),
     )
     await runProviderTool(f.ctx, f.deps)
-    // 工具按自己的 spec 模型提交，共享配置的 model 不会串到其他工具
-    assert.match(f.calls[0].url, /fal-queue\/fal-ai\/nano-banana$/)
+    // 配置行模型即覆盖（executor 会把共享配置按工具解析为 spec.model，不会串模型）
+    assert.equal(JSON.parse(String(f.calls[0]!.init.body)).model, 'fal-ai/flux/schnell')
   }))
-test('Fal resume polls stored request without submitting again', async () =>
-  withFixture('flux_image', {}, async (f) => {
-    Object.assign(f.ctx.state, { remoteId: 'saved', submissionStarted: true })
-    f.queue.push(json({ status: 'COMPLETED' }), json({ images: [{ url: 'https://fal.media/file.png' }] }))
+test('a recovered queue task snapshot keeps its original model', async () =>
+  withFixture('flux_image', { prompt: 'street' }, async (f) => {
+    f.ctx.state.queueModel = 'fal-ai/nano-banana'
+    f.queue.push(
+      json({ ok: true, request_id: 'r3', assets: [{ media_type: 'image/png', base64: png.toString('base64') }] }),
+    )
     await runProviderTool(f.ctx, f.deps)
-    assert.ok(f.calls.every((v) => !v.init.method || v.init.method === 'GET'))
+    assert.equal(JSON.parse(String(f.calls[0]!.init.body)).model, 'fal-ai/nano-banana')
   }))
 test('an uncertain async submission never gets silently resubmitted', async () =>
   withFixture('flux_image', { prompt: 'street' }, async (f) => {
@@ -173,12 +176,11 @@ test('provider mismatches and changed configuration IDs are rejected', async () 
     f.ctx.state.configId = 43
     await assert.rejects(runProviderTool(f.ctx, f.deps), /原模型配置/)
   }))
-test('Fal status URL cannot leak authorization to another host', async () =>
+test('a tampered queue model id is rejected before any request', async () =>
   withFixture('flux_image', { prompt: 'street' }, async (f) => {
-    f.queue.push(json({ request_id: 'id', status_url: 'https://evil.example/status' }))
-    await assert.rejects(runProviderTool(f.ctx, f.deps), /不受信任/)
-    assert.equal(f.calls.length, 1)
-    assert.equal(f.ctx.state.remoteId, 'id')
+    f.ctx.state.queueModel = '../../admin'
+    await assert.rejects(runProviderTool(f.ctx, f.deps), /模型 ID 无效/)
+    assert.equal(f.calls.length, 0)
   }))
 test('Fal 3D reference is read through project media ownership boundary', async () =>
   withFixture('fal_3d', { image: '/static/creative/2/stolen.png' }, async (f) => {
@@ -492,13 +494,13 @@ test('service URL validation rejects credential URLs and non-local insecure HTTP
     serviceUrl(
       {
         provider: 'company',
-        baseUrl: 'http://company.internal:8080/api/media/fal-queue',
+        baseUrl: 'http://company.internal:8080',
         apiKey: 'token',
         model: 'x',
       },
       '',
     ),
-    'http://company.internal:8080/api/media/fal-queue',
+    'http://company.internal:8080',
   )
 })
 
@@ -511,12 +513,25 @@ test('definitive HTTP 403 records rejection rather than uncertain billing', asyn
 test('HTML pretending to be a generated PNG is rejected', async () =>
   withFixture('flux_image', { prompt: 'street' }, async (f) => {
     f.queue.push(
-      json({ request_id: 'fake' }),
-      json({ status: 'COMPLETED' }),
-      json({ images: [{ url: 'https://fal.media/fake.png' }] }),
+      json({
+        ok: true,
+        request_id: 'fake',
+        assets: [{ media_type: 'image/png', base64: Buffer.from('<html>Error</html>').toString('base64') }],
+      }),
     )
-    f.deps.download = async () => Buffer.from('<html>Error</html>')
     await assert.rejects(runProviderTool(f.ctx, f.deps), /图片服务返回/)
+  }))
+test('a failed queue call resolves its attempt, so a retry submits a fresh job', async () =>
+  withFixture('flux_image', { prompt: 'street' }, async (f) => {
+    f.queue.push(new Response('', { status: 500 }))
+    await assert.rejects(runProviderTool(f.ctx, f.deps), /HTTP 500/)
+    // 同步端点失败没有可恢复的服务端任务：重试不落入"提交不确定"死锁
+    assert.equal(f.ctx.state.submissionStarted, false)
+    f.queue.push(
+      json({ ok: true, request_id: 'retry', assets: [{ media_type: 'image/png', base64: png.toString('base64') }] }),
+    )
+    await runProviderTool(f.ctx, f.deps)
+    assert.equal(f.calls.length, 2)
   }))
 test('Kling signs expiring JWT on server and uses documented image/video task contract', async () =>
   withFixture('kling_official_video', { prompt: 'street', duration: 5 }, async (f) => {
