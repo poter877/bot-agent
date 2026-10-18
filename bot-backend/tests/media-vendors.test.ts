@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createHmac } from 'node:crypto'
 import { createTestApp, flushRateLimits, registerUser, truncateAll, uniqueEmail, type RegisteredUser, type TestApp } from './helpers.js'
 
 /**
@@ -187,6 +188,252 @@ describe('POST /api/media/queue — internalized fal queue', () => {
       body: JSON.stringify({ model: 'fal-ai/flux/schnell', input: { prompt: 'reject me' } }),
     })
     expect(response.status).toBe(502)
+  })
+})
+
+describe('POST /api/media/image|video — Kling', () => {
+  let testApp: TestApp
+  let user: RegisteredUser
+  const upstream: Array<{ url: string; method: string; auth?: string; body?: unknown }> = []
+  const KLING_IMAGE_CATALOG = [
+    { id: 'kling-v2', provider: 'kling' as const, model: 'kling-v2', enabled: true },
+  ]
+  const KLING_VIDEO_CATALOG = [
+    { id: 'kling-v2-6', provider: 'kling' as const, model: 'kling-v2-6', enabled: true },
+  ]
+  const PNG_BYTES = Buffer.from('fake-kling-png')
+  const MP4_BYTES = Buffer.from('fake-kling-mp4')
+
+  /** Kling's documented submit → poll(→ succeed) → asset URLs flow; the poll
+   * answers "processing" once, then succeeds, so the loop is exercised. */
+  beforeAll(async () => {
+    const fakeFetch = vi.fn(async (input: unknown, init?: { method?: string; headers?: Record<string, string>; body?: string }) => {
+      const url = String(input)
+      upstream.push({
+        url,
+        method: init?.method ?? 'GET',
+        auth: init?.headers?.['Authorization'],
+        ...(init?.body !== undefined ? { body: JSON.parse(init.body) } : {}),
+      })
+      const task = url.match(/\/v1\/videos\/(text2video|image2video)\/([^/]+)$/),
+        imageTask = url.match(/\/v1\/images\/generations\/([^/]+)$/)
+      if (url.endsWith('/v1/videos/text2video') && init?.method === 'POST') {
+        return new Response(JSON.stringify({ code: 0, data: { task_id: 'kv-1' } }), { status: 200 })
+      }
+      if (url.endsWith('/v1/videos/image2video') && init?.method === 'POST') {
+        return new Response(JSON.stringify({ code: 0, data: { task_id: 'kv-2' } }), { status: 200 })
+      }
+      if (url.endsWith('/v1/images/generations') && init?.method === 'POST') {
+        return new Response(JSON.stringify({ code: 0, data: { task_id: 'ki-1' } }), { status: 200 })
+      }
+      if (task?.[2] === 'kv-1' || task?.[2] === 'kv-2') {
+        const done = upstream.filter((call) => call.url.endsWith(`/tasks/${task![2]}`) || call.url.endsWith(`/${task![2]}`)).length > 1
+        if (!done) return new Response(JSON.stringify({ code: 0, data: { task_status: 'processing' } }), { status: 200 })
+        return new Response(
+          JSON.stringify({ code: 0, data: { task_status: 'succeed', task_result: { videos: [{ url: 'https://cdn.klingai.com/v.mp4' }] } } }),
+          { status: 200 },
+        )
+      }
+      if (imageTask?.[1] === 'ki-1') {
+        const done = upstream.filter((call) => call.url.endsWith('/ki-1')).length > 1
+        if (!done) return new Response(JSON.stringify({ code: 0, data: { task_status: 'processing' } }), { status: 200 })
+        return new Response(
+          JSON.stringify({
+            code: 0,
+            data: { task_status: 'succeed', task_result: { images: [{ url: 'https://cdn.klingai.com/a.png' }, { url: 'https://cdn.klingai.com/b.png' }] } },
+          }),
+          { status: 200 },
+        )
+      }
+      if (url === 'https://cdn.klingai.com/v.mp4') {
+        return new Response(MP4_BYTES, { status: 200, headers: { 'content-type': 'video/mp4' } })
+      }
+      if (url === 'https://cdn.klingai.com/a.png' || url === 'https://cdn.klingai.com/b.png') {
+        return new Response(PNG_BYTES, { status: 200, headers: { 'content-type': 'image/png' } })
+      }
+      return new Response('unexpected', { status: 500 })
+    })
+    vi.stubGlobal('fetch', fakeFetch)
+    testApp = await createTestApp(
+      { KLING_ACCESS_KEY: 'kling-access', KLING_SECRET_KEY: 'kling-secret', MEDIA_SERVICE_TOKEN: 'svc-token-0123456789abcdef' },
+      undefined,
+      undefined,
+      { imageCatalog: KLING_IMAGE_CATALOG, videoCatalog: KLING_VIDEO_CATALOG, pollingDeps: { intervalMs: 1 } },
+    )
+  })
+
+  afterAll(async () => {
+    vi.unstubAllGlobals()
+    await testApp.close()
+  })
+
+  beforeEach(async () => {
+    upstream.length = 0
+    await truncateAll(testApp.database)
+    await flushRateLimits(testApp.redis)
+    user = await registerUser(testApp.app, testApp.database, uniqueEmail(), 'password-123456')
+  })
+
+  /** Recompute the documented HS256 signature so the wire token is proven,
+   * not just shaped. */
+  const resign = (token: string): string => {
+    const [head, payload] = token.split('.')
+    return `${head}.${payload}.${createHmac('sha256', 'kling-secret').update(`${head}.${payload}`).digest('base64url')}`
+  }
+
+  it('signs HS256 JWTs over the split env pair, polls, and answers video base64', async () => {
+    const response = await testApp.app.request('/api/media/video', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: user.cookie, origin: 'http://127.0.0.1:3100' },
+      body: JSON.stringify({
+        model: 'kling-v2-6', prompt: '一只猫', duration: 10, aspectRatio: '9:16', generateAudio: false,
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as { ok: boolean; videos: Array<{ media_type: string; base64: string }> }
+    expect(body.ok).toBe(true)
+    expect(body.videos).toEqual([{ media_type: 'video/mp4', base64: MP4_BYTES.toString('base64') }])
+
+    const submit = upstream[0]!
+    expect(submit.url).toBe('https://api-beijing.klingai.com/v1/videos/text2video')
+    expect(submit.body).toEqual({
+      model_name: 'kling-v2-6', prompt: '一只猫', duration: '10', mode: 'pro', aspect_ratio: '9:16', sound: 'off',
+    })
+    const token = submit.auth!.slice('Bearer '.length)
+    const payload = JSON.parse(Buffer.from(token.split('.')[1]!, 'base64url').toString('utf8'))
+    expect(payload.iss).toBe('kling-access')
+    expect(payload.exp).toBeGreaterThan(Date.now() / 1000)
+    expect(resign(token)).toBe(token)
+    expect(upstream.some((call) => call.url.endsWith('/videos/text2video/kv-1'))).toBe(true)
+    // The secret key rides only the signature, never the wire body.
+    expect(JSON.stringify(body)).not.toContain('kling-secret')
+  })
+
+  it('unwraps data-URI first frames into the image2video base64 contract', async () => {
+    const frame = Buffer.from('first-frame-png').toString('base64')
+    const response = await testApp.app.request('/api/media/video', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: user.cookie, origin: 'http://127.0.0.1:3100' },
+      body: JSON.stringify({ model: 'kling-v2-6', prompt: '一只猫', imageUrl: `data:image/png;base64,${frame}` }),
+    })
+
+    expect(response.status).toBe(200)
+    const submit = upstream[0]!
+    expect(submit.url).toBe('https://api-beijing.klingai.com/v1/videos/image2video')
+    expect((submit.body as Record<string, unknown>)['image']).toBe(frame)
+    // image2video is adaptive: no aspect_ratio is forced.
+    expect((submit.body as Record<string, unknown>)['aspect_ratio']).toBeUndefined()
+    expect((submit.body as Record<string, unknown>)['sound']).toBe('on')
+  })
+
+  it('answers every generated image in the images array', async () => {
+    const response = await testApp.app.request('/api/media/image', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: user.cookie, origin: 'http://127.0.0.1:3100' },
+      body: JSON.stringify({ model: 'kling-v2', prompt: '一张猫图', n: 2, aspectRatio: '16:9' }),
+    })
+
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as { ok: boolean; images: Array<{ media_type: string; base64: string }> }
+    expect(body.images).toEqual([
+      { media_type: 'image/png', base64: PNG_BYTES.toString('base64') },
+      { media_type: 'image/png', base64: PNG_BYTES.toString('base64') },
+    ])
+    expect(upstream[0]!.url).toBe('https://api-beijing.klingai.com/v1/images/generations')
+    expect(upstream[0]!.body).toEqual({ model_name: 'kling-v2', prompt: '一张猫图', n: 2, aspect_ratio: '16:9' })
+  })
+
+  it('serves the service token without an Origin header (server-to-server callers)', async () => {
+    const response = await testApp.app.request('/api/media/video', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer svc-token-0123456789abcdef' },
+      body: JSON.stringify({ model: 'kling-v2-6', prompt: '一只猫' }),
+    })
+    expect(response.status).toBe(200)
+  })
+})
+
+describe('POST /api/media/image|video — Kling vendor failures', () => {
+  let testApp: TestApp
+
+  beforeAll(async () => {
+    const fakeFetch = vi.fn(async (input: unknown, init?: { method?: string }) => {
+      const url = String(input)
+      if (url.endsWith('/v1/images/generations') && init?.method === 'POST') {
+        return new Response(JSON.stringify({ code: 1002, message: 'quota exceeded' }), { status: 200 })
+      }
+      if (url.endsWith('/v1/videos/text2video') && init?.method === 'POST') {
+        return new Response(JSON.stringify({ code: 0, data: { task_id: 'kv-fail' } }), { status: 200 })
+      }
+      if (url.endsWith('/v1/videos/text2video/kv-fail')) {
+        return new Response(
+          JSON.stringify({ code: 0, data: { task_status: 'failed', task_status_msg: 'sensitive content' } }),
+          { status: 200 },
+        )
+      }
+      return new Response('unexpected', { status: 500 })
+    })
+    vi.stubGlobal('fetch', fakeFetch)
+    testApp = await createTestApp(
+      { KLING_ACCESS_KEY: 'kling-access', KLING_SECRET_KEY: 'kling-secret', MEDIA_SERVICE_TOKEN: 'svc-token-0123456789abcdef' },
+      undefined,
+      undefined,
+      {
+        imageCatalog: [{ id: 'kling-v2', provider: 'kling' as const, model: 'kling-v2', enabled: true }],
+        videoCatalog: [{ id: 'kling-v2-6', provider: 'kling' as const, model: 'kling-v2-6', enabled: true }],
+        pollingDeps: { intervalMs: 1 },
+      },
+    )
+  })
+
+  afterAll(async () => {
+    vi.unstubAllGlobals()
+    await testApp.close()
+  })
+
+  it('answers 502 when the vendor refuses the submission in a 200 envelope', async () => {
+    const response = await testApp.app.request('/api/media/image', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer svc-token-0123456789abcdef' },
+      body: JSON.stringify({ model: 'kling-v2', prompt: '一张猫图' }),
+    })
+    expect(response.status).toBe(502)
+  })
+
+  it('answers 502 when the polled task fails', async () => {
+    const response = await testApp.app.request('/api/media/video', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer svc-token-0123456789abcdef' },
+      body: JSON.stringify({ model: 'kling-v2-6', prompt: '一只猫' }),
+    })
+    expect(response.status).toBe(502)
+  })
+})
+
+describe('POST /api/media/video — Kling without the key pair', () => {
+  let testApp: TestApp
+
+  beforeAll(async () => {
+    testApp = await createTestApp(
+      { MEDIA_SERVICE_TOKEN: 'svc-token-0123456789abcdef' },
+      undefined,
+      undefined,
+      { videoCatalog: [{ id: 'kling-v2-6', provider: 'kling' as const, model: 'kling-v2-6', enabled: true }] },
+    )
+  })
+
+  afterAll(async () => {
+    await testApp.close()
+  })
+
+  it('answers 503 when only one half of the pair is configured', async () => {
+    const response = await testApp.app.request('/api/media/video', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer svc-token-0123456789abcdef' },
+      body: JSON.stringify({ model: 'kling-v2-6', prompt: '一只猫' }),
+    })
+    expect(response.status).toBe(503)
   })
 })
 

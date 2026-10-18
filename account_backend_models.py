@@ -69,16 +69,26 @@ def resolve_company_model(requested: str | None, task: str | None = None) -> dic
 
 
 _MEDIA_TIMEOUT_SECONDS = 600.0
+# Speech is one short synthesis call (input capped server-side at 20k chars), not a
+# minutes-long generation job like image/video, so it fails fast relative to them.
+_SPEECH_TIMEOUT_SECONDS = 120.0
+_MEDIA_KIND_TIMEOUTS: dict[str, float] = {
+    "image": _MEDIA_TIMEOUT_SECONDS,
+    "video": _MEDIA_TIMEOUT_SECONDS,
+    "speech": _SPEECH_TIMEOUT_SECONDS,
+}
 
 
 def generate_media(kind: str, payload: dict) -> dict:
-    """Image/video generation through the company backend (``/api/media/{kind}``).
+    """Image/video/speech generation through the company backend (``/api/media/{kind}``).
 
-    ``kind`` is ``"image"`` or ``"video"``. Returns the backend envelope
-    ``{ok, images|videos: [{media_type, base64}], ...}``; auth/backend failures
-    raise :class:`AccountBackendError` (the tools surface them as copy)."""
-    if kind not in ("image", "video"):
+    ``kind`` is ``"image"``, ``"video"`` or ``"speech"``. Returns the backend envelope
+    (``{ok, images|videos: [{media_type, base64}] | audio: {media_type, base64}, ...}``);
+    auth/backend failures raise :class:`AccountBackendError` (the tools surface them
+    as copy)."""
+    if kind not in _MEDIA_KIND_TIMEOUTS:
         raise ValueError(f"unknown media kind {kind!r}")
     from account_backend_session import request_account_backend
 
-    return request_account_backend(f"/api/media/{kind}", payload=payload, timeout=_MEDIA_TIMEOUT_SECONDS)
+    return request_account_backend(
+        f"/api/media/{kind}", payload=payload, timeout=_MEDIA_KIND_TIMEOUTS[kind])

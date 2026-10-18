@@ -67,10 +67,6 @@ const providerBases: Record<string, { label: string; baseUrl: string }> = {
     label: '腾讯云混元',
     baseUrl: 'https://hunyuan.tencentcloudapi.com',
   },
-  kling_official: {
-    label: '可灵官方',
-    baseUrl: 'https://api-beijing.klingai.com',
-  },
   atlascloud: { label: 'Atlas Cloud', baseUrl: 'https://api.atlascloud.ai' },
   higgsfield: { label: 'Higgsfield', baseUrl: 'https://api.higgsfield.ai' },
   dashscope: { label: '阿里云百炼', baseUrl: 'https://dashscope.aliyuncs.com' },

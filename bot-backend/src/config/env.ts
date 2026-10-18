@@ -74,6 +74,10 @@ const envSchema = z.object({
   VOLCENGINE_API_KEY: z.string().optional(),
   MINIMAX_API_KEY: z.string().optional(),
   DASHSCOPE_API_KEY: z.string().optional(),
+  // Kling signs each vendor call with a JWT over the AK/SK pair; the pair is
+  // composed server-side, so the split stays in env like every other provider.
+  KLING_ACCESS_KEY: z.string().optional(),
+  KLING_SECRET_KEY: z.string().optional(),
 
   // Media generation (image/video) catalogs — same shape and bootstrap story
   // as LLM_MODEL_CATALOG: env seeds the id→provider/model mapping while the

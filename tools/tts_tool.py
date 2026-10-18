@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Text-to-speech tool: config resolution, built-in provider dispatch, output policy, registration.
 
-Built-ins: Edge (free default), ElevenLabs, OpenAI, DeepInfra, MiniMax, Mistral, Gemini, xAI,
-local NeuTTS / KittenTTS / Piper; plus ``type: command`` providers under ``tts.providers.<name>``
+Company mode (判定同 image/video 工具) routes ALL speech through the company backend
+(``POST /api/media/speech``); every other route below is unreachable there. Built-ins: Edge
+(free default), ElevenLabs, OpenAI, DeepInfra, MiniMax, Mistral, Gemini, xAI, local NeuTTS /
+KittenTTS / Piper; plus ``type: command`` providers under ``tts.providers.<name>``
 and plugin-registered ones. Output is Opus (.ogg) on voice-bubble platforms, MP3 elsewhere.
 Sibling ``tts_tool_*`` modules hold backends/delivery/lifecycle; they read the seams defined
 here (config, provider resolution, lazy SDK importers) through ``_origin()`` at call time.
@@ -41,6 +43,7 @@ from tools.tts_command_provider import (
 from tools.tts_tool_delivery import (
     _resolve_max_text_length, _build_audio_delivery_files, _convert_to_opus, _remove_quietly,
     _repair_ogg_container, _resolve_audio_delivery_profile, _split_text_for_tts)
+from tools.tts_tool_company import _generate_company_speech
 from tools.tts_tool_providers import (
     _generate_edge_tts, _generate_elevenlabs, _generate_gemini_tts, _generate_minimax_tts,
     _generate_mistral_tts, _generate_xai_tts, _resolve_minimax_tts_runtime)
@@ -102,6 +105,16 @@ def _check_piper_available() -> bool: return _package_installed("piper")
 
 # --- Defaults / config ---
 DEFAULT_PROVIDER = "edge"
+
+# 公司模式的引擎标签：语音经公司后端 /api/media/speech（服务端持厂商密钥），
+# 配置里的 tts.provider/厂商表/命令/插件/本地引擎在该模式下全部不可达。
+COMPANY_TTS_PROVIDER = "company-backend"
+
+
+def _company_mode() -> bool:
+    from account_backend_session import company_backend_enabled
+
+    return company_backend_enabled()
 
 
 def _get_default_output_dir() -> str:
@@ -242,11 +255,17 @@ def _finalize_voice_delivery(
 ) -> tuple:
     """Voice-bubble eligibility (Opus-converting when needed) -> ``(path, voice_compatible)``.
 
-    Command/plugin providers are documents unless they opt in via ``voice_compatible``; native-Opus
+    The company backend emits mp3/wav, so Opus platforms take the ffmpeg pass; command
+    providers are documents unless they opt in via ``voice_compatible``; native-Opus
     built-ins qualify when the platform wants Opus and they wrote .ogg; MP3/WAV built-ins are
     ffmpeg-converted only when the platform needs Opus."""
     if command_provider_config is not None:
         opted_in = _is_command_tts_voice_compatible(command_provider_config)
+    elif provider == COMPANY_TTS_PROVIDER:
+        if want_opus and not file_str.endswith(".ogg"):
+            opus_path = _convert_to_opus(file_str)
+            return (opus_path, True) if opus_path else (file_str, False)
+        return file_str, False
     elif provider not in BUILTIN_TTS_PROVIDERS:
         opted_in = _plugin_provider_is_voice_compatible(provider)
     elif want_opus and provider in _FFMPEG_OPUS_PROVIDERS and not file_str.endswith(".ogg"):
@@ -372,11 +391,15 @@ def _text_to_speech_single(
 ) -> str:
     """Synthesize one provider-safe chunk into *file_str*; returns the result envelope.
 
-    Command providers resolve BEFORE built-in dispatch, but built-in names short-circuit so
+    Company mode resolves BEFORE every other route (the hard cut mirrors the image/video
+    tools); command providers resolve next, but built-in names short-circuit so
     ``tts.providers.openai.command`` can't shadow OpenAI. Plugins fire only for names that are
     neither; a None return falls through to built-in dispatch (unknown -> Edge default)."""
     try:
-        if command_provider_config is not None:
+        if provider == COMPANY_TTS_PROVIDER:
+            logger.info("Generating speech via company backend...")
+            _generate_company_speech(text, file_str, tts_config)
+        elif command_provider_config is not None:
             logger.info("Generating speech with command TTS provider '%s'...", provider)
             file_str = _generate_command_tts(
                 text, file_str, provider, command_provider_config, tts_config)
@@ -471,7 +494,13 @@ def text_to_speech_tool(
     if not text:
         return tool_error("Text is empty after TTS cleanup", success=False)
     tts_config, provider = _apply_call_overrides(_load_tts_config(), speed, provider)
-    command_provider_config = _resolve_command_provider_config(provider, tts_config)
+    # 公司模式唯一路径（判定与硬切先例：image/video 工具，公司后端可用即整体切换、无回落）：
+    # 命令/插件/直连厂商与本地引擎均不可达，语音经公司后端 /api/media/speech 合成。
+    # chunk 上限随之走未知 provider 的 4000 兜底（低于后端 speech 模型 4096 的输入上限）。
+    company = _company_mode()
+    command_provider_config = None if company else _resolve_command_provider_config(provider, tts_config)
+    if company:
+        provider = COMPANY_TTS_PROVIDER
     max_len = _resolve_max_text_length(provider, tts_config)
     chunks = _split_text_for_tts(text, max_len)
     if not chunks:
@@ -611,6 +640,10 @@ def check_tts_requirements() -> bool:
     """Return whether the explicitly resolved TTS provider can run — now, or after the
     first-use SDK install that synthesis performs. This is the ``text_to_speech`` tool's
     ``check_fn``, so it runs on every tool listing and must never install."""
+    if _company_mode():
+        # 公司模式下引擎与密钥都在公司后端，本机 SDK/厂商凭据无关可用性；会话与后端
+        # 故障在调用时经错误面报出（同 image/video 工具的公司路径，不在此预检）。
+        return True
     tts_config = _load_tts_config()
     provider = _get_provider(tts_config)
     if _resolve_command_provider_config(provider, tts_config) is not None:

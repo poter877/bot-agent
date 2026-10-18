@@ -52,7 +52,6 @@ const audio = await fs.readFile(audioFile),
 test.after(() => fs.rm(fixturesDir, { recursive: true, force: true }))
 import type { ProviderContext, ProviderDependencies } from '../src/services/production-tools/providers.js'
 const { responseBytes, serviceUrl, outputBytes } = await import('../src/services/production-tools/provider-runtime.js')
-const { klingToken } = await import('../src/services/production-tools/provider-kling.js')
 const { tencentHeaders } = await import('../src/services/production-tools/provider-regional.js')
 const json = (data: unknown) =>
   new Response(JSON.stringify(data), {
@@ -533,41 +532,134 @@ test('a failed queue call resolves its attempt, so a retry submits a fresh job',
     await runProviderTool(f.ctx, f.deps)
     assert.equal(f.calls.length, 2)
   }))
-test('Kling signs expiring JWT on server and uses documented image/video task contract', async () =>
-  withFixture('kling_official_video', { prompt: 'street', duration: 5 }, async (f) => {
-    f.ctx.config!.apiKey = 'access-id:secret-value'
-    f.queue.push(
-      json({ code: 0, data: { task_id: 'kl1' } }),
-      json({
-        code: 0,
-        data: {
-          task_status: 'succeed',
-          task_result: { videos: [{ url: 'https://cdn.klingai.com/a.mp4' }] },
-        },
-      }),
-    )
-    const result = await runProviderTool(f.ctx, f.deps),
-      token = new Headers(f.calls[0].init.headers).get('Authorization')!.slice(7),
-      payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString())
-    assert.equal(payload.iss, 'access-id')
-    assert.ok(payload.exp > Date.now() / 1000)
-    assert.match(f.calls[0].url, /\/v1\/videos\/text2video$/)
+/** 可灵工具走公司媒体目录：同步 base64 信封，配置行/args.model 优先于 spec 默认。 */
+async function klingFixture(
+  toolId: 'kling_official_image' | 'kling_official_video' | 'kling_video',
+  args: Record<string, unknown>,
+  respond: () => unknown,
+  model = '',
+) {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'vf-kling-company-'))
+  const calls: { url: string; init: RequestInit }[] = []
+  const ctx: ProviderContext = {
+    projectId: 1,
+    toolId,
+    args,
+    outputDir: dir,
+    signal: new AbortController().signal,
+    progress: () => {},
+    config: { id: 9, provider: 'company', baseUrl: 'https://company.invalid', apiKey: 'company-token', model },
+    state: {},
+    checkpoint: () => {},
+  }
+  const deps: Partial<ProviderDependencies> = {
+    fetch: (async (url: unknown, init: RequestInit = {}) => {
+      calls.push({ url: String(url), init })
+      const payload = respond()
+      return payload instanceof Response ? payload : json(payload)
+    }) as typeof fetch,
+    sleep: async () => {},
+    download: async () => png,
+    readMedia: async () => ({ name: 'first.png', mime: 'image/png', bytes: Buffer.from('owned-frame') }),
+  }
+  return {
+    ctx,
+    deps,
+    calls,
+    cleanup: () => fs.rm(dir, { recursive: true, force: true }),
+  }
+}
+const klingVideoEnvelope = { ok: true, videos: [{ media_type: 'video/mp4', base64: video.toString('base64') }] }
+test('Kling video posts the company media contract and saves the returned video', async () => {
+  const f = await klingFixture('kling_official_video', { prompt: 'street', duration: 5, aspect_ratio: '16:9' }, () => klingVideoEnvelope)
+  try {
+    const result = await runProviderTool(f.ctx, f.deps as ProviderDependencies)
+    assert.match(f.calls[0].url, /\/api\/media\/video$/)
+    assert.equal(new Headers(f.calls[0].init.headers).get('Authorization'), 'Bearer company-token')
+    const body = JSON.parse(String(f.calls[0].init.body))
+    assert.equal(body.model, 'kling-v2-6')
+    assert.equal(body.prompt, 'street')
+    assert.equal(body.duration, 5)
+    assert.equal(body.aspectRatio, '16:9')
+    assert.equal(body.generateAudio, true)
+    assert.equal(body.mode, 'pro')
     assert.equal(result.files[0].kind, 'video')
-    assert.equal(JSON.stringify(f.ctx.state).includes('secret-value'), false)
+    assert.deepEqual(await fs.readFile(result.files[0].path), video)
+    assert.equal(f.ctx.state.submissionStarted, false)
+  } finally {
+    await f.cleanup()
+  }
+})
+test('Kling image saves every image in the company envelope', async () => {
+  const f = await klingFixture('kling_official_image', { prompt: 'street', count: 2 }, () => ({
+    ok: true,
+    images: [
+      { media_type: 'image/png', base64: png.toString('base64') },
+      { media_type: 'image/png', base64: png.toString('base64') },
+    ],
   }))
-test('Kling validates credential shape before a billable submission', async () =>
-  withFixture('kling_official_image', { prompt: 'street' }, async (f) => {
-    await assert.rejects(runProviderTool(f.ctx, f.deps), /AccessKey:SecretKey/)
-    assert.equal(f.ctx.state.submissionStarted, undefined)
+  try {
+    const result = await runProviderTool(f.ctx, f.deps as ProviderDependencies)
+    assert.match(f.calls[0].url, /\/api\/media\/image$/)
+    const body = JSON.parse(String(f.calls[0].init.body))
+    assert.equal(body.model, 'kling-v2')
+    assert.equal(body.n, 2)
+    assert.equal(body.aspectRatio, '16:9')
+    assert.equal(result.files.length, 2)
+    assert.equal(result.files[0].kind, 'image')
+  } finally {
+    await f.cleanup()
+  }
+})
+test('Kling image2video sends the first frame as a data URI and drops the ratio', async () => {
+  const f = await klingFixture(
+    'kling_video',
+    { prompt: 'street', image: '/static/creative/1/first.png', generate_audio: false, aspect_ratio: '9:16' },
+    () => klingVideoEnvelope,
+  )
+  try {
+    await runProviderTool(f.ctx, f.deps as ProviderDependencies)
+    const body = JSON.parse(String(f.calls[0].init.body))
+    assert.equal(body.imageUrl, `data:image/png;base64,${Buffer.from('owned-frame').toString('base64')}`)
+    assert.equal(body.aspectRatio, undefined)
+    assert.equal(body.generateAudio, false)
+  } finally {
+    await f.cleanup()
+  }
+})
+test('Kling model falls back to the spec default and honours the service row', async () => {
+  const spec = await klingFixture('kling_official_video', { prompt: 'street' }, () => klingVideoEnvelope)
+  const row = await klingFixture('kling_official_video', { prompt: 'street' }, () => klingVideoEnvelope, 'ops-kling-entry')
+  try {
+    await runProviderTool(spec.ctx, spec.deps as ProviderDependencies)
+    assert.equal(JSON.parse(String(spec.calls[0].init.body)).model, 'kling-v2-6')
+    await runProviderTool(row.ctx, row.deps as ProviderDependencies)
+    assert.equal(JSON.parse(String(row.calls[0].init.body)).model, 'ops-kling-entry')
+  } finally {
+    await spec.cleanup()
+    await row.cleanup()
+  }
+})
+test('Kling rejects durations the vendor cannot serve before any call', async () => {
+  const f = await klingFixture('kling_official_video', { prompt: 'street', duration: 7 }, () => klingVideoEnvelope)
+  try {
+    await assert.rejects(runProviderTool(f.ctx, f.deps as ProviderDependencies), /5 秒或 10 秒/)
     assert.equal(f.calls.length, 0)
-  }))
-test('Kling records a definitive business rejection in HTTP 200', async () =>
-  withFixture('kling_official_image', { prompt: 'street' }, async (f) => {
-    f.ctx.config!.apiKey = 'access:secret'
-    f.queue.push(json({ code: 1002, message: 'invalid' }))
-    await assert.rejects(runProviderTool(f.ctx, f.deps), /服务拒绝/)
-    assert.equal(f.ctx.state.rejected, true)
-  }))
+    assert.equal(f.ctx.state.submissionStarted, undefined)
+  } finally {
+    await f.cleanup()
+  }
+})
+test('Kling oversized first frames are rejected before any call', async () => {
+  const f = await klingFixture('kling_official_video', { prompt: 'street', image: '/static/creative/1/big.png' }, () => klingVideoEnvelope)
+  f.deps.readMedia = async () => ({ name: 'big.png', mime: 'image/png', bytes: Buffer.alloc(10 * 1024 * 1024 + 1) })
+  try {
+    await assert.rejects(runProviderTool(f.ctx, f.deps as ProviderDependencies), /10 MB/)
+    assert.equal(f.calls.length, 0)
+  } finally {
+    await f.cleanup()
+  }
+})
 test('Doubao reads HTTP JSON audio chunks and uses unified API key resource headers', async () =>
   withFixture('doubao_tts', { text: '你好' }, async (f) => {
     f.queue.push(
@@ -629,14 +721,6 @@ test('Tencent video uses its dedicated vclm service and DONE video output contra
     assert.equal(new Headers(f.calls[0].init.headers).get('X-TC-Version'), '2024-05-23')
     assert.equal(new Headers(f.calls[1].init.headers).get('X-TC-Action'), 'DescribeHunyuanToVideoJob')
   }))
-
-test('Kling JWT matches a fixed HS256 credential and clock vector', () => {
-  // Expected value independently computed with Python's standard hmac implementation.
-  assert.equal(
-    klingToken('access-id:secret-value', 1700000000000),
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJhY2Nlc3MtaWQiLCJleHAiOjE3MDAwMDE4MDAsIm5iZiI6MTY5OTk5OTk5NX0.D_RRLFPvOaYhA7_dWndkoxeJAIMnnTgzFOkskjy1VRk',
-  )
-})
 
 test('Tencent TC3 signature matches a fixed canonical request vector', () => {
   const headers = tencentHeaders(

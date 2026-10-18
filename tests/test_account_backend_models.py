@@ -74,6 +74,29 @@ def test_catalog_follows_profile_and_current_account(directory_server, tmp_path)
         assert caught.value.status_code == 401
 
 
+def test_generate_media_speech_kind_uses_speech_endpoint_and_timeout(monkeypatch):
+    """speech 走 /api/media/speech 且用短超时（单次合成，非 image/video 的长任务）；
+    未知 kind 维持 ValueError 白名单行为。"""
+    import account_backend_models
+    import account_backend_session
+
+    seen = {}
+
+    def fake_request(path, *, payload=None, timeout=10.0):
+        seen["args"] = (path, payload, timeout)
+        return {"ok": True, "audio": {"media_type": "audio/mpeg", "base64": ""}}
+
+    monkeypatch.setattr(account_backend_session, "request_account_backend", fake_request)
+    result = account_backend_models.generate_media("speech", {"model": "gpt-4o-mini-tts", "input": "hi"})
+    assert result["ok"] is True
+    path, payload, timeout = seen["args"]
+    assert path == "/api/media/speech"
+    assert payload == {"model": "gpt-4o-mini-tts", "input": "hi"}
+    assert timeout == account_backend_models._SPEECH_TIMEOUT_SECONDS == 120.0
+    with pytest.raises(ValueError, match="unknown media kind"):
+        account_backend_models.generate_media("audio", {})
+
+
 def test_managed_inventory_and_selection_share_directory(directory_server, tmp_path):
     from hermes_cli.inventory import ConfigContext, build_model_options_payload
     from hermes_cli.model_switch import persist_model_selection, switch_model

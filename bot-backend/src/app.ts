@@ -230,14 +230,17 @@ export async function createApp(deps: AppDeps): Promise<App> {
 
   // Media generation (image/video/audio/queue): same Better Auth session or
   // internal service token, own per-user request budget, generation errors
-  // answer as 502. The queue route carries submit payloads with inline data
-  // URIs and the transcription route takes multipart audio — both get the
-  // stream-sized body budget (and, for transcription, the multipart
-  // allowance) instead of the small JSON-only media one.
+  // answer as 502. The queue and video routes carry submit payloads with
+  // inline data URIs (kling image2video first frames) and the transcription
+  // route takes multipart audio — all three get the stream-sized body budget
+  // (and, for transcription, the multipart allowance) instead of the small
+  // JSON-only media one.
   const mediaBodyPolicy = bodyPolicyMiddleware(config.MEDIA_BODY_LIMIT_BYTES)
   const mediaUploadBodyPolicy = bodyPolicyMiddleware(config.LLM_STREAM_BODY_LIMIT_BYTES, ['application/json', 'multipart/form-data'])
   app.use('/api/media/*', (c, next) =>
-    c.req.path.startsWith('/api/media/queue') || c.req.path.startsWith('/api/media/transcription')
+    c.req.path.startsWith('/api/media/queue') ||
+    c.req.path.startsWith('/api/media/video') ||
+    c.req.path.startsWith('/api/media/transcription')
       ? mediaUploadBodyPolicy(c, next)
       : mediaBodyPolicy(c, next),
   )

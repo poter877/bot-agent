@@ -70,14 +70,16 @@ const ASSET_EXTENSIONS: Record<string, string> = {
 const KIND_EXTENSIONS: Record<OutputKind, string> = {
   image: 'png', video: 'mp4', audio: 'mp3', subtitle: 'srt', model: 'glb', archive: 'zip', data: 'json',
 }
-function assetExtension(mediaType: unknown, kind: OutputKind) {
+/** 公司媒体/队列信封共用的扩展名推断（media_type → 项目可导入后缀）。 */
+export function assetExtension(mediaType: unknown, kind: OutputKind) {
   if (kind === 'model') return 'glb'
   const subtype = typeof mediaType === 'string' && mediaType.includes('/')
     ? mediaType.slice(mediaType.indexOf('/') + 1).split(';')[0]!.toLowerCase()
     : ''
   return ASSET_EXTENSIONS[subtype] ?? KIND_EXTENSIONS[kind]
 }
-function assetBytes(asset: unknown): Buffer {
+/** 公司媒体/队列信封共用的资产解码。 */
+export function assetBytes(asset: unknown): Buffer {
   const base64 = (asset as any)?.base64
   if (
     typeof base64 !== 'string' ||

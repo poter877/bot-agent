@@ -721,7 +721,7 @@
   },
   {
     "id": "kling_official_image",
-    "referenceProvider": "kling_official",
+    "referenceProvider": "company",
     "category": "graphics",
     "capability": "image_generation",
     "referenceFiles": [
@@ -730,7 +730,7 @@
   },
   {
     "id": "kling_official_video",
-    "referenceProvider": "kling_official",
+    "referenceProvider": "company",
     "category": "video",
     "capability": "video_generation",
     "referenceFiles": [
@@ -748,7 +748,7 @@
   },
   {
     "id": "kling_video",
-    "referenceProvider": "kling",
+    "referenceProvider": "company",
     "category": "video",
     "capability": "video_generation",
     "referenceFiles": [

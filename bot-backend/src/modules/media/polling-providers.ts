@@ -1,4 +1,5 @@
 import type { MediaCatalogEntry } from './catalog.js'
+import { createHmac } from 'node:crypto'
 
 /**
  * The async-poll media providers (ai-drama's vendor set moved behind the
@@ -402,4 +403,168 @@ export async function generateFalQueue(
   const assets: VendorMediaResult[] = []
   for (const url of urls) assets.push(await downloadAsBase64(fetchImpl, url, signal, 'application/octet-stream'))
   return { requestId, assets }
+}
+
+// ── Kling (JWT-signed jobs; image generations + text2video/image2video) ─────
+
+const KLING_BASE = 'https://api-beijing.klingai.com'
+/** Kling's documented input-image cap (decoded bytes), enforced before submit. */
+const KLING_IMAGE_MAX_BYTES = 10 * 1024 * 1024
+const KLING_MAX_FILES = 4
+
+export interface KlingVideoRequest {
+  prompt: string
+  duration?: number
+  aspectRatio?: string
+  mode?: string
+  generateAudio?: boolean
+  /** image2video first frame: base64 data URI (decoded here) or an https URL (passed through). */
+  imageUrl?: string
+}
+
+/** Split the composed `KLING_ACCESS_KEY:KLING_SECRET_KEY` pair and sign the
+ * documented HS256 JWT (30-minute expiry, per-call so polls outlive nothing). */
+function klingHeaders(key: string, now = Date.now()): Record<string, string> {
+  const split = key.indexOf(':')
+  if (split < 1 || split === key.length - 1) {
+    throw new Error('Kling credentials require KLING_ACCESS_KEY and KLING_SECRET_KEY')
+  }
+  const seconds = Math.floor(now / 1000)
+  const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64url')
+  const body = `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode({ iss: key.slice(0, split), exp: seconds + 1800, nbf: seconds - 5 })}`
+  return { Authorization: `Bearer ${body}.${createHmac('sha256', key.slice(split + 1)).update(body).digest('base64url')}` }
+}
+
+function klingDuration(value: number | undefined): 5 | 10 {
+  const parsed = Math.round(Number(value ?? 5))
+  if (parsed !== 5 && parsed !== 10) throw new Error('Kling duration must be 5 or 10 seconds')
+  return parsed
+}
+
+/** Kling accepts a bare base64 payload; data URIs are unwrapped (with the
+ * size cap), plain URLs ride through for the vendor to fetch. */
+function klingImagePayload(value: string): string {
+  const match = /^data:image\/[a-z0-9.+-]+;base64,(.+)$/s.exec(value)
+  if (match === null) return value
+  const payload = match[1]!.replace(/\s/g, '')
+  if (Buffer.from(payload, 'base64').byteLength > KLING_IMAGE_MAX_BYTES) {
+    throw new Error('Kling input image exceeds 10 MB')
+  }
+  return payload
+}
+
+/** Submit → poll the documented task contract → return the asset URLs
+ * (images[] or videos[]). Shared by the image and video entry points. */
+async function klingTaskUrls(
+  fetchImpl: typeof fetch,
+  key: string,
+  endpoint: 'images/generations' | 'videos/text2video' | 'videos/image2video',
+  submitBody: Record<string, unknown>,
+  listKey: 'images' | 'videos',
+  timeoutMs: number,
+  signal: AbortSignal,
+  deps: PollingProviderDeps,
+): Promise<string[]> {
+  const intervalMs = deps.intervalMs ?? POLL_INTERVAL_MS
+  const deadline = Date.now() + timeoutMs
+
+  const submitted = await postJson(fetchImpl, `${KLING_BASE}/v1/${endpoint}`, klingHeaders(key), submitBody, signal)
+  if (submitted['code'] !== undefined && submitted['code'] !== 0) {
+    throw new Error(errorText(submitted['message'] ?? submitted))
+  }
+  const task = submitted['data'] as Record<string, unknown> | undefined
+  if (typeof task?.['task_id'] !== 'string') throw new Error('Kling did not return a task id')
+  const taskId = task['task_id']
+
+  for (;;) {
+    if (signal.aborted) throw new Error('aborted')
+    if (Date.now() >= deadline) throw new Error('Media generation timed out.')
+    await new Promise((resolve) => setTimeout(resolve, intervalMs))
+    const poll = await getJson(fetchImpl, `${KLING_BASE}/v1/${endpoint}/${encodeURIComponent(taskId)}`, klingHeaders(key), signal)
+    if (poll['code'] !== undefined && poll['code'] !== 0) throw new Error(errorText(poll['message'] ?? poll))
+    const data = poll['data'] as Record<string, unknown> | undefined
+    const status = data?.['task_status']
+    if (status === 'failed') throw new Error(errorText(data?.['task_status_msg'] ?? 'Kling task failed'))
+    if (status === 'succeed') {
+      const result = data?.['task_result'] as Record<string, unknown> | undefined
+      const list = result?.[listKey]
+      const urls = Array.isArray(list)
+        ? list.map((item) => (item && typeof item === 'object' ? asString((item as Record<string, unknown>)['url']) : undefined))
+        : []
+      return urls.slice(0, KLING_MAX_FILES).filter((url): url is string => url !== undefined)
+    }
+    if (Date.now() + intervalMs >= deadline) throw new Error('Media generation timed out.')
+  }
+}
+
+async function klingAssets(
+  fetchImpl: typeof fetch,
+  key: string,
+  endpoint: 'images/generations' | 'videos/text2video' | 'videos/image2video',
+  submitBody: Record<string, unknown>,
+  listKey: 'images' | 'videos',
+  fallbackType: 'image/png' | 'video/mp4',
+  timeoutMs: number,
+  signal: AbortSignal,
+  deps: PollingProviderDeps,
+): Promise<VendorMediaResult[]> {
+  const urls = await klingTaskUrls(fetchImpl, key, endpoint, submitBody, listKey, timeoutMs, signal, deps)
+  if (urls.length === 0) throw new Error('Kling finished without assets')
+  const assets: VendorMediaResult[] = []
+  for (const url of urls) {
+    const asset = await downloadAsBase64(fetchImpl, url, signal, fallbackType)
+    const prefix = fallbackType === 'image/png' ? 'image/' : 'video/'
+    assets.push({ ...asset, media_type: asset.media_type.startsWith(prefix) ? asset.media_type : fallbackType })
+  }
+  return assets
+}
+
+export async function generateKlingImage(
+  key: string,
+  entry: MediaCatalogEntry,
+  request: { prompt: string; n: number; aspectRatio?: `${number}:${number}` },
+  timeoutMs: number,
+  signal: AbortSignal,
+  deps: PollingProviderDeps = {},
+): Promise<VendorMediaResult[]> {
+  if (request.prompt.length > 2_500) throw new Error('Kling prompt exceeds 2500 characters')
+  return klingAssets(
+    deps.fetchImpl ?? fetch, key, 'images/generations',
+    {
+      model_name: entry.model,
+      prompt: request.prompt,
+      n: Math.min(Math.max(Math.round(request.n), 1), 4),
+      aspect_ratio: request.aspectRatio ?? '16:9',
+    },
+    'images', 'image/png', timeoutMs, signal, deps,
+  )
+}
+
+export async function generateKlingVideo(
+  key: string,
+  entry: MediaCatalogEntry,
+  request: KlingVideoRequest,
+  timeoutMs: number,
+  signal: AbortSignal,
+  deps: PollingProviderDeps = {},
+): Promise<VendorMediaResult[]> {
+  if (request.prompt.length > 2_500) throw new Error('Kling prompt exceeds 2500 characters')
+  const firstFrame = asString(request.imageUrl) || undefined
+  const body: Record<string, unknown> = {
+    model_name: entry.model,
+    prompt: request.prompt,
+    duration: String(klingDuration(request.duration)),
+    mode: asString(request.mode) || 'pro',
+  }
+  if (firstFrame === undefined) {
+    body.aspect_ratio = asString(request.aspectRatio) || '16:9'
+  } else {
+    body.image = klingImagePayload(firstFrame)
+  }
+  // Only the v2.6 line generates audio; sound is the documented toggle.
+  if (entry.model === 'kling-v2-6') body.sound = request.generateAudio === false ? 'off' : 'on'
+  return klingAssets(
+    deps.fetchImpl ?? fetch, key, firstFrame === undefined ? 'videos/text2video' : 'videos/image2video',
+    body, 'videos', 'video/mp4', timeoutMs, signal, deps,
+  )
 }

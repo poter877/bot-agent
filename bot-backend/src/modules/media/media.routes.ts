@@ -8,7 +8,7 @@ import { HttpApiError, assertSameOrigin } from '../../shared/http.js'
 import type { Logger } from '../../shared/logger.js'
 import type { MediaCatalogEntry, MediaKind } from './catalog.js'
 import { MediaCatalogError, parseMediaCatalog, resolveMediaCatalogEntry } from './catalog.js'
-import { generateFalQueue, generatePollingVideo, generateVolcengineImage, type PollingProviderDeps } from './polling-providers.js'
+import { generateFalQueue, generateKlingImage, generateKlingVideo, generatePollingVideo, generateVolcengineImage, type PollingProviderDeps } from './polling-providers.js'
 
 /**
  * POST /api/media/image|video — media generation over the AI SDK, served from
@@ -51,6 +51,11 @@ function providerKeysOf(config: AppConfig): ProviderKeys {
     volcengine: config.VOLCENGINE_API_KEY,
     minimax: config.MINIMAX_API_KEY,
     aliyun: config.DASHSCOPE_API_KEY,
+    // Kling signs with an AK:SK pair; the composed form is split again in the
+    // provider module so resolveMediaCatalogEntry's presence gate stays uniform.
+    kling: config.KLING_ACCESS_KEY && config.KLING_SECRET_KEY
+      ? `${config.KLING_ACCESS_KEY}:${config.KLING_SECRET_KEY}`
+      : undefined,
   }
 }
 
@@ -83,6 +88,8 @@ interface VideoRequest {
   referenceLinkUrl?: string
   promptExtend?: boolean
   watermark?: boolean
+  /** Kling's std/pro rendering mode. */
+  mode?: string
 }
 
 const POLLING_VIDEO_PROVIDERS = new Set(['volcengine', 'minimax', 'aliyun'])
@@ -164,6 +171,10 @@ export function createMediaRoutes(deps: MediaRoutesDeps): Hono<AppEnv> {
         const key = keys.volcengine
         if (key === undefined) throw new HttpApiError(503, 'provider_key_missing', 'The media backend is not configured.')
         images = await generateVolcengineImage(key, entry, request, config.MEDIA_REQUEST_TIMEOUT_MS, c.req.raw.signal, deps.pollingDeps)
+      } else if (entry.provider === 'kling') {
+        const key = keys.kling
+        if (key === undefined) throw new HttpApiError(503, 'provider_key_missing', 'The media backend is not configured.')
+        images = await generateKlingImage(key, entry, { ...request, n }, config.MEDIA_REQUEST_TIMEOUT_MS, c.req.raw.signal, deps.pollingDeps)
       } else {
         images = await defaultImageGenerator(config, request, entry, n, c.req.raw.signal)
       }
@@ -206,6 +217,7 @@ export function createMediaRoutes(deps: MediaRoutesDeps): Hono<AppEnv> {
       ...(asString(raw['referenceLinkUrl']) !== undefined ? { referenceLinkUrl: asString(raw['referenceLinkUrl']) } : {}),
       ...(typeof raw['promptExtend'] === 'boolean' ? { promptExtend: raw['promptExtend'] } : {}),
       ...(typeof raw['watermark'] === 'boolean' ? { watermark: raw['watermark'] } : {}),
+      ...(asString(raw['mode']) !== undefined ? { mode: asString(raw['mode']) } : {}),
     }
     if (request.model.trim() === '') throw new HttpApiError(400, 'validation_failed', 'model is required')
     if (request.prompt.trim() === '' || request.prompt.length > 20_000) {
@@ -228,6 +240,23 @@ export function createMediaRoutes(deps: MediaRoutesDeps): Hono<AppEnv> {
         videos = await deps.videoGenerator(request, entry)
       } else if (entry.provider === 'fal') {
         videos = await defaultVideoGenerator(config, request, entry, c.req.raw.signal)
+      } else if (entry.provider === 'kling') {
+        const key = keys.kling
+        if (key === undefined) throw new HttpApiError(503, 'provider_key_missing', 'The media backend is not configured.')
+        videos = await generateKlingVideo(
+          key, entry,
+          {
+            prompt: request.prompt,
+            ...(request.aspectRatio !== undefined ? { aspectRatio: request.aspectRatio } : {}),
+            ...(request.duration !== undefined ? { duration: request.duration } : {}),
+            ...(request.mode !== undefined ? { mode: request.mode } : {}),
+            ...(request.generateAudio !== undefined ? { generateAudio: request.generateAudio } : {}),
+            // image2video first frame: ai-drama sends local files as data URIs;
+            // plain https URLs ride through for the vendor to fetch.
+            ...(request.imageUrl !== undefined ? { imageUrl: request.imageUrl } : {}),
+          },
+          config.MEDIA_REQUEST_TIMEOUT_MS, c.req.raw.signal, deps.pollingDeps,
+        )
       } else if (POLLING_VIDEO_PROVIDERS.has(entry.provider)) {
         const key = keys[entry.provider]
         if (key === undefined) throw new HttpApiError(503, 'provider_key_missing', 'The media backend is not configured.')
