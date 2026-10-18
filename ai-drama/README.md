@@ -94,9 +94,7 @@ The interface ships in **中文 / English / 日本語 / 한국어**, with a glob
 
 | Type | Providers |
 |---|---|
-| **Text** | OpenAI (compatible APIs), Gemini |
-| **Image** | OpenAI, Gemini, Volcano Engine |
-| **Video** | Volcano Engine Seedance 2.0 (Standard / Fast / Mini), MiniMax H3, Alibaba Bailian Wan 3.0 (Prime / Standard) |
+| **Text / Image / Video** | Company model backend (bot-backend; vendor keys live server-side, model ids come from its catalog) |
 
 ---
 
@@ -248,7 +246,7 @@ Run **extraction** on the script to get the character / scene / prop list, then 
 
 On the "Video Production" page, first run **storyboard breakdown** (AI splits shots and writes video prompts). Then:
 
-- Pick the **video model** in the top bar (Seedance / Wan 3.0 / MiniMax…); resolution and duration tiers follow the model
+- Pick the **video model** in the top bar (models come from the company catalog); resolution and duration tiers follow the model
 - Review and tweak each shot's prompt on the right (`@character` references map to reference images automatically)
 - Click "Batch Generate Videos"; failed tasks can be retried in one click
 
@@ -499,7 +497,7 @@ A: The backend creates all tables automatically on first launch — check the lo
 ### v3.1.0 (2026-09)
 
 - Added Alibaba Bailian Wan 3.0 video models (Prime / Standard, official `input.media`/`parameters` payloads)
-- Resolution selector in the workbench top bar with native tiers per provider (Seedance 480p/720p, MiniMax 768P/2K, Wan 480P/720P/1080P)
+- Resolution selector in the workbench top bar (480p/720p/1080p)
 - Default video model changed to Seedance 2.0 Mini
 - Fixed generation errors caused by provider/model mismatch when switching video models
 - Batch video: selection mode + pre-generation confirmation (shot count / total duration / model / resolution), one-click retry for failed tasks

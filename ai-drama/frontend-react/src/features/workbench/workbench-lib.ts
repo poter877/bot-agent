@@ -149,19 +149,22 @@ export function pruneStaleModel(stored: string, options: ModelOption[]): string 
 // ===== 分辨率档位 =====
 
 export const RESOLUTION_TIERS: Record<string, string[]> = {
+  // 公司后端是当前的唯一视频来源；其余键仅供历史配置行的展示回退
+  company: ['480p', '720p', '1080p'],
   volcengine: ['480p', '720p'],
   minimax: ['720p', '1080p'],
   aliyun: ['480p', '720p', '1080p'],
 }
 
 export const RESOLUTION_DISPLAY: Record<string, Record<string, string>> = {
+  company: { '480p': '480p', '720p': '720p', '1080p': '1080p' },
   volcengine: { '480p': '480p', '720p': '720p', '1080p': '720p' },
   minimax: { '480p': '768P', '720p': '768P', '1080p': '2K' },
   aliyun: { '480p': '480P', '720p': '720P', '1080p': '1080P' },
 }
 
 export function resolutionProviderOf(provider: string | undefined): string {
-  return provider && RESOLUTION_TIERS[provider] ? provider : 'volcengine'
+  return provider && RESOLUTION_TIERS[provider] ? provider : 'company'
 }
 
 export function resolutionKeysFor(provider: string | undefined): string[] {

@@ -8,16 +8,20 @@ import { eq } from 'drizzle-orm'
 const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'unified-ai-'))
 process.env.SQLITE_PATH = path.join(directory, 'test.sqlite')
 process.env.MYSQL_AUTO_IMPORT = 'false'
+// env 在动态导入前注入：company-backend 惰性读取，但迁移与校验需要它们已就位
+process.env.COMPANY_BACKEND_URL = 'https://company.invalid'
+process.env.COMPANY_SERVICE_TOKEN = 'company-token'
 const { db, schema, getInsertId } = await import('../src/db/index.js')
 const { migrateServiceConfigs, resolveServiceRow } = await import('../src/services/ai-registry.js')
+const { companyBaseUrl } = await import('../src/services/company-backend.js')
 const { getActiveConfig, getConfigById } = await import('../src/services/ai.js')
 const { requireToolConfig, saveToolSettings, publicToolSettings } = await import('../src/services/creative-tools/settings.js')
 const { default: app } = await import('../src/routes/aiConfigs.js')
 const now = new Date().toISOString()
-function insert(type: string, provider: string, key = 'secret', priority = 0) {
+function insert(type: string, provider: string, key = 'secret', priority = 0, baseUrl?: string) {
   return getInsertId(db.insert(schema.aiServiceConfigs).values({ serviceType: type, provider, name: type,
-    baseUrl: provider === 'openai' ? 'https://api.openai.com' : 'https://api.sync.so', apiKey: key,
-    model: JSON.stringify([provider === 'openai' ? 'text-model' : 'sync-3']), priority, isActive: true,
+    baseUrl: baseUrl ?? (provider === 'sync' ? 'https://api.sync.so' : 'https://legacy.example'), apiKey: key,
+    model: JSON.stringify([provider === 'sync' ? 'sync-3' : 'legacy-model']), priority, isActive: true,
     createdAt: now, updatedAt: now }).run())
 }
 async function request(url: string, method = 'GET', body?: unknown) {
@@ -26,8 +30,8 @@ async function request(url: string, method = 'GET', body?: unknown) {
 }
 after(async () => { await fs.rm(directory, { recursive: true, force: true }) })
 
-test('migration preserves legacy secrets and speech settings exactly once', async () => {
-  insert('text', 'openai', 'shared-speech-secret')
+test('migration switches active direct-vendor rows to the company backend exactly once', async () => {
+  const textId = insert('text', 'openai', 'legacy-text-secret')
   db.insert(schema.appSettings).values({ key: 'creative_tool_sync', value: JSON.stringify({ enabled: true, apiKey: 'old-sync-secret', model: 'sync-3' }), updatedAt: now }).run()
   const projectId = getInsertId(db.insert(schema.dramas).values({ title: 'Legacy task', createdAt: now, updatedAt: now }).run())
   const data = { shotId: 'speaker', model: 'sync-3' }
@@ -42,13 +46,22 @@ test('migration preserves legacy secrets and speech settings exactly once', asyn
   assert.equal(resolveServiceRow('lipsync')!.apiKey, 'old-sync-secret')
   assert.equal(resolveServiceRow('lipsync')!.model, '["sync-3"]')
   assert.equal(db.select().from(schema.appSettings).where(eq(schema.appSettings.key, 'creative_tool_sync')).get(), undefined)
-  assert.equal((await getActiveConfig('speech'))?.model, 'gpt-4o-mini-tts')
-  assert.equal((await getActiveConfig('transcription'))?.model, 'whisper-1')
-  assert.equal((await getActiveConfig('speech'))?.apiKey, 'shared-speech-secret')
+  // 直连厂商的活跃行归一为 company：地址/密钥来自环境，模型置空待选
+  const text = await getActiveConfig('text')
+  assert.equal(text?.provider, 'company')
+  assert.equal(text?.baseUrl, companyBaseUrl('text'))
+  assert.equal(text?.apiKey, 'company-token')
+  assert.equal(text?.model, '')
+  // 缺失的能力类型播种 company 行
+  for (const type of ['image', 'video', 'speech', 'transcription']) {
+    assert.equal((await getActiveConfig(type))?.provider, 'company')
+  }
+  assert.equal((await getConfigById(textId, 'text'))?.id, text!.id)
   const count = db.select().from(schema.aiServiceConfigs).all().length
   migrateServiceConfigs(); migrateServiceConfigs()
   assert.equal(db.select().from(schema.aiServiceConfigs).all().length, count)
   db.delete(schema.aiServiceConfigs).where(eq(schema.aiServiceConfigs.serviceType, 'speech')).run()
+  // 标记位保证迁移一次性：删除后不会重复播种
   migrateServiceConfigs()
   assert.equal(await getActiveConfig('speech'), null)
 })
@@ -88,11 +101,20 @@ test('CRUD redacts credentials; blank edits preserve and explicit clearing remov
   assert.equal((await request(`/${row.id}`)).body.data.has_api_key, false)
 })
 
-test('dedicated adapters reject unsupported models, addresses and type changes', async () => {
-  assert.equal((await request('/', 'POST', { service_type: 'transcription', provider: 'openai', model: ['text-model'] })).status, 400)
+test('company rows keep the env-injected address and reject other providers on core types', async () => {
+  assert.equal((await request('/', 'POST', { service_type: 'transcription', provider: 'openai', base_url: 'https://legacy.example', model: ['whisper-1'] })).status, 400)
   assert.equal((await request('/', 'POST', { service_type: 'lipsync', provider: 'sync', base_url: 'https://other.example', model: ['sync-3'] })).status, 400)
-  const id = resolveServiceRow('lipsync')!.id
-  assert.equal((await request(`/${id}`, 'PUT', { service_type: 'text', provider: 'openai' })).status, 400)
+  const row = resolveServiceRow('text')!
+  // company 地址由环境持有：客户端提交的地址被忽略，密钥不可清除
+  assert.equal((await request('/', 'POST', { service_type: 'text', provider: 'company', base_url: 'https://other.example', model: ['m1'], api_key: 'client-key', priority: 100 })).status, 201)
+  const created = resolveServiceRow('text')!
+  assert.equal(created.baseUrl, companyBaseUrl('text'))
+  assert.equal(created.apiKey, 'company-token')
+  db.delete(schema.aiServiceConfigs).where(eq(schema.aiServiceConfigs.id, created.id)).run()
+  assert.equal((await request(`/${row.id}`, 'PUT', { service_type: 'image', provider: 'company' })).status, 400)
+  assert.equal((await request(`/${row.id}`, 'PUT', { base_url: 'https://other.example', clear_key: true })).status, 200)
+  assert.equal(resolveServiceRow('text')!.baseUrl, companyBaseUrl('text'))
+  assert.equal(resolveServiceRow('text')!.apiKey, 'company-token')
 })
 
 test('probes resolve saved keys server-side and reject forwarding them to another endpoint', async () => {
@@ -101,33 +123,50 @@ test('probes resolve saved keys server-side and reject forwarding them to anothe
   let calls = 0
   globalThis.fetch = async (_url, init) => {
     calls++
-    assert.equal((init?.headers as Record<string, string>).Authorization, 'Bearer shared-speech-secret')
+    assert.equal((init?.headers as Record<string, string>).Authorization, 'Bearer company-token')
     return Response.json({ data: [] })
   }
   try {
-    const body = { config_id: row.id, service_type: 'text', provider: 'openai', base_url: row.baseUrl, model: ['text-model'] }
+    const body = { config_id: row.id, service_type: 'text', provider: 'company', base_url: row.baseUrl, model: ['m1'] }
     assert.equal((await request('/test', 'POST', body)).body.data.ok, true)
-    assert.equal((await request('/test', 'POST', { ...body, base_url: 'https://other.example' })).status, 400)
-    assert.equal((await request(`/${row.id}`, 'PUT', { base_url: 'https://other.example', api_key: '' })).status, 400)
-    assert.equal(calls, 1)
+    // company 地址由服务端钉死：客户端改地址只会被忽略并继续探测环境端点
+    assert.equal((await request('/test', 'POST', { ...body, base_url: 'https://other.example' })).body.data.ok, true)
+    assert.equal(calls, 2)
   } finally { globalThis.fetch = original }
+})
+
+test('company models endpoint forwards the catalog with the server-side token', async () => {
+  const original = globalThis.fetch
+  let calls = 0
+  globalThis.fetch = async (url, init) => {
+    calls++
+    assert.equal(String(url), 'https://company.invalid/api/llm/models')
+    assert.equal((init?.headers as Record<string, string>).Authorization, 'Bearer company-token')
+    return Response.json({ data: [{ id: 'catalog-model-a' }, { id: 'catalog-model-b' }] })
+  }
+  try {
+    const result = await request('/company-models')
+    assert.deepEqual(result.body.data, ['catalog-model-a', 'catalog-model-b'])
+  } finally { globalThis.fetch = original; void calls }
 })
 
 test('shared text factory applies the selected model, credentials and temperature to real SDK requests', async () => {
   const { getTextModel } = await import('../src/services/ai-text.js')
   const row = resolveServiceRow('text')!
-  db.update(schema.aiServiceConfigs).set({ baseUrl: 'https://gateway.example', settings: '{"temperature":0.6}' }).where(eq(schema.aiServiceConfigs.id, row.id)).run()
+  db.update(schema.aiServiceConfigs).set({
+    model: '["catalog-model"]', settings: '{"temperature":0.6}',
+  }).where(eq(schema.aiServiceConfigs.id, row.id)).run()
   const original = globalThis.fetch
   let calls = 0
   globalThis.fetch = async (url, init) => {
     calls++
-    assert.equal(String(url), 'https://gateway.example/v1/chat/completions')
+    assert.equal(String(url), 'https://company.invalid/api/llm/chat/completions')
     const body = JSON.parse(init!.body as string)
-    assert.equal(body.model, calls === 1 ? 'text-model' : 'explicit-model')
+    assert.equal(body.model, calls === 1 ? 'catalog-model' : 'explicit-model')
     assert.equal(body.temperature, 0.6)
     assert.equal(body.enable_thinking, false)
     assert.equal(body.max_tokens, 16384)
-    assert.equal(new Headers(init?.headers).get('authorization'), 'Bearer shared-speech-secret')
+    assert.equal(new Headers(init?.headers).get('authorization'), 'Bearer company-token')
     return Response.json({ id: 'test', created: 1, model: body.model,
       choices: [{ index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
       usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } })

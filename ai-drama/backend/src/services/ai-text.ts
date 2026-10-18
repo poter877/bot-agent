@@ -1,7 +1,6 @@
 /** Text model construction shared by drama agents, creative planning, chat and translation. */
-import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { createOpenAI } from '@ai-sdk/openai'
-import { getTextConfig, getTextProviderBaseUrl, getConfigById } from './ai.js'
+import { getTextConfig, getConfigById } from './ai.js'
 import { logTaskProgress } from '../utils/task-logger.js'
 
 // Agent 每一步都会重新解析模型，相同端点只打一次日志避免刷屏
@@ -16,14 +15,11 @@ let lastLoggedTextEndpointKey = ''
  * 这里在请求体注入各厂商风格的关思考参数,让模型不产出 reasoning_content。
  *
  * - 默认开启;AI_DISABLE_THINKING=false 可关闭注入
- * - 官方 OpenAI / Gemini 端点跳过(官方 API 会拒绝未知参数)
  * - AI_THINKING_OFF_PATCH 可传 JSON 覆盖注入的 OpenAI 风格参数(适配不同中转站)
+ *
+ * 公司后端 /api/llm 是 OpenAI 兼容路由，接受这些字段，补丁始终叠加。
  */
 const thinkingOffEnabled = (process.env.AI_DISABLE_THINKING ?? 'true').toLowerCase() !== 'false'
-
-function isOfficialTextHost(baseURL: string) {
-  return /api\.openai\.com|generativelanguage\.googleapis\.com/.test(baseURL)
-}
 
 function openaiThinkingOffPatch(): Record<string, any> {
   const fallback = {
@@ -41,29 +37,15 @@ function openaiThinkingOffPatch(): Record<string, any> {
   }
 }
 
-function createThinkingOffFetch(providerName: string, baseURL: string): typeof fetch | undefined {
-  if (!thinkingOffEnabled || isOfficialTextHost(baseURL)) return undefined
+function createThinkingOffFetch(): typeof fetch | undefined {
+  if (!thinkingOffEnabled) return undefined
   const openaiPatch = openaiThinkingOffPatch()
 
   return async (input: any, init?: any) => {
     try {
       if (init?.body && typeof init.body === 'string') {
         const body = JSON.parse(init.body)
-        if (providerName === 'gemini' && Array.isArray(body?.contents)) {
-          // Gemini 原生格式。Gemini 3 系列思考参数改名 thinkingLevel(low/high)，
-          // 旧参数 thinkingBudget 会被 400 拒绝("requires thinkingLevel, not thinkingBudget")；
-          // 2.x 及更早仍用 thinkingBudget: 0。模型名从 URL(/models/<model>:)或 body 嗅探
-          const url = String(typeof input === 'string' ? input : input?.url || '')
-          const isGemini3 = /gemini-3/i.test(url) || /gemini-3/i.test(String(body?.model || ''))
-          body.generationConfig = {
-            ...(body.generationConfig || {}),
-            thinkingConfig: isGemini3
-              ? { thinkingLevel: 'low' }
-              : { thinkingBudget: 0, includeThoughts: false },
-          }
-          init = { ...init, body: JSON.stringify(body) }
-        } else if (Array.isArray(body?.messages)) {
-          // OpenAI 兼容格式
+        if (Array.isArray(body?.messages)) {
           Object.assign(body, openaiPatch)
           init = { ...init, body: JSON.stringify(body) }
         }
@@ -81,18 +63,13 @@ function createThinkingOffFetch(providerName: string, baseURL: string): typeof f
  * 需要在文本服务配置里显式指定并随每个请求下发。
  * inner 传 thinking-off fetch 时可链式叠加两个补丁。
  */
-function createTemperatureFetch(providerName: string, temperature: number, inner?: typeof fetch): typeof fetch {
+function createTemperatureFetch(temperature: number, inner?: typeof fetch): typeof fetch {
   const base = inner || fetch
   return async (input: any, init?: any) => {
     try {
       if (init?.body && typeof init.body === 'string') {
         const body = JSON.parse(init.body)
-        if (providerName === 'gemini' && Array.isArray(body?.contents)) {
-          // Gemini 原生格式
-          body.generationConfig = { ...(body.generationConfig || {}), temperature }
-          init = { ...init, body: JSON.stringify(body) }
-        } else if (Array.isArray(body?.messages)) {
-          // OpenAI 兼容格式
+        if (Array.isArray(body?.messages)) {
           body.temperature = temperature
           init = { ...init, body: JSON.stringify(body) }
         }
@@ -110,29 +87,16 @@ function createTemperatureFetch(providerName: string, temperature: number, inner
  * 模型写作到一半被截断、工具调用从未生成，表现为「Agent 正常结束但什么都没保存」。
  * 这里显式抬高输出上限，给足模型完整生成工具调用的空间。
  * AI_MAX_TOKENS 可覆盖默认值（如某些中转站限制更严）。
- *
- * 官方 OpenAI 端点不注入：reasoning 模型（o 系/gpt-5 系）拒绝 max_tokens
- * （要求 max_completion_tokens），且官方默认输出上限足够大，
- * 截断问题主要出现在中转站/DeepSeek 类端点。
  */
 const defaultMaxTokens = Number(process.env.AI_MAX_TOKENS || 16384)
 
-function isOfficialOpenAIHost(baseURL: string) {
-  return /api\.openai\.com/.test(baseURL)
-}
-
-function createMaxTokensFetch(providerName: string, inner?: typeof fetch): typeof fetch {
+function createMaxTokensFetch(inner?: typeof fetch): typeof fetch {
   const base = inner || fetch
   return async (input: any, init?: any) => {
     try {
       if (init?.body && typeof init.body === 'string') {
         const body = JSON.parse(init.body)
-        if (providerName === 'gemini' && Array.isArray(body?.contents)) {
-          // Gemini 原生格式
-          body.generationConfig = { ...(body.generationConfig || {}), maxOutputTokens: defaultMaxTokens }
-          init = { ...init, body: JSON.stringify(body) }
-        } else if (Array.isArray(body?.messages)) {
-          // OpenAI 兼容格式
+        if (Array.isArray(body?.messages)) {
           body.max_tokens = defaultMaxTokens
           init = { ...init, body: JSON.stringify(body) }
         }
@@ -148,43 +112,31 @@ export async function getTextModel(options: { fallbackModel?: string; model?: st
   const textConfig = (textConfigId ? await getConfigById(textConfigId, 'text') : null) || await getTextConfig()
   const modelName = modelOverride || fileModel || textConfig.model
   if (!modelName) throw new Error('文本配置尚未选择模型，请先在模型与服务中选择模型')
-  const providerName = textConfig.provider.toLowerCase()
-  const resolvedBaseURL = getTextProviderBaseUrl(textConfig)
   const temperature = textConfig.temperature ?? null
-  const endpointKey = `${providerName}|${resolvedBaseURL}|${modelName}|t=${temperature ?? 'default'}`
+  const endpointKey = `${textConfig.provider}|${textConfig.baseUrl}|${modelName}|t=${temperature ?? 'default'}`
   if (endpointKey !== lastLoggedTextEndpointKey) {
     lastLoggedTextEndpointKey = endpointKey
     logTaskProgress('AIConfig', 'text-model-endpoint', {
       provider: textConfig.provider,
-      baseUrl: resolvedBaseURL,
+      baseUrl: textConfig.baseUrl,
       model: modelName,
       ...(temperature !== null ? { temperature } : {}),
     })
   }
 
-  // 叠加请求补丁：thinking-off（非官方端点）+ 配置温度 + 输出上限（非官方 OpenAI）
-  const thinkingOffFetch = createThinkingOffFetch(providerName, resolvedBaseURL)
+  // 叠加请求补丁：thinking-off + 配置温度 + 输出上限（公司后端兼容路由都接受）
+  const thinkingOffFetch = createThinkingOffFetch()
   const tempFetch = temperature !== null
-    ? createTemperatureFetch(providerName, temperature, thinkingOffFetch)
+    ? createTemperatureFetch(temperature, thinkingOffFetch)
     : thinkingOffFetch
-  const fetchImpl = isOfficialOpenAIHost(resolvedBaseURL)
-    ? tempFetch
-    : createMaxTokensFetch(providerName, tempFetch)
+  const fetchImpl = createMaxTokensFetch(tempFetch)
 
-  if (providerName === 'gemini') {
-    const googleProvider = createGoogleGenerativeAI({
-      apiKey: textConfig.apiKey,
-      baseURL: resolvedBaseURL,
-      fetch: fetchImpl,
-    })
-    return googleProvider(modelName)
-  }
-
+  // provider 收敛后只剩公司后端：baseUrl 即最终 OpenAI 兼容地址（.../api/llm），
+  // createOpenAI 自动拼 /chat/completions
   const provider = createOpenAI({
-    baseURL: resolvedBaseURL,
+    baseURL: textConfig.baseUrl,
     apiKey: textConfig.apiKey,
     fetch: fetchImpl,
   } as any)
   return provider.chat(modelName)
 }
-

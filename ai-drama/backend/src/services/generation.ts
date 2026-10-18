@@ -19,12 +19,6 @@ type TaskType = 'image' | 'video'
 
 const taskLabel = (type: TaskType) => (type === 'image' ? 'ImageTask' : 'VideoTask')
 
-// 轮询节奏：图片 5s×120（上限 10 分钟）；视频 10s×300
-const POLL_PROFILES: Record<TaskType, { attempts: number; intervalMs: number; maxDurationMs: number | null }> = {
-  image: { attempts: 120, intervalMs: 5000, maxDurationMs: 600_000 },
-  video: { attempts: 300, intervalMs: 10_000, maxDurationMs: null },
-}
-
 interface GenerateImageParams {
   storyboardId?: number
   dramaId?: number
@@ -264,18 +258,13 @@ async function processTask(id: number, config: AIConfig) {
       url: redactUrl(url),
       model: record.model,
     })
+    logTaskPayload(label, 'request payload', { id, method, url, headers, body })
 
-    const isMultipart = body instanceof FormData
-    logTaskPayload(label, 'request payload', {
-      id, method, url, headers,
-      // multipart 表单（如 OpenAI /v1/images/edits）无法 JSON 化，记录字段摘要
-      body: isMultipart ? `[multipart/form-data: ${[...(body as FormData).keys()].join(', ')}]` : body,
-    })
-
+    // 公司媒体接口是同步 JSON（内部化轮询），没有 multipart/异步任务形态
     const resp = await fetch(url, {
       method,
       headers,
-      body: isMultipart ? (body as FormData) : JSON.stringify(body),
+      body: JSON.stringify(body),
       signal: AbortSignal.timeout(600_000),
     })
 
@@ -284,52 +273,20 @@ async function processTask(id: number, config: AIConfig) {
     logTaskPayload(label, 'response payload', { id, provider: config.provider, result })
 
     if (type === 'image') {
-      const adapter = getImageAdapter(config.provider)
-      const { isAsync, taskId, imageUrl } = adapter.parseGenerateResponse(result)
-
-      if (!isAsync && imageUrl) {
-        logTaskProgress(label, 'sync-complete', { id, imageUrl })
-        await handleImageComplete(record, imageUrl)
-        return
-      }
-
-      if (!isAsync && !imageUrl) {
-        // 同步模式但无 URL（Gemini 等返回 base64）
-        const b64 = adapter.extractImageBase64(result)
-        if (b64) {
-          logTaskProgress(label, 'sync-base64-complete', { id, mimeType: b64.mimeType })
-          await handleImageCompleteBase64(record, b64.data, b64.mimeType)
-          return
-        }
-        throw new Error('No image URL or base64 data in response')
-      }
-
-      await markPolling(id, taskId)
-      pollTask(record, config, taskId!)
+      const b64 = getImageAdapter(config.provider).extractImageBase64(result)
+      if (!b64) throw new Error('No base64 image data in response')
+      logTaskProgress(label, 'sync-base64-complete', { id, mimeType: b64.mimeType })
+      await handleImageCompleteBase64(record, b64.data, b64.mimeType)
       return
     }
 
-    const adapter = getVideoAdapter(config.provider)
-    const { isAsync, taskId, videoUrl } = adapter.parseGenerateResponse(result)
-
-    if (!isAsync && videoUrl) {
-      logTaskProgress(label, 'sync-complete', { id, videoUrl })
-      await handleVideoComplete(record, videoUrl, params.duration)
-      return
-    }
-
-    await markPolling(id, taskId)
-    pollTask(record, config, taskId!)
+    const { videoUrl } = getVideoAdapter(config.provider).parseGenerateResponse(result)
+    if (!videoUrl) throw new Error('No video data in response')
+    logTaskProgress(label, 'sync-complete', { id })
+    await handleVideoComplete(record, videoUrl, params.duration)
   } catch (err: any) {
     await failTask(id, err.message)
   }
-}
-
-async function markPolling(id: number, taskId: string | undefined) {
-  await db.update(schema.sysTask)
-    .set({ taskId, status: 'processing', updatedAt: now() })
-    .where(eq(schema.sysTask.id, id))
-  logTaskProgress('SysTask', 'poll-start', { id, taskId })
 }
 
 async function failTask(id: number, message: string) {
@@ -340,83 +297,6 @@ async function failTask(id: number, message: string) {
 }
 
 type SysTaskRecord = typeof schema.sysTask.$inferSelect
-
-async function pollTask(record: SysTaskRecord, config: AIConfig, taskId: string) {
-  const type = record.type as TaskType
-  const label = taskLabel(type)
-  const profile = POLL_PROFILES[type]
-  const adapter = type === 'image' ? getImageAdapter(config.provider) : getVideoAdapter(config.provider)
-  const startedAt = Date.now()
-
-  for (let i = 0; i < profile.attempts; i++) {
-    if (profile.maxDurationMs && Date.now() - startedAt >= profile.maxDurationMs) {
-      await failTask(record.id, 'Timeout: Polling exceeded 10 minutes')
-      return
-    }
-    await new Promise(r => setTimeout(r, profile.intervalMs))
-    try {
-      const { url, method, headers } = adapter.buildPollRequest(config, taskId)
-      logTaskProgress(label, 'poll-request', {
-        id: record.id,
-        taskId,
-        provider: config.provider,
-        method,
-        url: redactUrl(url),
-        attempt: i + 1,
-      })
-      const remainingMs = profile.maxDurationMs
-        ? Math.max(1_000, profile.maxDurationMs - (Date.now() - startedAt))
-        : 600_000
-      const resp = await fetch(url, {
-        method,
-        headers,
-        signal: AbortSignal.timeout(remainingMs),
-      })
-      if (!resp.ok) continue
-      const result = await resp.json() as any
-
-      // 图片/视频 PollResponse 结构不同，这里统一按 any 取值后按 type 分支
-      const pollResp: any = adapter.parsePollResponse(result)
-
-      if (pollResp.status === 'completed') {
-        if (type === 'image') {
-          if (pollResp.imageUrl) {
-            logTaskSuccess(label, 'poll-complete', { id: record.id, taskId, imageUrl: pollResp.imageUrl })
-            await handleImageComplete(record, pollResp.imageUrl)
-            return
-          }
-          if (adapter.provider === 'gemini') {
-            // Gemini 可能返回 base64
-            const b64 = (adapter as ReturnType<typeof getImageAdapter>).extractImageBase64(result)
-            if (b64) {
-              logTaskSuccess(label, 'poll-base64-complete', { id: record.id, taskId, mimeType: b64.mimeType })
-              await handleImageCompleteBase64(record, b64.data, b64.mimeType)
-              return
-            }
-          }
-        } else if (pollResp.videoUrl) {
-          logTaskSuccess(label, 'poll-complete', { id: record.id, taskId, videoUrl: pollResp.videoUrl })
-          await handleVideoComplete(record, pollResp.videoUrl, pollResp.duration)
-          return
-        }
-      }
-      if (pollResp.status === 'failed') {
-        // 上游明确失败（如内容审核拦截）属终态：立即落库，不重试不等待超时
-        await failTask(record.id, pollResp.error || 'Generation failed')
-        return
-      }
-    } catch (err: any) {
-      const exhausted = i === profile.attempts - 1
-        || (profile.maxDurationMs != null && Date.now() - startedAt >= profile.maxDurationMs)
-      if (exhausted) {
-        await failTask(record.id, `Timeout: ${err.message}`)
-        return
-      }
-      logTaskWarn(label, 'poll-retry', { id: record.id, taskId, attempt: i + 1, error: err.message })
-    }
-  }
-  await failTask(record.id, 'Timeout: polling attempts exhausted')
-}
 
 async function handleImageComplete(record: SysTaskRecord, imageUrl: string, existingLocalPath?: string) {
   const localPath = existingLocalPath || await downloadFile(imageUrl, 'images')
@@ -625,6 +505,7 @@ export async function resumeGenerationTask(id:number) {
   const params=parseTaskParams(record.params),config=typeof params.snapshotConfigId==='number'?await getConfigById(params.snapshotConfigId,record.type):null
   if(!config)throw new Error('请恢复原生成任务的模型配置后重试')
   db.update(schema.sysTask).set({status:'processing',errorMsg:null,updatedAt:now()}).where(eq(schema.sysTask.id,id)).run()
-  if(record.type==='image'?imageAdapters[config.provider]:videoAdapters[config.provider])void pollTask(record,config,record.taskId)
-  else void processTask(id,config)
+  // 公司接口同步返回、直连厂商已下线：恢复统一走任务重派——
+  // 扩展工具凭 state.remoteId 续查（不重复提交），公司任务只能明确重发
+  void processTask(id,config)
 }

@@ -110,25 +110,30 @@ function project() {
     .run();
   return getCreativeProject(id);
 }
-test("pipeline ElevenLabs speech honors configured voice ID and retains fitting/approval cache", async () => {
+test("pipeline company speech posts the OpenAI-compatible contract and retains fitting/approval cache", async () => {
   let p = project();
   p = approveCreativeProject(p.id, p.revision);
   let calls = 0;
   const deps = {
     config: async () => ({
       id: 21,
-      provider: "elevenlabs",
-      baseUrl: "https://api.elevenlabs.io",
-      apiKey: "secret",
-      model: "eleven_multilingual_v2",
-      serviceOptions: { voice_id: "configured-voice" },
+      provider: "company",
+      baseUrl: "https://company.invalid",
+      apiKey: "company-token",
+      model: "catalog-tts",
+      serviceOptions: {},
     }),
     fetch: async (url: RequestInfo | URL, init?: RequestInit) => {
       calls++;
-      assert.match(String(url), /text-to-speech\/configured-voice$/);
-      assert.equal(JSON.parse(String(init!.body)).voice, undefined);
-      return new Response(new Uint8Array(wav), {
-        headers: { "content-type": "audio/wav" },
+      assert.match(String(url), /api\/media\/speech$/);
+      const body = JSON.parse(String(init!.body));
+      assert.equal(body.model, "catalog-tts");
+      assert.equal(body.input, "外部服务的配音");
+      assert.equal(body.response_format, "wav");
+      assert.equal(body.voice, "coral");
+      return Response.json({
+        ok: true,
+        audio: { media_type: "audio/wav", base64: wav.toString("base64") },
       });
     },
   };
@@ -164,11 +169,11 @@ test("external speech caches completed provider audio across concurrent project 
   const deps = {
     config: async () => ({
       id: 22,
-      provider: "inworld",
-      baseUrl: "https://api.inworld.ai",
-      apiKey: "secret",
-      model: "inworld-tts-2",
-      serviceOptions: { voice: "Ashley" },
+      provider: "company",
+      baseUrl: "https://company.invalid",
+      apiKey: "company-token",
+      model: "catalog-tts",
+      serviceOptions: {},
     }),
     fetch: async () => {
       calls++;
@@ -176,7 +181,10 @@ test("external speech caches completed provider audio across concurrent project 
         ...getCreativeProject(p.id),
         title: "保留并发修改",
       });
-      return Response.json({ audioContent: wav.toString("base64") });
+      return Response.json({
+        ok: true,
+        audio: { media_type: "audio/wav", base64: wav.toString("base64") },
+      });
     },
   };
   await assert.rejects(
@@ -201,8 +209,8 @@ test("pipeline restores a submitted Fal speech job after transport failure witho
     config: async () => ({
       id: 23,
       provider: "fal",
-      baseUrl: "https://queue.fal.run",
-      apiKey: "secret",
+      baseUrl: "https://company.invalid/api/media/fal-queue",
+      apiKey: "company-token",
       model: "fal-ai/elevenlabs/tts/multilingual-v2",
     }),
     fetch: async (_url: RequestInfo | URL, init?: RequestInit) => {
@@ -238,7 +246,7 @@ test("pipeline restores a submitted Fal speech job after transport failure witho
     "fal-existing",
   );
 });
-test("pipeline rejects text-only ASR before charging and never creates synthetic subtitle timing", async () => {
+test("pipeline rejects text-only ASR output and never creates synthetic subtitle timing", async () => {
   const p = project();
   let calls = 0;
   const deps = {
@@ -261,8 +269,8 @@ test("pipeline rejects text-only ASR before charging and never creates synthetic
       p.production.sources[0].id,
       deps,
     ),
-    /只提供文字.*时码/,
+    /未返回有效的逐字稿与时码/,
   );
-  assert.equal(calls, 0);
+  assert.equal(calls, 1);
   assert.equal(getCreativeProject(p.id).production.sources[0].transcript, "");
 });

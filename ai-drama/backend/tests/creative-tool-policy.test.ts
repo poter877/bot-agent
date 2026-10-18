@@ -104,8 +104,8 @@ function scenePlan(ctx: StageContext, toolId: string, args: Record<string, unkno
   Object.assign(ctx.project.shots[0], { toolPlan: { toolId, args, ...(chain ? { chain } : {}) } })
 }
 
-test('all 153 unique tools have explicit category, stage, purpose and activation policy', () => {
-  assert.equal(Object.keys(pipelineToolPolicies).length, 153)
+test('all inventory tools have explicit category, stage, purpose and activation policy', () => {
+  assert.equal(Object.keys(pipelineToolPolicies).length, 152)
   assert.deepEqual(Object.keys(pipelineToolPolicies).sort(), inventory.map((item) => item.id).sort())
   for (const policy of Object.values(pipelineToolPolicies)) {
     assert.ok(
@@ -402,26 +402,25 @@ test('avatar input gaps stop before submission and explicitly disabled avatar pa
 })
 test('transcription selection uses the same canonical field and rejects visual or speech aliases', () => {
   assert.equal(
-    parsePipelineAutomation(context('talking_head', 'idea', { transcriptionTool: 'azure_stt' }).project)
+    parsePipelineAutomation(context('talking_head', 'idea', { transcriptionTool: 'dashscope_asr' }).project)
       .transcriptionTool,
-    'azure_stt',
+    'dashscope_asr',
   )
   const invalid = context('talking_head', 'idea', { transcriptionTool: 'openai_tts' })
   invalid.project.production.sources[0].transcript = ''
   assert.throws(() => planPipelineTools(invalid, 'before'), /transcription/)
 })
 test('ASR prepares actual mono WAV audio and text-only engines never invent timed captions', () => {
-  for (const tool of ['azure_stt', 'dashscope_asr']) {
-    const ctx = context('talking_head', 'idea', { transcriptionTool: tool })
-    ctx.project.production.sources[0].transcript = ''
-    const steps = planPipelineTools(ctx, 'before')
-    const extract = steps.find((step) => step.toolId === 'audio_mixer')!,
-      transcribe = steps.find((step) => step.toolId === tool)!
-    assert.equal(extract.args.sample_rate, 16000)
-    assert.equal(extract.args.channels, 1)
-    assert.deepEqual(transcribe.args.audio_url, { $step: extract.key, kind: 'audio' })
-    assert.equal(transcribe.apply?.kind, tool === 'dashscope_asr' ? 'data' : 'subtitle')
-  }
+  const tool = 'dashscope_asr'
+  const ctx = context('talking_head', 'idea', { transcriptionTool: tool })
+  ctx.project.production.sources[0].transcript = ''
+  const steps = planPipelineTools(ctx, 'before')
+  const extract = steps.find((step) => step.toolId === 'audio_mixer')!,
+    transcribe = steps.find((step) => step.toolId === tool)!
+  assert.equal(extract.args.sample_rate, 16000)
+  assert.equal(extract.args.channels, 1)
+  assert.deepEqual(transcribe.args.audio_url, { $step: extract.key, kind: 'audio' })
+  assert.equal(transcribe.apply?.kind, 'data')
 })
 test('recording stays opt-in and is never inferred from entering software demo workflow', () => {
   const noCapture = context('screen_demo', 'idea')

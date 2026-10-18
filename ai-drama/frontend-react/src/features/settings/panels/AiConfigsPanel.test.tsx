@@ -111,17 +111,20 @@ it('adds catalog-provided capabilities through the unified settings form', async
   fireEvent.click(screen.getByRole('button', { name: '保存' }))
   await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({ service_type: 'music', provider: 'elevenlabs', model: ['music_v1'], base_url: 'https://api.elevenlabs.io' })))
 })
-it('appends adapter models after existing official presets without changing the default', async () => {
+it('applies the company preset for core services and appends catalog tool rows after it', async () => {
   vi.mocked(toolboxApi.catalog).mockResolvedValue({ tools: [], providers: [{ provider: 'openai', serviceType: 'image', name: 'OpenAI 旧工具', baseUrl: 'https://old.example.com', models: ['gpt-image-1', 'gpt-image-2'] }] })
   vi.spyOn(aiConfigApi, 'list').mockResolvedValue([])
   const create = vi.spyOn(aiConfigApi, 'create').mockResolvedValue({})
   mountPanel()
   await waitFor(() => expect(toolboxApi.catalog).toHaveBeenCalled())
   fireEvent.click(screen.getByRole('button', { name: '图片' }))
-  fireEvent.click(screen.getByRole('button', { name: 'OpenAI 官方' }))
-  fireEvent.change(screen.getByLabelText('API Key'), { target: { value: 'image-secret' } })
+  // 公司后端是图片服务的默认且首选预设；工具行预设仅追加在后排
+  expect(screen.getByRole('dialog').textContent).toContain('公司模型服务')
+  expect(screen.getByRole('button', { name: 'OpenAI 旧工具' })).toBeTruthy()
+  expect(screen.queryByLabelText('API Key')).toBeNull()
+  expect(screen.queryByLabelText('Base URL')).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: '保存' }))
-  await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({ service_type: 'image', provider: 'openai', model: ['gpt-image-2', 'gpt-image-1'], base_url: 'https://api.openai.com' })))
+  await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({ service_type: 'image', provider: 'company', api_key: '', base_url: '' })))
 })
 
 it('restores and saves a ComfyUI workflow without replacing edits during refresh', async () => {

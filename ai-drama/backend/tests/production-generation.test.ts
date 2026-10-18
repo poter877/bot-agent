@@ -4,13 +4,17 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import os from 'node:os'
 import sharp from 'sharp'
+import { execFileSync } from 'node:child_process'
 import { eq } from 'drizzle-orm'
+import { ffmpegPath } from '../src/utils/ffmpeg.js'
 const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'production-generation-'))
 process.env.SQLITE_PATH = path.join(dir, 'test.sqlite')
 process.env.STORAGE_PATH = path.join(dir, 'static')
 process.env.MYSQL_AUTO_IMPORT = 'false'
+process.env.COMPANY_BACKEND_URL = 'https://company.invalid'
+process.env.COMPANY_SERVICE_TOKEN = 'company-token'
 const { db, schema, getInsertId } = await import('../src/db/index.js')
-const { generateImage, resumeGenerationTask } = await import('../src/services/generation.js')
+const { generateImage, generateVideo, resumeGenerationTask } = await import('../src/services/generation.js')
 const { providerDependencies } = await import('../src/services/production-tools/provider-runtime.js')
 const { providerToolSpecs } = await import('../src/services/production-tools/providers.js')
 const { runUnifiedGeneration } = await import('../src/services/production-tools/executor.js')
@@ -48,8 +52,8 @@ test('new model providers use the original image task lifecycle and write back r
         serviceType: 'image',
         provider: 'fal',
         name: 'Fal shared',
-        baseUrl: 'https://queue.fal.run',
-        apiKey: 'test-secret',
+        baseUrl: 'https://company.invalid/api/media/fal-queue',
+        apiKey: 'company-token',
         model: JSON.stringify([model]),
         createdAt: now,
         updatedAt: now,
@@ -63,7 +67,7 @@ test('new model providers use the original image task lifecycle and write back r
   providerDependencies.fetch = async (url, init) => {
     if (init?.method === 'POST') {
       posts++
-      assert.equal(new Headers(init.headers).get('authorization'), 'Key test-secret')
+      assert.equal(new Headers(init.headers).get('authorization'), 'Bearer company-token')
       return Response.json({ request_id: 'known-job' })
     }
     if (String(url).endsWith('/status')) return Response.json({ status: 'COMPLETED' })
@@ -106,8 +110,8 @@ test('restarting a failed provider query uses its saved account and remote ID wi
       serviceType: 'image',
       provider: 'fal',
       name: 'Other account',
-      baseUrl: 'https://queue.fal.run',
-      apiKey: 'another-secret',
+      baseUrl: 'https://company.invalid/api/media/fal-queue',
+      apiKey: 'company-token',
       model: previous.model,
       priority: 100,
       createdAt: now,
@@ -162,4 +166,119 @@ test('unified generation keeps the snapshotted model when the saved account mode
   assert.equal(task.model, model)
   assert.equal(result.files.length, 1)
   assert.ok((await fs.stat(result.files[0].path)).size > 0)
+})
+
+test('company image generation posts the media contract and writes back the base64 asset', async () => {
+  const now = new Date().toISOString(),
+    projectId = getInsertId(
+      db.insert(schema.dramas).values({ title: '公司图片', createdAt: now, updatedAt: now }).run(),
+    )
+  const configId = getInsertId(
+    db
+      .insert(schema.aiServiceConfigs)
+      .values({
+        serviceType: 'image',
+        provider: 'company',
+        name: '公司图片',
+        baseUrl: 'https://company.invalid',
+        apiKey: 'company-token',
+        model: JSON.stringify(['catalog-image']),
+        priority: 200,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run(),
+  )
+  const image = await sharp({ create: { width: 32, height: 32, channels: 3, background: '#123456' } })
+    .png()
+    .toBuffer()
+  const original = globalThis.fetch
+  let request: { url: string; init: RequestInit } | undefined
+  globalThis.fetch = (async (url, init) => {
+    if (!String(url).startsWith('data:')) request = { url: String(url), init: init! }
+    return Response.json({ ok: true, images: [{ media_type: 'image/png', base64: image.toString('base64') }] })
+  }) as typeof fetch
+  try {
+    const id = await generateImage({ dramaId: projectId, prompt: '公司图片', configId })
+    const row = await terminal(id)
+    assert.equal(row.status, 'completed')
+    assert.equal(row.provider, 'company')
+    assert.match(request!.url, /\/api\/media\/image$/)
+    assert.equal(new Headers(request!.init.headers).get('authorization'), 'Bearer company-token')
+    assert.equal(JSON.parse(String(request!.init.body)).model, 'catalog-image')
+    assert.equal((await fs.stat(path.join(dir, row.localPath!))).size, image.length)
+  } finally {
+    globalThis.fetch = original
+    db.delete(schema.aiServiceConfigs).where(eq(schema.aiServiceConfigs.id, configId)).run()
+  }
+})
+
+test('company video generation sends reference fields as JSON arrays and decodes the base64 video', async () => {
+  const now = new Date().toISOString(),
+    projectId = getInsertId(
+      db.insert(schema.dramas).values({ title: '公司视频', createdAt: now, updatedAt: now }).run(),
+    )
+  const configId = getInsertId(
+    db
+      .insert(schema.aiServiceConfigs)
+      .values({
+        serviceType: 'video',
+        provider: 'company',
+        name: '公司视频',
+        baseUrl: 'https://company.invalid',
+        apiKey: 'company-token',
+        model: JSON.stringify(['catalog-video']),
+        priority: 200,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run(),
+  )
+  await fs.mkdir(path.join(dir, 'static'), { recursive: true })
+  const videoFile = path.join(dir, 'static', 'video-fixture.mp4')
+  execFileSync(ffmpegPath!, [
+    '-v', 'error', '-y',
+    '-f', 'lavfi', '-i', 'color=c=blue:s=64x64:r=10',
+    '-t', '0.4', '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+    videoFile,
+  ])
+  const video = await fs.readFile(videoFile)
+  const original = globalThis.fetch
+  let request: { url: string; init: RequestInit } | undefined
+  globalThis.fetch = (async (url, init) => {
+    if (String(url).startsWith('data:')) return original(url) // 落盘下载走真实 data: 解码
+    request = { url: String(url), init: init! }
+    return Response.json({ ok: true, videos: [{ media_type: 'video/mp4', base64: video.toString('base64') }] })
+  }) as typeof fetch
+  try {
+    const id = await generateVideo({
+      dramaId: projectId,
+      prompt: '公司视频',
+      configId,
+      duration: 5,
+      firstFrameUrl: 'data:image/png;base64,Zmlyc3QtZnJhbWU=',
+      referenceImageUrls: ['data:image/png;base64,Zmlyc3QtZnJhbWU='],
+      referenceVideoUrls: ['https://cdn.example.com/ref.mp4'],
+      referenceAudioUrls: [],
+      referenceFileUrl: 'https://cdn.example.com/ref.zip',
+      generateAudio: false,
+      resolution: '720p',
+    })
+    const row = await terminal(id)
+    assert.equal(row.status, 'completed')
+    assert.match(request!.url, /\/api\/media\/video$/)
+    const body = JSON.parse(String(request!.init.body))
+    // 参考列以 JSON 数组下发（不再是 JSON 字符串列），音频开关转布尔
+    assert.deepEqual(body.referenceImages, ['data:image/png;base64,Zmlyc3QtZnJhbWU='])
+    assert.deepEqual(body.referenceVideos, ['https://cdn.example.com/ref.mp4'])
+    assert.equal('referenceAudios' in body, false)
+    assert.equal(body.referenceFileUrl, 'https://cdn.example.com/ref.zip')
+    assert.equal(body.firstFrameUrl, 'data:image/png;base64,Zmlyc3QtZnJhbWU=')
+    assert.equal(body.generateAudio, false)
+    assert.equal(body.resolution, '720p')
+    assert.equal((await fs.readFile(path.join(dir, row.localPath!))).length, video.length)
+  } finally {
+    globalThis.fetch = original
+    db.delete(schema.aiServiceConfigs).where(eq(schema.aiServiceConfigs.id, configId)).run()
+  }
 })

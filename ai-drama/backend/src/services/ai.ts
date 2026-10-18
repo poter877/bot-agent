@@ -4,7 +4,6 @@
 import { db, schema } from '../db/index.js'
 import { eq } from 'drizzle-orm'
 import { logTaskProgress, logTaskWarn } from '../utils/task-logger.js'
-import { joinProviderUrl } from './adapters/url.js'
 
 import { serviceProviders, resolveServiceRow, configModels, migrateServiceConfigs, type ServiceType } from './ai-registry.js'
 export type { ServiceType } from './ai-registry.js'
@@ -32,29 +31,9 @@ export function parseConfigTemperature(settingsRaw: string | null | undefined): 
   }
 }
 
-export const officialProviders = serviceProviders
-
 export function isOfficialProvider(serviceType?: string | null, provider?: string | null): boolean {
-  const providers = officialProviders[serviceType as ServiceType]
+  const providers = serviceProviders()[serviceType as ServiceType]
   return Array.isArray(providers) && (providers as readonly string[]).includes((provider || '').toLowerCase())
-}
-
-export function getTextProviderBaseUrl(config: AIConfig) {
-  const provider = config.provider.toLowerCase()
-
-  if (provider === 'openai') {
-    return joinProviderUrl(config.baseUrl, '/v1', '')
-  }
-
-  if (provider === 'gemini') {
-    return joinProviderUrl(config.baseUrl, '/v1beta', '')
-  }
-
-  if (provider === 'volcengine') {
-    return joinProviderUrl(config.baseUrl, '/api/v3', '')
-  }
-
-  return config.baseUrl
 }
 
 // Agent 多步循环会逐步重复解析同一配置，相同配置只打一次日志避免刷屏

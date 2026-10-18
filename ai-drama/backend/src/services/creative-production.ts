@@ -29,10 +29,7 @@ export async function generateCreativeShot(id: number, shotId: string, input: {r
         if (shot.duration > 15) throw new CreativeError('生成视频单镜头最多 15 秒，请先拆分镜头；原片剪辑不受此限制')
         const config = input.configId ? await getConfigById(input.configId, input.kind) : await getActiveConfig('video')
         if (!config) throw new CreativeError('未配置视频模型，请先在设置中心添加并启用视频服务')
-        if (['minimax', 'volcengine'].includes(config.provider) && shot.duration > 15) {
-          throw new CreativeError('当前视频模型单次最多生成 15 秒，请缩短或拆分这个镜头')
-        }
-        generationDuration = Math.max(config.provider === 'aliyun' ? 2 : 4, generationDuration)
+        generationDuration = Math.max(4, generationDuration)
       }
       const taskId = input.kind === 'image'
         ? await deps.generateImage({ dramaId: id, prompt, size: sizes[project.aspectRatio], configId: input.configId })

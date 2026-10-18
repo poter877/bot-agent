@@ -99,15 +99,6 @@
     ]
   },
   {
-    "id": "azure_stt",
-    "referenceProvider": "azure",
-    "category": "analysis",
-    "capability": "analysis",
-    "referenceFiles": [
-      "tools/analysis/azure_stt.py"
-    ]
-  },
-  {
     "id": "azure_tts",
     "referenceProvider": "azure",
     "category": "audio",

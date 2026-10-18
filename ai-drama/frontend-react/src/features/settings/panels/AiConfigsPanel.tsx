@@ -7,7 +7,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ExternalLink, Loader2, Pencil, Plus, Sparkles, Star, Trash2, X } from 'lucide-react'
+import { Loader2, Pencil, Plus, Star, Trash2, X } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -17,7 +17,6 @@ import { toolboxQueries } from '@/entities/creative/toolbox'
 import { toastError } from '@/shared/lib/errors'
 import { providerIconUrl } from '@/shared/lib/provider-icons'
 import { useTheme } from '@/shared/config/theme'
-import { useUiLocale } from '@/shared/config/use-locale'
 import { Modal } from '@/shared/ui/Modal'
 import { BaseSelect } from '@/shared/ui/BaseSelect'
 import { Button } from '@/shared/ui/button'
@@ -36,29 +35,10 @@ const SETTINGS_TITLE = 'text-[22px] font-extrabold tracking-[-0.02em]'
 const SETTINGS_DESC = 'mt-1.5 text-[13px] text-content-muted'
 
 // 火宝快捷配置（quick-card 为引导锚点类，保留）
-const QUICK_CARD = 'quick-card mb-4 border-[1.5px] border-brand p-5 hover:border-brand'
-const QUICK_CARD_HEAD = 'mb-1.5 flex items-center gap-2.5'
 const SETUP_TITLE = 'text-[15px] font-bold text-content'
 const SETUP_DESC = 'mb-3.5 text-[12.5px] text-content-muted'
-const HUOBA_SITE_LINK =
-  'ml-1.5 inline-flex items-center gap-[3px] whitespace-nowrap font-semibold text-brand no-underline hover:underline'
-const HUOBA_QUICK_ROW = 'grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2.5'
-const HUOBA_QUICK_MODELS = 'mt-3.5 flex flex-col gap-[7px]'
-const HQM_ROW = 'flex items-baseline gap-2.5 text-[11px] leading-[1.6]'
-const HQM_LABEL = 'w-7 shrink-0 font-semibold text-content-muted'
-const HQM_PROVIDER =
-  'inline-flex shrink-0 items-center gap-1 rounded-[4px] bg-brand-soft px-1.5 py-px text-[9px] font-semibold uppercase tracking-[0.02em] text-brand'
-const HQM_PROVIDER_ICON = 'h-[11px] w-[11px] rounded-[2px] object-contain'
-const HQM_MODELS = 'flex flex-wrap gap-x-3 gap-y-1 text-content-subtle'
-const HQM_MODEL_DEFAULT = 'font-semibold text-content-secondary'
-const DEFAULT_EM = 'ml-1 rounded-[5px] bg-brand-soft px-[5px] text-[10px] font-semibold not-italic text-brand-content'
 
 // 内容语言分段选择器（火宝节点选择同款）
-const LANG_PICKER_QUICK = 'flex gap-0.5 rounded-pill bg-track p-[3px]'
-const LANG_OPTION_BASE =
-  'min-h-[30px] cursor-pointer whitespace-nowrap rounded-pill border-none bg-transparent px-3.5 py-0 text-[12.5px] font-semibold leading-none transition-all duration-[160ms] ease-app focus-visible:outline-none focus-visible:shadow-focus'
-const LANG_OPTION_ON = 'bg-seg-active text-content shadow-[0_1px_4px_rgba(0,0,0,0.1)]'
-const LANG_OPTION_IDLE = 'text-content-muted hover:text-content'
 
 // 手动配置入口
 const SETUP_PANEL = 'mt-3.5 mb-4 px-5 py-[18px]'
@@ -121,27 +101,19 @@ const TEST_RESULT_META = 'font-code text-[11px] text-content-muted break-all'
 // 原全局 .btn-icon.btn-sm 尺寸收窄（30px）
 const ICON_BTN_SM = 'h-[30px] min-h-[30px] w-[30px] min-w-[30px]'
 
-/** 厂商预设模板（配置名持久化进 DB：provider 英文 + 服务类型英文，不随界面语言漂移） */
+/** 厂商预设模板（配置名持久化进 DB：provider 英文 + 服务类型英文，不随界面语言漂移）。
+ *  文本/图像/视频/语音/转写已收敛到公司后端：地址与密钥由服务端环境注入，模型走公司目录。 */
+const COMPANY_PRESET = { label: '公司模型服务', baseUrl: '', models: [] as string[] }
 const PROVIDER_PRESETS: Record<ServiceType, Record<string, { label: string; baseUrl: string; models: string[]; requiresApiKey?: boolean }>> = {
-  speech: { openai: { label: 'OpenAI 语音合成', baseUrl: 'https://api.openai.com', models: ['gpt-4o-mini-tts', 'tts-1', 'tts-1-hd'] } },
-  transcription: { openai: { label: 'OpenAI 时码识别', baseUrl: 'https://api.openai.com', models: ['whisper-1'] } },
+  speech: { company: { ...COMPANY_PRESET } },
+  transcription: { company: { ...COMPANY_PRESET } },
   lipsync: { sync: { label: 'Sync 口型同步', baseUrl: 'https://api.sync.so', models: ['lipsync-2', 'lipsync-2-pro', 'sync-3'] } },
   rigging: { meshy: { label: 'Meshy 骨骼绑定', baseUrl: 'https://api.meshy.ai', models: ['rigging'] } },
   research: { tavily: { label: 'Tavily 联网资料', baseUrl: 'https://api.tavily.com', models: ['search'] } },
   stock: { pexels: { label: 'Pexels 联网素材', baseUrl: 'https://api.pexels.com', models: ['search'] } },
-  text: {
-    gemini: { label: 'Gemini 官方', baseUrl: 'https://generativelanguage.googleapis.com', models: ['gemini-3.8-flash', 'gemini-3.1-pro-preview', 'gemini-3-flash-preview'] },
-    openai: { label: 'OpenAI 官方', baseUrl: 'https://api.openai.com', models: ['deepseek-v4-pro', 'gpt-5.6-terra'] },
-  },
-  image: {
-    gemini: { label: 'Gemini 官方', baseUrl: 'https://generativelanguage.googleapis.com', models: ['gemini-3-pro-image', 'gemini-3.1-flash-image'] },
-    openai: { label: 'OpenAI 官方', baseUrl: 'https://api.openai.com', models: ['gpt-image-2'] },
-  },
-  video: {
-    aliyun: { label: '阿里云百炼 Wan 3.0', baseUrl: 'https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com', models: ['wan3.0-video', 'wan3.0-video-prime'] },
-    volcengine: { label: 'Seedance 2.0 官方', baseUrl: 'https://ark.cn-beijing.volces.com', models: ['doubao-seedance-2-0-mini-260615', 'doubao-seedance-2-0-fast-260128', 'doubao-seedance-2-0-260128'] },
-    minimax: { label: 'MiniMax H3 官方', baseUrl: 'https://api.minimaxi.com', models: ['MiniMax-H3'] },
-  },
+  text: { company: { ...COMPANY_PRESET } },
+  image: { company: { ...COMPANY_PRESET } },
+  video: { company: { ...COMPANY_PRESET } },
 }
 
 const CFG_FORM_SCHEMA = z.object({
@@ -157,7 +129,6 @@ type CfgFormOutput = z.output<typeof CFG_FORM_SCHEMA>
 
 export function AiConfigsPanel() {
   const { t } = useTranslation()
-  const locale = useUiLocale()
   const { resolvedTheme } = useTheme()
   const queryClient = useQueryClient()
   const toolCatalog = useQuery(toolboxQueries.catalog())
@@ -214,53 +185,8 @@ export function AiConfigsPanel() {
     serviceMeta[type] = { label, desc: '短剧、创意视频与制作工具箱共用此能力的服务配置' }
   }
 
-  // ===== 火宝快捷配置 =====
-  // 节点选择：默认跟随界面语言（中文→国内 .cn，其他→国外 .com），一键配置与取 Key 链接共用
-  const [huobaoApiKey, setHuobaoApiKey] = useState('')
-  const [huobaoRegion, setHuobaoRegion] = useState<'cn' | 'com'>(locale.startsWith('zh') ? 'cn' : 'com')
-  const huobaoSiteUrl = `https://api.firemux.${huobaoRegion}`
-  const huobaoQuickConfigs = [
-    { service_type: 'text', provider: 'gemini', name: '火宝文本服务 · Gemini', base_url: huobaoSiteUrl, model: ['gemini-3.8-flash', 'gemini-3.1-pro-preview', 'gemini-3-flash-preview'], priority: 101 },
-    { service_type: 'text', provider: 'openai', name: '火宝文本服务 · OpenAI', base_url: huobaoSiteUrl, model: ['deepseek-v4-pro', 'deepseek-v4-flash', 'gpt-5.6-terra'], priority: 100 },
-    { service_type: 'image', provider: 'openai', name: '火宝图片服务 · OpenAI', base_url: huobaoSiteUrl, model: ['gpt-image-2'], priority: 99 },
-    { service_type: 'image', provider: 'gemini', name: '火宝图片服务 · Gemini', base_url: huobaoSiteUrl, model: ['gemini-3-pro-image', 'gemini-3.1-flash-image'], priority: 97 },
-    { service_type: 'video', provider: 'aliyun', name: '火宝视频服务 · Wan 3.0', base_url: `${huobaoSiteUrl}/qwen`, model: ['wan3.0-video', 'wan3.0-video-prime'], priority: 97 },
-    { service_type: 'video', provider: 'volcengine', name: '火宝视频服务 · Seedance', base_url: `${huobaoSiteUrl}/volcengine`, model: ['doubao-seedance-2-0-mini-260615', 'doubao-seedance-2-0-fast-260128', 'doubao-seedance-2-0-260128'], priority: 96 },
-    { service_type: 'video', provider: 'minimax', name: '火宝视频服务 · MiniMax', base_url: `${huobaoSiteUrl}/minimax`, model: ['MiniMax-H3'], priority: 98 },
-  ]
-
-  const quickApplyMutation = useMutation({
-    mutationFn: async () => {
-      const apiKey = huobaoApiKey.trim()
-      if (!apiKey) throw new Error('skip')
-      for (const preset of huobaoQuickConfigs) {
-        const payload = { ...preset, api_key: apiKey }
-        const existing = cfgs.find(
-          (c) => c.name === preset.name || (c.serviceType === preset.service_type && c.provider === preset.provider && c.baseUrl === preset.base_url),
-        )
-        if (existing) await aiConfigApi.update(existing.id, payload)
-        else await aiConfigApi.create(payload)
-      }
-    },
-    onSuccess: () => {
-      toast.success(t('settings.ai.quickApplied'))
-      setHuobaoApiKey('')
-      invalidate()
-    },
-    onError: (err) => {
-      if (!(err instanceof Error && err.message === 'skip')) toastError(err)
-    },
-  })
-
-  function applyHuobaoQuickConfig() {
-    if (!huobaoApiKey.trim()) {
-      toast.warning(t('settings.ai.apiKeyRequired'))
-      return
-    }
-    quickApplyMutation.mutate()
-  }
-
   // ===== 配置 CRUD =====
+  const isCompanyProvider = (type: ServiceType, provider: string) => provider === 'company' && ['text', 'image', 'video', 'speech', 'transcription'].includes(type)
   const byType = (type: ServiceType) => cfgs.filter((c) => c.serviceType === type)
   const countActive = (type: ServiceType) => byType(type).filter((c) => c.isActive).length
 
@@ -322,6 +248,16 @@ export function AiConfigsPanel() {
     resolver: zodResolver(CFG_FORM_SCHEMA),
     defaultValues: { name: '', provider: '', priority: 0, api_key: '', base_url: '', temperature: '' },
   })
+
+  // 公司后端连接数据由服务端环境注入；文本模型列表拉公司目录（经后端代理）
+  const companyModelsQuery = useQuery({
+    queryKey: qk.companyModels(),
+    queryFn: ({ signal }) => aiConfigApi.companyModels(signal),
+    enabled: dialogOpen && dialogType === 'text' && form.watch('provider') === 'company',
+    staleTime: 5 * 60_000,
+  })
+  const currentProvider = form.watch('provider')
+  const companyMode = isCompanyProvider(dialogType, currentProvider)
 
   function presetsByType(type: ServiceType) {
     const group = providerPresets[type] || {}
@@ -493,71 +429,6 @@ export function AiConfigsPanel() {
         <p className={SETTINGS_DESC}>短剧与创意视频共用这些模型和服务。每类服务按优先级选用默认配置，也可在制作时指定模型。</p>
       </div>
 
-      {/* 火宝快捷配置 */}
-      <section className={cn(cardVariants(), CONTENT_W, QUICK_CARD)}>
-        <div className={QUICK_CARD_HEAD}>
-          <div className={SETUP_TITLE}>{t('settings.ai.quickTitle')}</div>
-          <Badge tone="brand">{t('settings.ai.recommended')}</Badge>
-        </div>
-        <p className={SETUP_DESC}>
-          {t('settings.ai.quickDesc')}
-          <a className={HUOBA_SITE_LINK} href={huobaoSiteUrl} target="_blank" rel="noopener noreferrer">
-            {t('settings.ai.getKey')}
-            <ExternalLink size={12} strokeWidth={1.8} />
-          </a>
-        </p>
-        <div className={HUOBA_QUICK_ROW}>
-          <Input
-            value={huobaoApiKey}
-            onChange={(e) => setHuobaoApiKey(e.target.value)}
-            type="password"
-            placeholder="Huobao API Key"
-            autoComplete="off"
-          />
-          <div className={LANG_PICKER_QUICK}>
-            <button
-              type="button"
-              className={cn(LANG_OPTION_BASE, huobaoRegion === 'cn' ? LANG_OPTION_ON : LANG_OPTION_IDLE)}
-              onClick={() => setHuobaoRegion('cn')}
-            >
-              {t('settings.ai.regionCn')}
-            </button>
-            <button
-              type="button"
-              className={cn(LANG_OPTION_BASE, huobaoRegion === 'com' ? LANG_OPTION_ON : LANG_OPTION_IDLE)}
-              onClick={() => setHuobaoRegion('com')}
-            >
-              {t('settings.ai.regionCom')}
-            </button>
-          </div>
-          <Button variant="primary" disabled={quickApplyMutation.isPending} onClick={applyHuobaoQuickConfig}>
-            {quickApplyMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-            {t('settings.ai.applyQuick')}
-          </Button>
-        </div>
-        <div className={HUOBA_QUICK_MODELS}>
-          {huobaoQuickConfigs.map((q) => (
-            <div key={q.name} className={HQM_ROW}>
-              <span className={HQM_LABEL}>{serviceMeta[q.service_type as ServiceType].label}</span>
-              <span className={HQM_PROVIDER}>
-                {providerIconUrl(q.provider, resolvedTheme) && (
-                  <img src={providerIconUrl(q.provider, resolvedTheme)} className={HQM_PROVIDER_ICON} alt="" />
-                )}
-                {q.provider}
-              </span>
-              <span className={`font-code ${HQM_MODELS}`}>
-                {q.model.map((m, i) => (
-                  <span key={m} className={i === 0 ? HQM_MODEL_DEFAULT : undefined}>
-                    {m}
-                    {i === 0 && <em className={DEFAULT_EM}>{t('common.default')}</em>}
-                  </span>
-                ))}
-              </span>
-            </div>
-          ))}
-        </div>
-      </section>
-
       {/* 手动配置入口 */}
       <section className={cn(cardVariants(), CONTENT_W, SETUP_PANEL)}>
         <div className={SETUP_PANEL_HEAD}>
@@ -711,19 +582,25 @@ export function AiConfigsPanel() {
             <Input {...form.register('priority')} type="number" min={0} max={999} />
             <span className="text-micro leading-[1.5] text-content-subtle">{t('settings.cfg.priorityHint')}</span>
           </label>
-          <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-[550] text-content-secondary">API Key</span>
-            <Input {...form.register('api_key')} type="password" disabled={clearKey} placeholder={providerPresets[dialogType]?.[form.watch('provider')]?.requiresApiKey === false ? '可选，此服务无需密钥' : editId ? '留空保留已保存密钥' : '请输入 API Key'} autoComplete="off" />
-            {providerPresets[dialogType]?.[form.watch('provider')]?.requiresApiKey === false && <span className="text-xs text-content-muted">此服务无需密钥，仍需保存服务地址{form.watch('provider') === 'comfyui' ? '和 API 工作流' : ''}配置。</span>}
-          </label>
-          {editId && <label className="flex items-center gap-2 text-xs text-content-muted">
-            <input type="checkbox" checked={clearKey} onChange={event => setClearKey(event.target.checked)} />
-            清除已保存密钥并停用此配置
-          </label>}
-          <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-[550] text-content-secondary">Base URL</span>
-            <Input {...form.register('base_url')} placeholder="https://..." readOnly={['lipsync', 'rigging', 'research', 'stock'].includes(dialogType)} />
-          </label>
+          {companyMode ? (
+            <p className="text-xs leading-relaxed text-content-muted">公司服务的地址与密钥由服务端环境注入，无需填写；模型从公司目录选择。</p>
+          ) : (
+            <>
+              <label className="flex flex-col gap-1.5">
+                <span className="text-xs font-[550] text-content-secondary">API Key</span>
+                <Input {...form.register('api_key')} type="password" disabled={clearKey} placeholder={providerPresets[dialogType]?.[form.watch('provider')]?.requiresApiKey === false ? '可选，此服务无需密钥' : editId ? '留空保留已保存密钥' : '请输入 API Key'} autoComplete="off" />
+                {providerPresets[dialogType]?.[form.watch('provider')]?.requiresApiKey === false && <span className="text-xs text-content-muted">此服务无需密钥，仍需保存服务地址{form.watch('provider') === 'comfyui' ? '和 API 工作流' : ''}配置。</span>}
+              </label>
+              {editId && <label className="flex items-center gap-2 text-xs text-content-muted">
+                <input type="checkbox" checked={clearKey} onChange={event => setClearKey(event.target.checked)} />
+                清除已保存密钥并停用此配置
+              </label>}
+              <label className="flex flex-col gap-1.5">
+                <span className="text-xs font-[550] text-content-secondary">Base URL</span>
+                <Input {...form.register('base_url')} placeholder="https://..." readOnly={['lipsync', 'rigging', 'research', 'stock'].includes(dialogType)} />
+              </label>
+            </>
+          )}
           <div className="flex flex-col gap-1.5">
             <span className="text-xs font-[550] text-content-secondary">{t('settings.cfg.models')}</span>
             {models.length > 0 && (
@@ -750,6 +627,23 @@ export function AiConfigsPanel() {
                     </button>
                   </span>
                 ))}
+              </div>
+            )}
+            {companyMode && dialogType === 'text' && (
+              <div className={MODEL_CHIPS}>
+                {(companyModelsQuery.data ?? []).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    className={cn(MODEL_CHIP_COMMON, models.includes(m) ? MODEL_CHIP_DEFAULT : MODEL_CHIP_IDLE)}
+                    onClick={() => setModels((prev) => (prev.includes(m) ? prev.filter((x) => x !== m) : [m, ...prev.filter((x) => x !== m)]))}
+                  >
+                    {m}
+                  </button>
+                ))}
+                {companyModelsQuery.data && !companyModelsQuery.data.length && (
+                  <span className="text-[11px] text-content-subtle">公司目录暂无可用模型</span>
+                )}
               </div>
             )}
             <div className={MODEL_ADD_ROW}>

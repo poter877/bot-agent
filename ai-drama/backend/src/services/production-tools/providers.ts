@@ -1,4 +1,5 @@
 /** Independently implemented production provider adapters; no reference runtime is loaded. */
+import { companyBackendUrl } from '../company-backend.js'
 import {
   falToolModels,
   replicateToolModels,
@@ -77,31 +78,11 @@ const providerBases: Record<string, { label: string; baseUrl: string }> = {
     label: 'Google Cloud Vertex',
     baseUrl: 'https://us-central1-aiplatform.googleapis.com',
   },
-  fal: { label: 'Fal', baseUrl: 'https://queue.fal.run' },
   replicate: { label: 'Replicate', baseUrl: 'https://api.replicate.com' },
   comfyui: { label: 'ComfyUI', baseUrl: 'http://127.0.0.1:8188' },
-  openai: { label: 'OpenAI', baseUrl: 'https://api.openai.com' },
   gemini: {
     label: 'Google Gemini',
     baseUrl: 'https://generativelanguage.googleapis.com',
-  },
-  volcengine: {
-    label: '火山方舟',
-    baseUrl: 'https://ark.cn-beijing.volces.com',
-  },
-  minimax: { label: 'MiniMax', baseUrl: 'https://api.minimax.io' },
-  aliyun: { label: '阿里云百炼', baseUrl: 'https://dashscope.aliyuncs.com' },
-  elevenlabs: { label: 'ElevenLabs', baseUrl: 'https://api.elevenlabs.io' },
-  cartesia: { label: 'Cartesia', baseUrl: 'https://api.cartesia.ai' },
-  fish_audio: { label: 'Fish Audio', baseUrl: 'https://api.fish.audio' },
-  inworld: { label: 'Inworld', baseUrl: 'https://api.inworld.ai' },
-  google_tts: {
-    label: 'Google Cloud TTS',
-    baseUrl: 'https://texttospeech.googleapis.com',
-  },
-  azure: {
-    label: 'Azure Speech',
-    baseUrl: 'https://eastus.tts.speech.microsoft.com',
   },
   grok: { label: 'xAI Grok', baseUrl: 'https://api.x.ai' },
   ideogram: { label: 'Ideogram', baseUrl: 'https://api.ideogram.ai' },
@@ -121,30 +102,40 @@ const providerBases: Record<string, { label: string; baseUrl: string }> = {
   archive_org: { label: 'Internet Archive', baseUrl: 'https://archive.org' },
   loc: { label: 'Library of Congress', baseUrl: 'https://www.loc.gov' },
 }
-export const providerPresets: Record<
-  string,
-  Record<
-    string,
-    {
-      label: string
-      baseUrl: string
-      models: string[]
-      requiresApiKey?: boolean
+/** Fal 队列改走公司后端透传代理：厂商密钥在公司侧，本侧只带内部服务令牌。
+ *  未配置公司后端时不暴露预设（工具显式不可用），避免落到必然失败的直连地址。 */
+function providerBase(provider: string): { label: string; baseUrl: string } | undefined {
+  if (provider === 'fal')
+    return companyBackendUrl() ? { label: 'Fal', baseUrl: `${companyBackendUrl()}/api/media/fal-queue` } : undefined
+  return providerBases[provider]
+}
+
+export interface ProviderPreset {
+  label: string
+  baseUrl: string
+  models: string[]
+  requiresApiKey?: boolean
+}
+let presetsCache: Record<string, Record<string, ProviderPreset>> | null = null
+/** 预设含 env 派生的公司代理地址；providers 链先于 dotenv 求值，只能构建于首次访问。 */
+export function providerPresets() {
+  if (!presetsCache) {
+    presetsCache = {}
+    for (const spec of Object.values(providerToolSpecs)) {
+      const base = providerBase(spec.provider)
+      if (!base) continue
+      const group = presetsCache[spec.serviceType] ?? (presetsCache[spec.serviceType] = {})
+      const preset =
+        group[spec.provider] ??
+        (group[spec.provider] = {
+          ...base,
+          models: [],
+          requiresApiKey: spec.requiresApiKey !== false,
+        })
+      if (!preset.models.includes(spec.model)) preset.models.push(spec.model)
     }
-  >
-> = {}
-for (const spec of Object.values(providerToolSpecs)) {
-  const base = providerBases[spec.provider]
-  if (!base) continue
-  const group = providerPresets[spec.serviceType] ?? (providerPresets[spec.serviceType] = {})
-  const preset =
-    group[spec.provider] ??
-    (group[spec.provider] = {
-      ...base,
-      models: [],
-      requiresApiKey: spec.requiresApiKey !== false,
-    })
-  if (!preset.models.includes(spec.model)) preset.models.push(spec.model)
+  }
+  return presetsCache
 }
 export const supportedProviderToolIds = Object.keys(providerToolSpecs)
 export async function runProviderTool(

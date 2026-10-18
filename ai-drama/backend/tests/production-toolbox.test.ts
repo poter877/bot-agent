@@ -70,8 +70,8 @@ after(async () => {
 
 test('full inventory resolves, dependencies are explicit, retired APIs are identified', async () => {
   const c = await toolboxCatalog()
-  assert.equal(c.referenceCount, 153)
-  assert.equal(new Set(c.tools.map((t) => t.id)).size, 153)
+  assert.equal(c.referenceCount, 152)
+  assert.equal(new Set(c.tools.map((t) => t.id)).size, 152)
   assert.deepEqual(
     c.tools.filter((t) => !t.implemented).map((t) => t.id),
     [],
@@ -255,9 +255,9 @@ test('default changes do not change the pinned account, and job history redacts 
         .insert(schema.aiServiceConfigs)
         .values({
           serviceType: 'image',
-          provider: 'openai',
+          provider: 'company',
           name: 'A',
-          baseUrl: 'https://example.invalid',
+          baseUrl: 'https://company.invalid',
           apiKey: 'account-a-secret',
           model: '["gpt-image-2"]',
           priority: 3,

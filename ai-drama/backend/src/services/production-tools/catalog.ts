@@ -1,6 +1,7 @@
 /** Capability facts only. Implementations are native Video Factory adapters. */
 import inventory from './inventory.json' with { type: 'json' }
 import { providerPresets, providerToolSpecs } from './providers.js'
+import { companyBackendUrl } from '../company-backend.js'
 import { LOCAL_TOOL_IDS, localToolFields, localToolAvailability } from './local.js'
 import { auxiliaryIds, auxiliaryFields, acquisitionDomains } from './auxiliary.js'
 import { execFile } from 'node:child_process'
@@ -88,7 +89,7 @@ export const sharedToolSpecs: Record<string, { serviceType?: string; provider: s
   image_selector: { serviceType: 'image', provider: 'shared', mode: 'image' },
   video_selector: { serviceType: 'video', provider: 'shared', mode: 'video' },
   tts_selector: { serviceType: 'speech', provider: 'shared', mode: 'speech' },
-  transcriber: { serviceType: 'transcription', provider: 'openai', mode: 'transcription' },
+  transcriber: { serviceType: 'transcription', provider: 'company', mode: 'transcription' },
   lip_sync: { serviceType: 'lipsync', provider: 'sync', mode: 'lipsync' },
   talking_head: { serviceType: 'lipsync', provider: 'sync', mode: 'lipsync' },
   kling_lip_sync: { serviceType: 'lipsync', provider: 'sync', mode: 'lipsync' },
@@ -114,7 +115,7 @@ for (const item of inventory) {
   }
 }
 export function toolboxProviderPresets(): ProviderPreset[] {
-  const entries: ProviderPreset[] = Object.entries(providerPresets).flatMap(([serviceType, providers]) =>
+  const entries: ProviderPreset[] = Object.entries(providerPresets()).flatMap(([serviceType, providers]) =>
     Object.entries(providers).map(([provider, preset]) => ({
       provider,
       serviceType,
@@ -139,13 +140,17 @@ export function toolboxProviderPresets(): ProviderPreset[] {
       baseUrl: 'https://api.tavily.com',
       models: ['search'],
     },
-    {
-      provider: 'openai',
-      serviceType: 'transcription',
-      name: 'OpenAI 字幕时码识别',
-      baseUrl: 'https://api.openai.com',
-      models: ['whisper-1'],
-    },
+    ...(companyBackendUrl()
+      ? [
+          {
+            provider: 'company',
+            serviceType: 'transcription',
+            name: '公司字幕时码识别',
+            baseUrl: companyBackendUrl(),
+            models: [],
+          },
+        ]
+      : []),
   ]) {
     if (!entries.some((p) => p.provider === preset.provider && p.serviceType === preset.serviceType))
       entries.push(preset)
@@ -337,7 +342,7 @@ export function getToolDefinition(id: string): ToolDefinition {
           c.serviceType === serviceType &&
           c.isActive &&
           (provider === 'shared' || c.provider === provider) &&
-          (serviceProviders[serviceType] || []).includes(c.provider || ''),
+          (serviceProviders()[serviceType] || []).includes(c.provider || ''),
       )
       .sort(rankConfigs)[0]
     const preset = toolboxProviderPresets().find(

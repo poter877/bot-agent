@@ -167,8 +167,8 @@ test('video generation uses the saved reference image and rejects unsupported du
   let parameters: any
   let calls = 0
   const configId = getInsertId(db.insert(schema.aiServiceConfigs).values({
-    name: 'Test H3', serviceType: 'video', provider: 'minimax', baseUrl: 'https://invalid.example',
-    apiKey: 'not-a-real-key', model: JSON.stringify(['MiniMax-H3']), isActive: true, createdAt: '', updatedAt: '',
+    name: '公司视频', serviceType: 'video', provider: 'company', baseUrl: 'https://company.invalid',
+    apiKey: 'company-token', model: JSON.stringify(['catalog-video']), isActive: true, createdAt: '', updatedAt: '',
   }).run())
   const app = appWith({ generateVideo: async params => { calls++; parameters = params; return stubTask('video', params.dramaId!) } })
   let project = await create(app)

@@ -395,42 +395,6 @@
       }
     },
     {
-      "id": "azure_stt",
-      "referenceProvider": "azure",
-      "category": "analysis",
-      "capability": "analysis",
-      "referenceFiles": [
-        "tools/analysis/azure_stt.py"
-      ],
-      "implemented": true,
-      "executionFamily": "provider-adapter",
-      "actualProvider": "azure",
-      "serviceType": "transcription",
-      "notes": [],
-      "pipeline": {
-        "toolId": "azure_stt",
-        "mode": "selectable",
-        "role": "analysis",
-        "stages": [
-          "research",
-          "idea",
-          "script"
-        ],
-        "categories": [
-          "documentary",
-          "hybrid",
-          "talking_head",
-          "screen_demo",
-          "podcast",
-          "clip_factory",
-          "localization"
-        ],
-        "purpose": "为原片建立可核对的逐字稿；自动字幕必须使用真实时码，不伪造文本模型时间轴",
-        "trigger": "已开启转录且原片无逐字稿；文本型ASR只能写文本，不能替代精确字幕",
-        "selectionKey": "transcription"
-      }
-    },
-    {
       "id": "azure_tts",
       "referenceProvider": "azure",
       "category": "audio",

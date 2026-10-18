@@ -187,14 +187,14 @@ test('ASR stores real SRT, preserves concurrent edits and reuses cached output',
   const {transcribeCreativeSource}=await import('../src/services/creative-speech.js')
   let p=create('podcast');p=saveCreativeProject(p.id,{...p,production:{...p.production,sources:p.production.sources.map(s=>({...s,transcript:''}))}})
   let calls=0
-  const config=async(type:string)=>{assert.equal(type,'transcription');return {provider:'openai',model:'whisper-1',baseUrl:'https://example.invalid/v1',apiKey:'test-key'}}
+  const config=async(type:string)=>{assert.equal(type,'transcription');return {provider:'company',model:'catalog-asr',baseUrl:'https://company.invalid',apiKey:'company-token'}}
   const deps={config,fetch:async(input:RequestInfo|URL,init?:RequestInit)=>{
-    calls++;assert.equal(String(input),'https://example.invalid/v1/audio/transcriptions')
+    calls++;assert.equal(String(input),'https://company.invalid/api/media/transcription')
     const form=init!.body as FormData
-    assert.equal(form.get('model'),'whisper-1');assert.equal(form.get('response_format'),'verbose_json')
+    assert.equal(form.get('model'),'catalog-asr')
     assert.ok((form.get('file') as Blob).size>0)
     saveCreativeProject(p.id,{...getCreativeProject(p.id),title:'并发编辑保留'})
-    return Response.json({segments:[{start:0.5,end:2,text:'原声识别文字'},{start:3,end:4.5,text:'下一句'}]})
+    return Response.json({ok:true,text:'原声识别文字',segments:[{start:0.5,end:2,text:'原声识别文字'},{start:3,end:4.5,text:'下一句'}]})
   }}
   await assert.rejects(transcribeCreativeSource(p.id,p.revision,p.production.sources[0].id,deps),/修改|更新|版本/)
   const current=getCreativeProject(p.id)
@@ -213,11 +213,11 @@ test('TTS aligns real audio, mutes localized original speech and reuses output',
   const wav=path.join(directory,'speech.wav')
   execFileSync(ffmpegPath!,['-v','error','-y','-f','lavfi','-i','sine=frequency=700','-t','2','-c:a','pcm_s16le',wav])
   const bytes=await fs.readFile(wav);let calls=0
-  const deps={config:async(type:string)=>{assert.equal(type,'speech');return {provider:'openai',model:'gpt-4o-mini-tts',baseUrl:'https://example.invalid',apiKey:'test-key'}},fetch:async(input:RequestInfo|URL,init?:RequestInit)=>{
-    calls++;assert.equal(String(input),'https://example.invalid/v1/audio/speech')
+  const deps={config:async(type:string)=>{assert.equal(type,'speech');return {provider:'company',model:'catalog-tts',baseUrl:'https://company.invalid',apiKey:'company-token'}},fetch:async(input:RequestInfo|URL,init?:RequestInit)=>{
+    calls++;assert.equal(String(input),'https://company.invalid/api/media/speech')
     assert.equal(JSON.parse(init!.body as string).input,'这是一段合成配音')
-    assert.equal(JSON.parse(init!.body as string).model,'gpt-4o-mini-tts')
-    return new Response(bytes,{headers:{'Content-Type':'audio/wav'}})
+    assert.equal(JSON.parse(init!.body as string).model,'catalog-tts')
+    return Response.json({ok:true,audio:{media_type:'audio/wav',base64:bytes.toString('base64')}})
   }}
   const saved=await synthesizeCreativeShot(p.id,p.revision,p.shots[0].id,deps)
   assert.equal(saved.approvedRevision,saved.revision);assert.equal(saved.shots[0].originalVolume,0)

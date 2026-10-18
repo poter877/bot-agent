@@ -24,6 +24,9 @@ services:
       HUOBAO_WATCHTOWER_TOKEN: ${WATCHTOWER_TOKEN:-please-change-me}
       # 可覆盖为自己发布的版本清单
       HUOBAO_UPDATE_FEED: ${HUOBAO_UPDATE_FEED:-}
+      # 公司模型后端（bot-backend）：见 .env.example；不配置则公司能力不可用
+      COMPANY_BACKEND_URL: ${COMPANY_BACKEND_URL:-}
+      COMPANY_SERVICE_TOKEN: ${COMPANY_SERVICE_TOKEN:-}
     volumes:
       - huobao-data:/app/data
     labels:

@@ -1006,6 +1006,7 @@ function SelectedInspector({
 
 function resolutionShortOf(provider: string, key: string): string {
   const display: Record<string, Record<string, string>> = {
+    company: { '480p': '480p', '720p': '720p', '1080p': '1080p' },
     volcengine: { '480p': '480p', '720p': '720p', '1080p': '720p' },
     minimax: { '480p': '768P', '720p': '768P', '1080p': '2K' },
     aliyun: { '480p': '480P', '720p': '720P', '1080p': '1080P' },

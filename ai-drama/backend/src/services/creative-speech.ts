@@ -8,7 +8,6 @@ import { promisify } from "node:util";
 import { z } from "zod";
 import {
   getActiveConfig,
-  getTextProviderBaseUrl,
   type AIConfig,
 } from "./ai.js";
 import { CreativeError } from "./creative-model.js";
@@ -66,7 +65,8 @@ async function settings(deps: Dependencies, type: "speech" | "transcription") {
     );
   return {
     ...config,
-    url: getTextProviderBaseUrl(config).replace(/\/$/, ""),
+    // provider 收敛后 baseUrl 即最终地址（文本 .../api/llm、媒体 {COMPANY}）
+    url: config.baseUrl.replace(/\/$/, ""),
     headers: { Authorization: `Bearer ${config.apiKey}` },
   };
 }
@@ -246,102 +246,52 @@ export async function transcribeCreativeSource(
         path.join(os.tmpdir(), "video-factory-asr-"),
       );
       try {
-        if (config.provider === "openai") {
-          const audio = path.join(temp, "source.mp3");
-          await convert([
-            "-i",
-            sourcePath,
-            "-map",
-            "0:a:0",
-            "-vn",
-            "-ac",
-            "1",
-            "-ar",
-            "16000",
-            "-b:a",
-            "32k",
-            audio,
-          ]);
-          const bytes = await fs.readFile(audio);
-          if (bytes.length > 24 * 1024 * 1024)
-            throw new CreativeError("压缩后音频仍过大，请拆分原片后识别");
-          const form = new FormData();
-          form.set(
-            "file",
-            new Blob([bytes], { type: "audio/mpeg" }),
-            "source.mp3",
-          );
-          form.set("model", config.model);
-          form.set("response_format", "verbose_json");
-          form.append("timestamp_granularities[]", "segment");
-          const response = await respond(
-            deps.fetch(`${config.url}/audio/transcriptions`, {
-              method: "POST",
-              headers: config.headers,
-              body: form,
-              signal: AbortSignal.timeout(180000),
-              redirect: "error",
-            }),
-          );
-          const parsed = transcriptSchema.safeParse(await response.json());
-          if (!parsed.success)
-            throw new CreativeError("语音服务未返回有效的逐字稿与时码", 422);
-          result = parsed.data;
-        } else if (config.provider === "azure") {
-          if (source.duration > 60)
-            throw new CreativeError(
-              "当前 Azure 识别接口支持 60 秒以内原片；长片请选择 OpenAI 时码识别配置",
-              422,
-            );
-          const audio = path.join(dir, `asr-prepared-${hash}.wav`);
-          try {
-            await convert([
-              "-i",
-              sourcePath,
-              "-map",
-              "0:a:0",
-              "-vn",
-              "-ac",
-              "1",
-              "-ar",
-              "16000",
-              "-c:a",
-              "pcm_s16le",
-              audio,
-            ]);
-            const output = await runProviderTool(
-              {
-                projectId: id,
-                toolId: "azure_stt",
-                args: {
-                  ...config.serviceOptions,
-                  audio_url: `/static/creative/${id}/${path.basename(audio)}`,
-                },
-                outputDir: dir,
-                signal: AbortSignal.timeout(180000),
-                config,
-                state: {},
-                checkpoint: () => {},
-                progress: () => {},
-              },
-              { fetch: deps.fetch },
-            );
-            const parsed = transcriptSchema.safeParse(output.data);
-            if (!parsed.success)
-              throw new CreativeError(
-                "当前识别服务未返回真实时码，请选择支持时码的识别模型",
-                422,
-              );
-            result = parsed.data;
-          } finally {
-            await fs.rm(audio, { force: true });
-          }
-        } else {
-          throw new CreativeError(
-            "当前识别模型只提供文字，不能用于字幕时码；请选择 OpenAI 或 Azure 时码识别服务",
-            422,
-          );
-        }
+        // 公司识别契约：multipart file（audio/mpeg ≤24MiB）+ model，
+        // 响应 {ok, text, segments:[{start,end,text}]}（秒）。
+        const audio = path.join(temp, "source.mp3");
+        await convert([
+          "-i",
+          sourcePath,
+          "-map",
+          "0:a:0",
+          "-vn",
+          "-ac",
+          "1",
+          "-ar",
+          "16000",
+          "-b:a",
+          "32k",
+          audio,
+        ]);
+        const bytes = await fs.readFile(audio);
+        if (bytes.length > 24 * 1024 * 1024)
+          throw new CreativeError("压缩后音频仍过大，请拆分原片后识别");
+        const form = new FormData();
+        form.set(
+          "file",
+          new Blob([bytes], { type: "audio/mpeg" }),
+          "source.mp3",
+        );
+        form.set("model", config.model || "default");
+        const response = await respond(
+          deps.fetch(`${config.url}/api/media/transcription`, {
+            method: "POST",
+            headers: config.headers,
+            body: form,
+            signal: AbortSignal.timeout(180000),
+            redirect: "error",
+          }),
+        );
+        const payload = (await response.json()) as {
+          text?: unknown;
+          segments?: unknown;
+        };
+        const parsed = transcriptSchema.safeParse({
+          segments: payload.segments,
+        });
+        if (!parsed.success)
+          throw new CreativeError("语音服务未返回有效的逐字稿与时码", 422);
+        result = parsed.data;
         await fs.writeFile(cache, JSON.stringify(result), "utf8");
       } finally {
         await fs.rm(temp, { recursive: true, force: true });
@@ -394,8 +344,9 @@ export async function synthesizeCreativeShot(
     if (shot.audioUrl) return project;
     const config = await settings(deps, "speech"),
       dir = await folder(id);
+    // 公司语音沿用 OpenAI 兼容音色枚举（后端目录按同一集合配置）
     const voice =
-      config.provider === "openai"
+      config.provider === "company"
         ? voiceSchema.parse(
             project.production.fields.speechVoice ||
               config.serviceOptions?.voice ||

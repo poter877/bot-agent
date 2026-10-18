@@ -3,7 +3,6 @@ import { eq } from 'drizzle-orm'
 import { db, schema } from '../db/index.js'
 import { success, created, badRequest } from '../utils/response.js'
 import { generateImage, generateVideo } from '../services/generation.js'
-import { getActiveConfig, getConfigById } from '../services/ai.js'
 import { getDramaStylePrompt } from '../services/style-preset.js'
 import { logTaskError, logTaskPayload, logTaskStart, logTaskSuccess } from '../utils/task-logger.js'
 
@@ -56,7 +55,7 @@ function normalizeVideoRequest(body: any) {
   }
 }
 
-function validateVideoRequest(body: any, provider?: string): string | null {
+function validateVideoRequest(body: any): string | null {
   for (const key of ['reference_image_urls', 'reference_video_urls', 'reference_audio_urls']) {
     if (body[key] !== undefined && !Array.isArray(body[key])) return `${key} 必须为数组`
     if (Array.isArray(body[key]) && body[key].some((url: any) => typeof url !== 'string' || !url.trim())) {
@@ -85,19 +84,8 @@ function validateVideoRequest(body: any, provider?: string): string | null {
   const file = Boolean(body.file_url)
   const link = Boolean(body.link_url)
 
-  if ((provider || '').toLowerCase() === 'aliyun') {
-    if (imgs > 10 || vids > 5 || auds > 5) return 'Wan 3.0 参考素材超限：图片≤10、视频≤5、音频≤5'
-    if (last && !first) return 'Wan 3.0 尾帧必须与首帧同时传入'
-    if (file && link) return 'Wan 3.0 file 与 link 不能同时传入'
-    if ((first || last) && (imgs + vids + auds > 0 || file || link)) {
-      return 'Wan 3.0 的 first_frame/last_frame 不能与 reference_image/reference_video/reference_audio/file/link 混用'
-    }
-    const total = imgs + vids + auds + Number(first) + Number(last) + Number(file) + Number(link)
-    if (total > 20) return 'Wan 3.0 input.media 最多 20 项'
-  } else {
-    if (imgs > 9 || vids > 3 || auds > 3) return '参考素材超限：图片≤9、视频≤3、音频≤3'
-    if (auds > 0 && imgs + vids === 0) return '参考音频需要至少 1 个参考图片或视频'
-  }
+  if (imgs > 9 || vids > 3 || auds > 3) return '参考素材超限：图片≤9、视频≤3、音频≤3'
+  if (auds > 0 && imgs + vids === 0) return '参考音频需要至少 1 个参考图片或视频'
 
   if (!String(body.prompt || '').trim() && imgs + vids + auds === 0 && !first && !last && !file && !link) {
     return '视频生成需要至少一个参考素材或 prompt'
@@ -135,10 +123,7 @@ app.post('/', async (c) => {
     }
 
     if (type === 'video' && videoBody) {
-      const effectiveConfig = configId
-        ? (await getConfigById(configId, 'video')) ?? await getActiveConfig('video')
-        : await getActiveConfig('video')
-      const validationError = validateVideoRequest(videoBody, effectiveConfig?.provider)
+      const validationError = validateVideoRequest(videoBody)
       if (validationError) return badRequest(c, validationError)
     }
 

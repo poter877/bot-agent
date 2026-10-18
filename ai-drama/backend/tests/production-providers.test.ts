@@ -6,6 +6,11 @@ import os from 'node:os'
 import sharp from 'sharp'
 import { execFileSync } from 'node:child_process'
 import { ffmpegPath } from '../src/utils/ffmpeg.js'
+// env 在动态导入前注入：fal 预设的 baseUrl 来自公司后端环境
+process.env.COMPANY_BACKEND_URL = 'https://company.invalid'
+process.env.COMPANY_SERVICE_TOKEN = 'company-token'
+const { runProviderTool, providerToolSpecs } = await import('../src/services/production-tools/providers.js')
+const { providerPresets } = await import('../src/services/production-tools/providers.js')
 const fixturesDir = await fs.mkdtemp(path.join(os.tmpdir(), 'vf-provider-fixtures-'))
 const png = await sharp({
   create: { width: 8, height: 8, channels: 3, background: 'blue' },
@@ -45,16 +50,10 @@ execFileSync(ffmpegPath!, [
 const audio = await fs.readFile(audioFile),
   video = await fs.readFile(videoFile)
 test.after(() => fs.rm(fixturesDir, { recursive: true, force: true }))
-import {
-  runProviderTool,
-  providerPresets,
-  providerToolSpecs,
-  type ProviderContext,
-  type ProviderDependencies,
-} from '../src/services/production-tools/providers.js'
-import { responseBytes, serviceUrl, outputBytes } from '../src/services/production-tools/provider-runtime.js'
-import { klingToken } from '../src/services/production-tools/provider-kling.js'
-import { tencentHeaders } from '../src/services/production-tools/provider-regional.js'
+import type { ProviderContext, ProviderDependencies } from '../src/services/production-tools/providers.js'
+const { responseBytes, serviceUrl, outputBytes } = await import('../src/services/production-tools/provider-runtime.js')
+const { klingToken } = await import('../src/services/production-tools/provider-kling.js')
+const { tencentHeaders } = await import('../src/services/production-tools/provider-regional.js')
 const json = (data: unknown) =>
   new Response(JSON.stringify(data), {
     headers: { 'Content-Type': 'application/json' },
@@ -62,7 +61,7 @@ const json = (data: unknown) =>
 async function fixture(id: string, args: Record<string, unknown> = {}) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'vf-provider-'))
   const spec = providerToolSpecs[id],
-    preset = providerPresets[spec.serviceType][spec.provider]
+    preset = providerPresets()[spec.serviceType][spec.provider]
   const ctx: ProviderContext = {
     projectId: 1,
     toolId: id,
@@ -134,8 +133,11 @@ test('Fal persists authoritative queue URLs and downloads completed output', asy
     assert.equal(result.files[0].kind, 'image')
     assert.equal(f.ctx.state.remoteId, 'r1')
     assert.equal(f.calls.length, 3)
-    assert.match(f.calls[0].url, /nano-banana$/)
-    assert.equal(new Headers(f.calls[0].init.headers).get('Authorization'), 'Key test-secret')
+    assert.match(f.calls[0].url, /fal-queue\/fal-ai\/nano-banana$/)
+    assert.equal(new Headers(f.calls[0].init.headers).get('Authorization'), 'Bearer test-secret')
+    // 代理返回的 fal 绝对队列地址必须改写回公司代理，密钥不落地
+    assert.match(f.calls[1].url, /fal-queue\/fal-ai\/nano-banana\/requests\/r1\/status$/)
+    assert.match(f.calls[2].url, /fal-queue\/fal-ai\/nano-banana\/requests\/r1$/)
     assert.deepEqual(await fs.readFile(result.files[0].path), png)
   }))
 test('a shared Fal config does not run the wrong tool model', async () =>
@@ -147,7 +149,8 @@ test('a shared Fal config does not run the wrong tool model', async () =>
       json({ images: [{ url: 'https://fal.media/file.png' }] }),
     )
     await runProviderTool(f.ctx, f.deps)
-    assert.match(f.calls[0].url, /nano-banana$/)
+    // 工具按自己的 spec 模型提交，共享配置的 model 不会串到其他工具
+    assert.match(f.calls[0].url, /fal-queue\/fal-ai\/nano-banana$/)
   }))
 test('Fal resume polls stored request without submitting again', async () =>
   withFixture('flux_image', {}, async (f) => {
@@ -241,69 +244,51 @@ test('ComfyUI UI workflow format is rejected with actionable guidance', async ()
     await assert.rejects(runProviderTool(f.ctx, f.deps), /API 格式/)
     assert.equal(f.calls.length, 0)
   }))
-test('speech providers use provider-specific authentication and payloads', async () =>
-  withFixture('elevenlabs_tts', { text: 'hello', voice_id: 'voice-123' }, async (f) => {
-    f.queue.push(
-      new Response(new Uint8Array(audio), {
-        headers: { 'content-type': 'audio/mpeg' },
-      }),
+test('company speech posts the OpenAI-compatible contract and decodes the base64 audio', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'vf-company-tts-'))
+  try {
+    const calls: { url: string; init: RequestInit }[] = []
+    const result = await runProviderTool(
+      {
+        projectId: 1,
+        toolId: 'company_tts',
+        args: { text: 'hello', voice: 'coral', response_format: 'wav', speed: 1 },
+        outputDir: dir,
+        signal: new AbortController().signal,
+        progress: () => {},
+        config: {
+          id: 7,
+          provider: 'company',
+          baseUrl: 'https://company.invalid',
+          apiKey: 'company-token',
+          model: 'catalog-tts',
+        },
+        state: {},
+        checkpoint: () => {},
+      },
+      {
+        ...({} as ProviderDependencies),
+        fetch: (async (url, init = {}) => {
+          calls.push({ url: String(url), init })
+          return json({ ok: true, audio: { media_type: 'audio/wav', base64: audio.toString('base64') } })
+        }) as typeof fetch,
+        sleep: async () => {},
+        download: async () => audio,
+        readMedia: async () => ({ name: 'x.png', mime: 'image/png', bytes: Buffer.alloc(0) }),
+      } as Partial<ProviderDependencies> as ProviderDependencies,
     )
-    const result = await runProviderTool(f.ctx, f.deps)
-    assert.equal(new Headers(f.calls[0].init.headers).get('xi-api-key'), 'test-secret')
-    assert.match(f.calls[0].url, /v1\/text-to-speech\/voice-123$/)
-    assert.equal(JSON.parse(String(f.calls[0].init.body)).model_id, 'eleven_multilingual_v2')
-    assert.equal(result.files[0].kind, 'audio')
-  }))
-test('Inworld decodes documented base64 JSON response', async () =>
-  withFixture('inworld_tts', { text: 'hello' }, async (f) => {
-    f.queue.push(json({ audioContent: audio.toString('base64') }))
-    const result = await runProviderTool(f.ctx, f.deps)
-    assert.equal(new Headers(f.calls[0].init.headers).get('Authorization'), 'Basic test-secret')
+    assert.match(calls[0].url, /\/api\/media\/speech$/)
+    assert.equal(new Headers(calls[0].init.headers).get('Authorization'), 'Bearer company-token')
+    const body = JSON.parse(String(calls[0].init.body))
+    assert.equal(body.model, 'catalog-tts')
+    assert.equal(body.input, 'hello')
+    assert.equal(body.voice, 'coral')
+    assert.equal(body.response_format, 'wav')
     assert.deepEqual(await fs.readFile(result.files[0].path), audio)
-  }))
-test('Gemini TTS wraps PCM in a playable WAV container', async () =>
-  withFixture('gemini_tts', { text: 'hello' }, async (f) => {
-    f.queue.push(
-      json({
-        candidates: [
-          {
-            content: {
-              parts: [
-                {
-                  inlineData: {
-                    mimeType: 'audio/L16;rate=24000',
-                    data: Buffer.alloc(480).toString('base64'),
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      }),
-    )
-    const result = await runProviderTool(f.ctx, f.deps),
-      bytes = await fs.readFile(result.files[0].path)
-    assert.equal(bytes.toString('ascii', 0, 4), 'RIFF')
-    assert.equal(bytes.readUInt32LE(24), 24000)
-    assert.equal(bytes.length, 524)
-  }))
-test('binary speech response cannot treat a provider JSON error as audio', async () =>
-  withFixture('openai_tts', { text: 'hello' }, async (f) => {
-    f.queue.push(json({ error: 'quota error' }))
-    await assert.rejects(runProviderTool(f.ctx, f.deps), /未返回媒体/)
-  }))
-test('music generation passes milliseconds and instrumental preference', async () =>
-  withFixture('music_gen', { prompt: 'jazz', duration: 35, instrumental: true }, async (f) => {
-    f.queue.push(
-      new Response(new Uint8Array(audio), {
-        headers: { 'content-type': 'audio/mpeg' },
-      }),
-    )
-    await runProviderTool(f.ctx, f.deps)
-    const body = JSON.parse(String(f.calls[0].init.body))
-    assert.equal(body.music_length_ms, 35000)
-    assert.equal(body.force_instrumental, true)
-  }))
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true })
+  }
+})
 test('Runway sends documented API version and polls task output', async () =>
   withFixture('runway_video', { prompt: 'street' }, async (f) => {
     f.queue.push(
@@ -501,6 +486,19 @@ test('service URL validation rejects credential URLs and non-local insecure HTTP
       '/prompt',
     ),
     'http://127.0.0.1:8188/prompt',
+  )
+  // 公司内网后端可由部署决定是否终结 TLS，明文 http 合法
+  assert.equal(
+    serviceUrl(
+      {
+        provider: 'company',
+        baseUrl: 'http://company.internal:8080/api/media/fal-queue',
+        apiKey: 'token',
+        model: 'x',
+      },
+      '',
+    ),
+    'http://company.internal:8080/api/media/fal-queue',
   )
 })
 

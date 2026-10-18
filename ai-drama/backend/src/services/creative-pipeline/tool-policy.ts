@@ -206,7 +206,7 @@ group(
   ),
 )
 group(
-  ['transcriber', 'azure_stt', 'dashscope_asr'],
+  ['transcriber', 'dashscope_asr'],
   selectable(
     'analysis',
     ['research', 'idea', 'script'],

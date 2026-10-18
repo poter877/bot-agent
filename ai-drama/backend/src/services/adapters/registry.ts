@@ -1,30 +1,21 @@
 /**
  * Provider Adapter 注册表
- * 根据 provider 名称返回对应的 Adapter 实例
+ *
+ * 厂商直连已下线：图片/视频唯一适配路径是公司后端（bot-backend）。
+ * 历史遗留 provider 的任务不在此回落——迁移已把活跃配置行归一为 company，
+ * 白名单之外的值进入 generation.ts 的扩展工具路径并显式报错。
  */
-import { OpenAIImageAdapter } from './openai-image'
-import { GeminiImageAdapter } from './gemini-image'
-import { VolcEngineImageAdapter } from './volcengine-image'
-import { VolcEngineVideoAdapter } from './volcengine-video'
-import { MiniMaxVideoAdapter } from './minimax-video'
-import { AliyunWanVideoAdapter } from './aliyun-wan-video'
 import { CompanyImageAdapter } from './company-image'
 import { CompanyVideoAdapter } from './company-video'
 import type { ImageProviderAdapter, VideoProviderAdapter } from './types'
 
 // 图片 Adapter 注册表
 export const imageAdapters: Record<string, ImageProviderAdapter> = {
-  openai: new OpenAIImageAdapter(),
-  gemini: new GeminiImageAdapter(),
-  volcengine: new VolcEngineImageAdapter(),
   company: new CompanyImageAdapter(),
 }
 
 // 视频 Adapter 注册表
 export const videoAdapters: Record<string, VideoProviderAdapter> = {
-  volcengine: new VolcEngineVideoAdapter(),
-  minimax: new MiniMaxVideoAdapter(),
-  aliyun: new AliyunWanVideoAdapter(),
   company: new CompanyVideoAdapter(),
 }
 

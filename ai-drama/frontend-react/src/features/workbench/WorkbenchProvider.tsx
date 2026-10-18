@@ -326,7 +326,7 @@ export function WorkbenchProvider({
 
   const resolutionProvider = resolutionProviderOf(selectedVideoConfig?.provider)
   const resolutionKeys = useMemo(() => {
-    const keys = resolutionProvider === 'volcengine' ? ['480p', '720p'] : resolutionProvider === 'minimax' ? ['720p', '1080p'] : ['480p', '720p', '1080p']
+    const keys = resolutionProvider === 'minimax' ? ['720p', '1080p'] : ['480p', '720p', '1080p']
     return keys as string[]
   }, [resolutionProvider])
   const episodeResolution = useMemo(() => {

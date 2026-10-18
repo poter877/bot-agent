@@ -96,6 +96,12 @@ export const aiConfigApi = {
   test(data: Record<string, unknown>): Promise<ConfigTestResult> {
     return api.post('/ai-configs/test', data)
   },
+
+  /** 公司 LLM 目录（后端注入服务令牌转发 bot-backend /api/llm/models） */
+  async companyModels(signal?: AbortSignal): Promise<string[]> {
+    const ids = await api.get<string[]>('/ai-configs/company-models', { signal })
+    return asArray(ids).map(String)
+  },
 }
 
 /** 厂商预设（ai_service_providers，含 preset_models） */

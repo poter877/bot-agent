@@ -20,11 +20,11 @@ const configId = getInsertId(
     .insert(schema.aiServiceConfigs)
     .values({
       serviceType: 'transcription',
-      provider: 'openai',
+      provider: 'company',
       name: '字幕识别',
-      baseUrl: 'https://api.openai.com/v1',
-      apiKey: 'test-secret',
-      model: '["whisper-1"]',
+      baseUrl: 'https://company.invalid',
+      apiKey: 'company-token',
+      model: '["catalog-asr"]',
       createdAt: now,
       updatedAt: now,
     })
@@ -115,10 +115,11 @@ test('a received transcription is reused after local output processing fails', a
   services.push(service)
   providerDependencies.fetch = async (url, init) => {
     posts++
-    assert.equal(String(url), 'https://api.openai.com/v1/audio/transcriptions')
+    assert.equal(String(url), 'https://company.invalid/api/media/transcription')
     assert.equal(init?.method, 'POST')
     assert.ok(init?.body instanceof FormData)
-    return Response.json({ text: '测试字幕', segments: [{ start: 0, end: 0.8, text: '测试字幕' }] })
+    assert.equal((init.body as FormData).get('model'), 'catalog-asr')
+    return Response.json({ ok: true, text: '测试字幕', segments: [{ start: 0, end: 0.8, text: '测试字幕' }] })
   }
   const job = await service.start(p.id, p.input)
   await service.idle(job.id)
@@ -141,7 +142,7 @@ test('a definitively rejected transcription may retry without an unknown-submiss
   providerDependencies.fetch = async () =>
     ++posts === 1
       ? new Response('', { status: 429 })
-      : Response.json({ segments: [{ start: 0, end: 0.8, text: '恢复成功' }] })
+      : Response.json({ ok: true, text: '恢复成功', segments: [{ start: 0, end: 0.8, text: '恢复成功' }] })
   const job = await service.start(p.id, p.input)
   await service.idle(job.id)
   assert.equal(listToolboxJobs(p.id)[0].status, 'failed')

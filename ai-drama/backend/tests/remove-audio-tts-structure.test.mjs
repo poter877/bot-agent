@@ -32,8 +32,7 @@ test('backend removes audio service providers, TTS adapters, and voice routes', 
   assert.equal(exists('src/routes/aiVoices.ts'), false)
   assert.equal(exists('src/services/tts-generation.ts'), false)
   assert.equal(exists('src/services/adapters/minimax-tts.ts'), false)
-  assert.match(read('src/services/adapters/volcengine-video.ts'), /generate_audio:\s*record\.generateAudio/)
-  assert.doesNotMatch(read('src/services/adapters/volcengine-video.ts'), /generate_audio:\s*false/)
+  assert.match(read('src/services/adapters/company-video.ts'), /generateAudio = Number\(record\.generateAudio\)/)
 })
 
 test('backend removes TTS endpoints and audio-specific schema fields', () => {

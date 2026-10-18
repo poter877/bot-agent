@@ -136,7 +136,8 @@ async function runTranscription(ctx: ToolContext): Promise<ToolOutput> {
   const kind = /\.(mp3|wav|m4a|aac|ogg|flac)$/i.test(sourceUrl) ? 'audio' : 'video'
   validateCreativeMedia(ctx.projectId, sourceUrl, kind)
   const config = ctx.config
-  if (!config || config.provider !== 'openai') throw new CreativeError('请配置 OpenAI 字幕时码识别服务', 503)
+  // 公司后端不持第三方识别密钥：字幕时码识别只有 company 一条路径
+  if (!config || config.provider !== 'company') throw new CreativeError('请配置公司字幕时码识别服务', 503)
   let data = ctx.state.transcriptionResult as any
   if (!data) {
     ensureCanSubmit(ctx)
@@ -172,14 +173,12 @@ async function runTranscription(ctx: ToolContext): Promise<ToolOutput> {
     if (bytes.length > 24 * 1024 * 1024) throw new CreativeError('音频超过识别大小限制，请先裁剪')
     const form = new FormData()
     form.set('file', new Blob([new Uint8Array(bytes)], { type: 'audio/mpeg' }), 'source.mp3')
-    form.set('model', config.model || 'whisper-1')
-    form.set('response_format', 'verbose_json')
-    form.append('timestamp_granularities[]', 'segment')
+    form.set('model', config.model || 'default')
     checkpoint(ctx, { submissionStarted: true })
     data = await jsonRequest(
       ctx,
       providerDependencies,
-      serviceUrl(config, '/audio/transcriptions', '/v1'),
+      serviceUrl(config, '/api/media/transcription'),
       {
         method: 'POST',
         headers: { Authorization: `Bearer ${config.apiKey}` },
@@ -187,6 +186,7 @@ async function runTranscription(ctx: ToolContext): Promise<ToolOutput> {
       },
       8 * 1024 * 1024,
     )
+    data = { text: data.text, segments: data.segments }
     checkpoint(ctx, { transcriptionResult: data, submissionStarted: false })
   }
   if (!Array.isArray(data.segments) || !data.segments.length)
@@ -489,7 +489,7 @@ export async function executeTool(ctx: ToolContext): Promise<ToolOutput> {
   if (auxiliaryIds.includes(ctx.toolId)) return runAuxiliaryTool(ctx)
   if (providerToolSpecs[ctx.toolId]) {
     const spec = providerToolSpecs[ctx.toolId]
-    const preset = providerPresets[spec.serviceType]?.[spec.provider]
+    const preset = providerPresets()[spec.serviceType]?.[spec.provider]
     const config =
       ctx.config ??
       (spec.requiresApiKey === false

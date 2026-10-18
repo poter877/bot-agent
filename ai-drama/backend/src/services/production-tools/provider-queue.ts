@@ -52,11 +52,21 @@ function modelId(model: string) {
     throw new Error('模型 ID 无效，请选择服务预设')
   return model
 }
+/** Fal 队列走公司后端透传代理（{COMPANY}/api/media/fal-queue），不再直连 queue.fal.run。 */
 function queueUrl(config: NonNullable<ProviderContext['config']>, model: string) {
-  const base = serviceUrl(config, '')
-  const u = new URL(base)
-  if (u.hostname !== 'queue.fal.run') throw new Error('Fal 队列服务地址须使用 https://queue.fal.run')
+  const base = serviceUrl(config, '').replace(/\/+$/, '')
+  if (!/\/api\/media\/fal-queue$/.test(base)) throw new Error('Fal 队列服务地址须为公司后端 fal-queue 代理')
   return `${base}/${modelId(model)}`
+}
+/** 代理按原样透传 fal 的 JSON，返回的队列地址仍是 queue.fal.run 绝对 URL；
+ *  密钥在公司侧，必须把这些地址改写回代理路径再轮询。 */
+function proxiedQueueUrl(value: string, config: NonNullable<ProviderContext['config']>, context: string) {
+  const next = new URL(value)
+  const proxy = serviceUrl(config, '').replace(/\/+$/, '')
+  if (next.hostname === 'queue.fal.run') return `${proxy}${next.pathname}`
+  if (next.origin !== new URL(proxy).origin || !next.pathname.startsWith('/'))
+    throw new Error(`Fal 返回了不受信任的${context}地址`)
+  return next.href
 }
 function falResultFiles(data: any, kind: OutputKind) {
   if (kind === 'image')
@@ -81,7 +91,7 @@ export async function runFal(ctx: ProviderContext, deps: ProviderDependencies): 
     model = typeof ctx.state.queueModel === 'string' ? ctx.state.queueModel : spec.model,
     url = queueUrl(config, model),
     headers = {
-      Authorization: `Key ${config.apiKey}`,
+      Authorization: `Bearer ${config.apiKey}`,
       'Content-Type': 'application/json',
     }
   if (!ctx.state.remoteId) {
@@ -125,17 +135,13 @@ export async function runFal(ctx: ProviderContext, deps: ProviderDependencies): 
     }
     if (ctx.args.seed !== undefined) input.seed = num(ctx.args, 'seed', 0, 0, 4294967295)
     const submitted = await submitJson(ctx, deps, url, input, headers, (v) => v.request_id)
-    // Fal may remove endpoint subpaths in returned queue URLs. Persist the authoritative URLs.
-    const safe = (value: unknown) => {
-      if (typeof value !== 'string') return undefined
-      const next = new URL(value)
-      if (next.origin !== new URL(url).origin || !next.pathname.startsWith('/'))
-        throw new Error('Fal 返回了不受信任的查询地址')
-      return next.href
-    }
+    // Fal may remove endpoint subpaths in returned queue URLs. Persist the authoritative URLs,
+    // rewritten onto the company proxy so polling never bypasses it.
+    const statusUrl = typeof submitted.status_url === 'string' ? proxiedQueueUrl(submitted.status_url, config, '查询') : undefined
+    const responseUrl = typeof submitted.response_url === 'string' ? proxiedQueueUrl(submitted.response_url, config, '结果') : undefined
     checkpoint(ctx, {
-      statusUrl: safe(submitted.status_url),
-      responseUrl: safe(submitted.response_url),
+      ...(statusUrl ? { statusUrl } : {}),
+      ...(responseUrl ? { responseUrl } : {}),
       queueModel: model,
     })
   }

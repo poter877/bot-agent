@@ -136,7 +136,8 @@ export function serviceUrl(config: ProviderConfig, suffix: string, version = '')
   if (u.username || u.password || u.search || u.hash || !['http:', 'https:'].includes(u.protocol))
     throw new Error('模型服务地址无效')
   const isLocal = ['localhost', '127.0.0.1', '[::1]'].includes(u.hostname)
-  if (u.protocol !== 'https:' && !(isLocal && config.provider === 'comfyui'))
+  // company 是公司内网后端：TLS 由 ingress/部署层决定，开发与内网可为明文 http
+  if (u.protocol !== 'https:' && !(config.provider === 'company' || (isLocal && config.provider === 'comfyui')))
     throw new Error('云端模型服务须使用 HTTPS')
   const base = u.href.replace(/\/$/, '')
   return base + (version && !base.endsWith(version) ? version : '') + suffix
