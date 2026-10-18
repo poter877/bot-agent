@@ -96,6 +96,7 @@ changes 只支持以下可选字段：fields（该类型的专属创作要求，
     messages: [{ role: 'user', content: JSON.stringify({ project: context, history, request: message }) }],
     stream: true,
     timeoutMs: 180_000,
+    correlationId: `creative-project-${project.id}`,
   })) {
     reply += delta
   }

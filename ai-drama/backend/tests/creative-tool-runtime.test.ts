@@ -17,6 +17,7 @@ const { createToolboxService, applyToolboxOutput, listToolboxJobs, publicToolbox
   '../src/services/production-tools/jobs.js'
 )
 const { executeTool } = await import('../src/services/production-tools/executor.js')
+const { providerDependencies } = await import('../src/services/production-tools/provider-runtime.js')
 const { getPipelineDefinition } = await import('../src/services/creative-pipeline/definitions.js')
 const { runPipelineTools, reconcilePipelineToolRevision } = await import(
   '../src/services/creative-pipeline/tool-runtime.js'
@@ -977,4 +978,70 @@ test('native avatar video adopts actual duration, recovers its write, extracts o
   for (let sample = 0; sample < 16000; sample++) energy += pcm.readInt16LE(sample * 2) ** 2
   assert.ok(Math.sqrt(energy / 16000) > 100)
   assert.equal(current.approvedRevision, current.revision)
+})
+test('unified kling speech tool rides the configured company speech service', async () => {
+  const p = create(),
+    now = new Date().toISOString(),
+    configId = getInsertId(
+      db
+        .insert(schema.aiServiceConfigs)
+        .values({
+          serviceType: 'speech',
+          provider: 'company',
+          name: '公司配音',
+          baseUrl: 'https://company.invalid',
+          apiKey: 'company-token',
+          model: '["catalog-tts"]',
+          isActive: true,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .run(),
+    )
+  const { execFile } = await import('node:child_process'),
+    { promisify } = await import('node:util'),
+    { ffmpegPath } = await import('../src/utils/ffmpeg.js')
+  const wav = path.join(folder, 'kling-tts-stub.wav')
+  await promisify(execFile)(ffmpegPath!, [
+    '-hide_banner',
+    '-loglevel',
+    'error',
+    '-y',
+    '-f',
+    'lavfi',
+    '-i',
+    'sine=frequency=440',
+    '-t',
+    '0.2',
+    wav,
+  ])
+  const audio = await fs.readFile(wav),
+    calls: { url: string; init: RequestInit }[] = [],
+    originalFetch = providerDependencies.fetch
+  providerDependencies.fetch = (async (url, init = {}) => {
+    calls.push({ url: String(url), init })
+    return Response.json({ ok: true, audio: { media_type: 'audio/wav', base64: audio.toString('base64') } })
+  }) as typeof fetch
+  const s = service()
+  try {
+    const job = await s.start(p.id, {
+      revision: 1,
+      toolId: 'kling_tts',
+      args: { text: '统一语音服务讲稿', voice: 'catalog-voice' },
+      configId,
+    })
+    await s.idle(job.id)
+    const finished = listToolboxJobs(p.id)[0]
+    assert.equal(finished.status, 'completed')
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0].url, 'https://company.invalid/api/media/speech')
+    assert.equal(new Headers(calls[0].init.headers).get('Authorization'), 'Bearer company-token')
+    const body = JSON.parse(String(calls[0].init.body))
+    assert.equal(body.model, 'catalog-tts')
+    assert.equal(body.input, '统一语音服务讲稿')
+    assert.equal(body.voice, 'catalog-voice')
+    assert.equal(finished.result!.files[0].kind, 'audio')
+  } finally {
+    providerDependencies.fetch = originalFetch
+  }
 })

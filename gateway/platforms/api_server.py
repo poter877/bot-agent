@@ -138,11 +138,12 @@ from gateway.display_config import resolve_display_setting
 from gateway.platforms import api_server_room_dispatch as _room_dispatch
 from gateway.platforms import api_server_room_grants as _room_grants
 from gateway.platforms import api_server_runs as _api_runs
+from gateway.platforms.api_server_media_delivery import _resolve_media_to_data_urls
 from gateway.platforms.api_server_openai_routes import OpenAICompatRoutesMixin
+from gateway.platforms.api_server_request_audit import RequestAuditContextMixin
 from gateway.platforms.api_server_memory_sessions import ApiServerMemorySessions
 from gateway.platforms.base import (
-    MEDIA_TAG_CLEANUP_RE, BasePlatformAdapter, SendResult, _terminal_sentinel_start, is_network_accessible,
-    validate_media_delivery_path)
+    BasePlatformAdapter, SendResult, is_network_accessible)
 from gateway.platforms.api_server_run_idempotency import RunIdempotencyStore
 from agent.i18n import t
 from agent.redact import redact_sensitive_text
@@ -854,48 +855,6 @@ if AIOHTTP_AVAILABLE:
 else:
     cors_middleware = body_limit_middleware = security_headers_middleware = None  # type: ignore
 
-_MEDIA_MIME = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif",
-               ".webp": "image/webp", ".bmp": "image/bmp"}
-_MEDIA_IMG_EXT = set(_MEDIA_MIME)
-_MEDIA_DATA_URL_MAX_BYTES = 5 * 1024 * 1024  # skip images larger than 5MB
-
-
-def _resolve_media_to_data_urls(text: str) -> str:
-    """Replace ``MEDIA:<path>`` tags with inline base64 data URLs (remote frontends can't read
-    server paths); non-image/unreadable paths stay untouched. Security: the shared
-    ``MEDIA_TAG_CLEANUP_RE`` anchor + ``validate_media_delivery_path`` denylist — a bare-token
-    match would let a traversal path in the reply exfiltrate any readable image."""
-    if not text or "MEDIA:" not in text:
-        return text
-    import base64
-
-    def _to_data_url(path_str: str) -> Optional[str]:
-        # validate_media_delivery_path() strips wrapping quotes/trailing punctuation itself.
-        safe_path = validate_media_delivery_path(path_str)
-        p = Path(safe_path) if safe_path else None
-        suffix = p.suffix.lower() if p else ""
-        if suffix not in _MEDIA_IMG_EXT:
-            return None
-        try:
-            if p.stat().st_size > _MEDIA_DATA_URL_MAX_BYTES:
-                return None
-            b64 = base64.b64encode(p.read_bytes()).decode()
-        except OSError:
-            return None
-        return f"![image](data:{_MEDIA_MIME[suffix]};base64,{b64})"
-
-    def _repl(m: re.Match[str]) -> str:
-        return _to_data_url(m.group("path")) or m.group(0)
-    try:
-        # A leaked terminal <|eos|> glued to the last tag is not a path terminator (#111046):
-        # scan without it, and drop it (control token, never content) only when a tag resolved.
-        sentinel_start = _terminal_sentinel_start(text)
-        scan = text[:sentinel_start] if sentinel_start >= 0 else text
-        resolved = MEDIA_TAG_CLEANUP_RE.sub(_repl, scan)
-        return text if resolved == scan else resolved
-    except Exception:
-        return text
-
 
 def _redact_api_error_text(value: Any, *, limit: int | None = None) -> str:
     """Redact API-bound error text before it crosses the HTTP boundary."""
@@ -1169,7 +1128,7 @@ def _run_route_delegate(name: str):
     return _handler
 
 
-class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
+class APIServerAdapter(OpenAICompatRoutesMixin, RequestAuditContextMixin, BasePlatformAdapter):
     """aiohttp server routing OpenAI-format requests through hermes-agent's AIAgent."""
 
     # Stateless request/response (``send()`` is a stub): async-delivery tools must not promise
@@ -1492,46 +1451,6 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
         """Allow non-browser clients and explicitly configured browser origins."""
         return not origin or "*" in self._cors_origins or origin in self._cors_origins
 
-    @staticmethod
-    def _clean_log_value(value: Any, *, max_len: int = 200) -> str:
-        """Sanitize request metadata before it reaches security logs."""
-        if value is None:
-            return ""
-        text = str(value).replace("\r", " ").replace("\n", " ").strip()
-        return text[:max_len]
-
-    def _request_audit_context(self, request: web.Request) -> dict[str, str]:
-        """Return non-secret source metadata for security/audit warnings."""
-        peer_ip = ""
-        with suppress(Exception):
-            peer = request.transport.get_extra_info("peername") if request.transport else None
-            if isinstance(peer, (tuple, list)) and peer:
-                peer_ip = str(peer[0])
-        return {
-            "remote": self._clean_log_value(getattr(request, "remote", "") or peer_ip),
-            "peer_ip": self._clean_log_value(peer_ip),
-            "forwarded_for": self._clean_log_value(request.headers.get("X-Forwarded-For", "")),
-            "real_ip": self._clean_log_value(request.headers.get("X-Real-IP", "")),
-            "method": self._clean_log_value(request.method, max_len=16),
-            "path": self._clean_log_value(request.path_qs, max_len=500),
-            "user_agent": self._clean_log_value(request.headers.get("User-Agent", ""), max_len=300)}
-
-    def _request_audit_log_suffix(self, request: web.Request) -> str:
-        ctx = self._request_audit_context(request)
-        fields = [f"{key}={value!r}" for key, value in ctx.items() if value]
-        return " ".join(fields) if fields else "source='unknown'"
-
-    def _cron_origin_from_request(self, request: web.Request) -> dict[str, str]:
-        """Persist safe API source metadata on cron jobs created over HTTP."""
-        ctx = self._request_audit_context(request)
-        origin = {"platform": "api_server", "chat_id": "api"}
-        for ctx_key, origin_key in (("remote", "source_ip"), ("peer_ip", "peer_ip"),
-                                    ("forwarded_for", "forwarded_for"), ("real_ip", "real_ip"),
-                                    ("user_agent", "user_agent")):
-            if ctx.get(ctx_key):
-                origin[origin_key] = ctx[ctx_key]
-        return origin
-
     def _expected_api_key(self) -> str:
         """Return the API key authorized for the URL-selected profile."""
         profile = _api_request_profile.get()
@@ -1695,24 +1614,32 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
 
         @web.middleware
         async def profile_prefix_middleware(request: web.Request, handler):
+            from account_backend_session import request_correlation_scope, sanitize_correlation_id
+
             profile = self._resolve_request_profile(request)
             if profile is _PROFILE_REJECTED:
                 return web.json_response({"error": "Unknown or unconfigured profile"}, status=404)
             token = _api_request_profile.set(profile)
-            try:
-                with self._profile_scope(profile):
-                    resolved_profile = profile or "default"
-                    principal_token = _api_request_browser_control_principal.set(
-                        self._derive_browser_control_principal(resolved_profile))
-                    family_token = _api_request_browser_control_transport_family.set(
-                        self._browser_control_transport_family(request))
-                    try:
-                        return await handler(request)
-                    finally:
-                        _api_request_browser_control_transport_family.reset(family_token)
-                        _api_request_browser_control_principal.reset(principal_token)
-            finally:
-                _api_request_profile.reset(token)
+            # Caller-chosen trace id (frozen contract): rides the request's audit
+            # logs and outbound company-backend calls (model stream + account
+            # backend HTTP). Sanitized here once; invalid or absent means no
+            # correlation, never a 4xx.
+            with request_correlation_scope(
+                    sanitize_correlation_id(request.headers.get("X-Correlation-Id"))):
+                try:
+                    with self._profile_scope(profile):
+                        resolved_profile = profile or "default"
+                        principal_token = _api_request_browser_control_principal.set(
+                            self._derive_browser_control_principal(resolved_profile))
+                        family_token = _api_request_browser_control_transport_family.set(
+                            self._browser_control_transport_family(request))
+                        try:
+                            return await handler(request)
+                        finally:
+                            _api_request_browser_control_transport_family.reset(family_token)
+                            _api_request_browser_control_principal.reset(principal_token)
+                finally:
+                    _api_request_profile.reset(token)
         return profile_prefix_middleware
 
     def _http_route_table(self) -> list[tuple]:
@@ -4215,10 +4142,16 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
         request_profile = _api_request_profile.get()
         request_browser_control_principal = _api_request_browser_control_principal.get()
         request_browser_control_transport_family = _api_request_browser_control_transport_family.get()
+        # Same crossing for the request correlation id: the middleware bound it on
+        # the handler task; the executor thread starts a fresh context, so re-enter
+        # it explicitly or the outbound model call would lose its X-Correlation-Id.
+        from account_backend_session import current_request_correlation_id, request_correlation_scope
+
+        request_correlation_id = current_request_correlation_id()
 
         def _run():
             from gateway.session_context import clear_session_vars
-            with self._profile_scope(request_profile):
+            with request_correlation_scope(request_correlation_id), self._profile_scope(request_profile):
                 tokens = self._bind_api_server_session(
                     chat_id=session_id or "", session_key=gateway_session_key or session_id or "",
                     session_id=session_id or "", profile=request_profile or "",

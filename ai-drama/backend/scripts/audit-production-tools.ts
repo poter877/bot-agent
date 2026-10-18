@@ -44,8 +44,6 @@ const tools = inventory.map((item) => {
     )
   if (item.id === 'math_animate')
     notes.push('Structured graph/formula animation; does not run arbitrary Python/Manim source.')
-  if (item.id === 'kling_avatar' || item.id === 'kling_lip_sync')
-    notes.push('Uses unified Sync character/lip-sync service; actual provider is shown in the catalog.')
   return {
     ...item,
     implemented,

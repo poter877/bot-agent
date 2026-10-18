@@ -316,7 +316,7 @@ group(
   ),
 )
 group(
-  ['kling_avatar', 'kling_lip_sync', 'lip_sync', 'talking_head'],
+  ['lip_sync', 'talking_head'],
   selectable(
     'post',
     ['assets'],

@@ -49,7 +49,7 @@ export function createCreativeRoutes(dependencies: Partial<typeof defaultDepende
     if (translating.has(id)) throw new CreativeError('字幕正在翻译，请稍候', 409)
     translating.add(id)
     try {
-      const translated = await deps.translateCreativeCaptions(project)
+      const translated = await deps.translateCreativeCaptions(project, `creative-project-${id}`)
       return success(c, await withCreativeMutation(id, () => saveCreativeProject(id, { ...translated, revision })))
     } finally { translating.delete(id) }
   })
@@ -72,7 +72,7 @@ export function createCreativeRoutes(dependencies: Partial<typeof defaultDepende
     if (planning.has(id)) throw new CreativeError('该项目正在生成方案，请稍候', 409)
     planning.add(id)
     try {
-      const document = await deps.generateCreativePlan({ ...project, document: project })
+      const document = await deps.generateCreativePlan({ ...project, document: project, correlationId: `creative-project-${id}` })
       const result = await withCreativeMutation(id, () => saveCreativeProject(id, { ...document, revision }))
       return success(c, result)
     } finally { planning.delete(id) }

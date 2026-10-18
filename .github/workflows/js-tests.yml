@@ -101,3 +101,116 @@ jobs:
         # every earlier step passed: a step that failed midway can leave its own temp files
         # (a half-extracted download, a worktree its later cleanup never removed).
         uses: ./.github/actions/check-clean-worktree
+
+  bot-backend:
+    # Independent TS subtree (own lockfile, own runner). Hono model gateway: Postgres + Redis
+    # via service containers; tests/global-setup.ts picks them up through the two
+    # BOT_BACKEND_TEST_* URLs (its documented CI hook) and applies the drizzle migrations
+    # itself, so the services need no extra setup.
+    name: bot-backend (Hono model gateway)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        # Same images as bot-backend/docker-compose.dev.yml, digest-pinned.
+        image: postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: bot_backend_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      BOT_BACKEND_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/bot_backend_test
+      BOT_BACKEND_TEST_REDIS_URL: redis://localhost:6379/0
+    steps:
+      - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a # v7.0.1
+        with:
+          ref: ${{ inputs.commit }}
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # 7.0.0
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: bot-backend/package-lock.json
+
+      - name: Install dependencies
+        uses: ./.github/actions/retry
+        with:
+          command: npm ci
+          working-directory: bot-backend
+
+      - name: Typecheck (src + tests)
+        working-directory: bot-backend
+        run: npm run typecheck
+
+      - name: Vitest
+        working-directory: bot-backend
+        run: npm test
+
+      - name: Check the checkout is clean
+        uses: ./.github/actions/check-clean-worktree
+
+  ai-drama:
+    # Independent TS subtree (own lockfiles). Backend: Hono + better-sqlite3, tests via the
+    # node:test runner under tsx. frontend-react: typecheck + vite build.
+    name: ai-drama (backend + frontend-react)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a # v7.0.1
+        with:
+          ref: ${{ inputs.commit }}
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # 7.0.0
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: |
+            ai-drama/backend/package-lock.json
+            ai-drama/frontend-react/package-lock.json
+
+      - name: Install backend dependencies
+        uses: ./.github/actions/retry
+        with:
+          command: npm ci
+          working-directory: ai-drama/backend
+
+      - name: Backend typecheck
+        working-directory: ai-drama/backend
+        run: npm run typecheck
+
+      # 12 known-WIP tests carry { skip: 'WIP: ...' } markers (structure expectations left
+      # stale by the MySQL→SQLite migration and the hermes orchestration refactor) and are
+      # counted as skipped, not passed. Any failing (non-skipped) test is a regression.
+      - name: Backend tests (node:test via tsx)
+        working-directory: ai-drama/backend
+        run: npx tsx --test "tests/*.test.ts" "tests/*.test.mjs"
+
+      - name: Install frontend dependencies
+        uses: ./.github/actions/retry
+        with:
+          command: npm ci
+          working-directory: ai-drama/frontend-react
+
+      # build = tsc --noEmit && vite build, the frontend's own check.
+      - name: frontend-react typecheck + build
+        working-directory: ai-drama/frontend-react
+        run: npm run build
+
+      - name: Check the checkout is clean
+        uses: ./.github/actions/check-clean-worktree

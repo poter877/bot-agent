@@ -158,6 +158,8 @@ export const llmRequestLog = pgTable(
   {
     id: text('id').primaryKey(),
     requestId: text('request_id').notNull(),
+    /** Caller-chosen trace id from the X-Correlation-Id header (sanitized); null when absent. */
+    correlationId: text('correlation_id'),
     userId: text('user_id'),
     sessionId: text('session_id'),
     modelId: text('model_id').notNull(),

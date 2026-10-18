@@ -1,11 +1,13 @@
-import { Hono } from 'hono'
+import { Hono, type Context } from 'hono'
 import { generateSpeech, transcribe } from 'ai'
 import type { RedisClientType } from 'redis'
 import type { AppConfig } from '../../config/env.js'
+import type { Db } from '../../db/client.js'
 import type { AppEnv } from '../../shared/context.js'
 import { isServicePrincipal, requireAuthContext } from '../../shared/context.js'
 import { HttpApiError, assertSameOrigin } from '../../shared/http.js'
 import type { Logger } from '../../shared/logger.js'
+import { recordRequestLog } from '../llm/requestLog.js'
 import { MediaCatalogError, resolveMediaCatalogEntry, type MediaCatalogEntry, type MediaDirectoryEntry } from './catalog.js'
 
 /**
@@ -13,11 +15,13 @@ import { MediaCatalogError, resolveMediaCatalogEntry, type MediaCatalogEntry, ty
  * over the AI SDK (ai-drama 的配音 / 时码识别出口). OpenAI-family models from
  * the server-held OPENAI_API_KEY; the catalog gate does not apply here because
  * the model families are a closed set (speech: gpt-4o-mini-tts/tts-1/hd,
- * transcription: whisper-1). Usage books like the other media routes.
+ * transcription: whisper-1). Usage books like the other media routes, and
+ * every attributed request lands in llm_request_log with its X-Correlation-Id.
  */
 
 export interface AudioRoutesDeps {
   config: AppConfig
+  db: Db
   redis: RedisClientType
   logger: Logger
   /** Production directory source (speech/transcription kinds). */
@@ -69,74 +73,135 @@ async function recordUsage(redis: RedisClientType, userId: string, modelId: stri
 }
 
 export function createAudioRoutes(deps: AudioRoutesDeps): Hono<AppEnv> {
-  const { config, redis, logger } = deps
+  const { config, db, redis, logger } = deps
   const routes = new Hono<AppEnv>()
 
-  routes.post('/speech', async (c) => {
+  /** llm_request_log journal shared with the media/llm routes: one row per
+   * request (complete / failed / rejected), correlation id joined from the
+   * X-Correlation-Id header so film-task failures trace back to the hermes
+   * turn. 502/internal_error is the vendor-call failure; other HttpApiErrors
+   * are admission rejections (auth/origin/catalog/validation). */
+  const journalRequest = (c: Context<AppEnv>) => {
     const auth = requireAuthContext(c)
-    if (!isServicePrincipal(auth)) assertSameOrigin(c, new URL(config.BETTER_AUTH_URL).origin)
+    const requestId = c.get('requestId')
+    const correlationId = c.get('correlationId') ?? null
+    let modelId = ''
+    const write = async (
+      status: 'complete' | 'failed' | 'rejected', startedAt: number,
+      error?: { code: string; message: string },
+    ) => {
+      await recordRequestLog(db, {
+        requestId, auth, modelId: modelId || '(unresolved)', status, correlationId,
+        errorCode: error?.code, errorMessage: error?.message, durationMs: Date.now() - startedAt,
+      })
+    }
+    return {
+      auth,
+      requestId,
+      correlationId,
+      /** Names the model once the request carries one ('' journals as unresolved). */
+      model(id: string) { modelId = id },
+      /** Wrap a handler: journals complete on success, failed/rejected per the error kind. */
+      async run(handle: () => Promise<Response>): Promise<Response> {
+        const startedAt = Date.now()
+        try {
+          const response = await handle()
+          await write('complete', startedAt)
+          return response
+        } catch (error) {
+          if (error instanceof HttpApiError) {
+            const failed = error.status === 502 && error.code === 'internal_error'
+            await write(failed ? 'failed' : 'rejected', startedAt, { code: error.code, message: error.message })
+          } else {
+            await write('failed', startedAt, { code: 'internal_error', message: 'Unexpected server error.' })
+          }
+          throw error
+        }
+      },
+    }
+  }
 
-    const raw = asRecord(await c.req.json().catch(() => null))
-    if (raw === null) throw new HttpApiError(400, 'invalid_json', 'Request body is not valid JSON.')
-    const request: SpeechRequest = {
-      model: String(raw['model'] ?? ''),
-      input: String(raw['input'] ?? ''),
-      ...(typeof raw['voice'] === 'string' && raw['voice'] !== '' ? { voice: raw['voice'] } : {}),
-      responseFormat: raw['response_format'] === 'wav' ? 'wav' : 'mp3',
-      ...(typeof raw['speed'] === 'number' ? { speed: Math.min(4, Math.max(0.25, raw['speed'])) } : {}),
-    }
-    try {
-      resolveMediaCatalogEntry(await audioCatalogOf(deps, 'speech'), request.model, { openai: config.OPENAI_API_KEY })
-    } catch (error) {
-      if (error instanceof MediaCatalogError) throw new HttpApiError(error.status, error.code, error.message)
-      throw error
-    }
-    if (request.input.trim() === '' || request.input.length > 20_000) {
-      throw new HttpApiError(400, 'validation_failed', 'input is required (max 20000 chars)')
-    }
+  routes.post('/speech', async (c) => {
+    const journal = journalRequest(c)
+    const { auth } = journal
+    return journal.run(async () => {
+      if (!isServicePrincipal(auth)) assertSameOrigin(c, new URL(config.BETTER_AUTH_URL).origin)
 
-    try {
-      const audio = deps.speechGenerator
-        ? await deps.speechGenerator(request)
-        : await defaultSpeech(config, request, c.req.raw.signal)
-      logger.info({ requestId: c.get('requestId'), userId: auth.userId, model: request.model }, 'speech generated')
-      await recordUsage(redis, auth.userId, request.model)
-      return c.json({ ok: true, audio })
-    } catch (error) {
-      logger.warn({ requestId: c.get('requestId'), model: request.model, err: error }, 'speech generation failed')
-      throw new HttpApiError(502, 'internal_error', 'Speech generation failed.')
-    }
+      const raw = asRecord(await c.req.json().catch(() => null))
+      if (raw === null) throw new HttpApiError(400, 'invalid_json', 'Request body is not valid JSON.')
+      const request: SpeechRequest = {
+        model: String(raw['model'] ?? ''),
+        input: String(raw['input'] ?? ''),
+        ...(typeof raw['voice'] === 'string' && raw['voice'] !== '' ? { voice: raw['voice'] } : {}),
+        responseFormat: raw['response_format'] === 'wav' ? 'wav' : 'mp3',
+        ...(typeof raw['speed'] === 'number' ? { speed: Math.min(4, Math.max(0.25, raw['speed'])) } : {}),
+      }
+      journal.model(request.model)
+      try {
+        resolveMediaCatalogEntry(await audioCatalogOf(deps, 'speech'), request.model, { openai: config.OPENAI_API_KEY })
+      } catch (error) {
+        if (error instanceof MediaCatalogError) throw new HttpApiError(error.status, error.code, error.message)
+        throw error
+      }
+      if (request.input.trim() === '' || request.input.length > 20_000) {
+        throw new HttpApiError(400, 'validation_failed', 'input is required (max 20000 chars)')
+      }
+
+      try {
+        const audio = deps.speechGenerator
+          ? await deps.speechGenerator(request)
+          : await defaultSpeech(config, request, c.req.raw.signal)
+        logger.info(
+          { requestId: journal.requestId, correlationId: journal.correlationId, userId: auth.userId, model: request.model },
+          'speech generated',
+        )
+        await recordUsage(redis, auth.userId, request.model)
+        return c.json({ ok: true, audio })
+      } catch (error) {
+        if (error instanceof HttpApiError) throw error
+        logger.warn({ requestId: journal.requestId, model: request.model, err: error }, 'speech generation failed')
+        throw new HttpApiError(502, 'internal_error', 'Speech generation failed.')
+      }
+    })
   })
 
   routes.post('/transcription', async (c) => {
-    const auth = requireAuthContext(c)
-    if (!isServicePrincipal(auth)) assertSameOrigin(c, new URL(config.BETTER_AUTH_URL).origin)
+    const journal = journalRequest(c)
+    const { auth } = journal
+    return journal.run(async () => {
+      if (!isServicePrincipal(auth)) assertSameOrigin(c, new URL(config.BETTER_AUTH_URL).origin)
 
-    const form = await c.req.formData().catch(() => null)
-    if (form === null) throw new HttpApiError(400, 'invalid_json', 'A multipart form with a file field is required.')
-    const model = String(form.get('model') ?? '')
-    try {
-      resolveMediaCatalogEntry(await audioCatalogOf(deps, 'transcription'), model, { openai: config.OPENAI_API_KEY })
-    } catch (error) {
-      if (error instanceof MediaCatalogError) throw new HttpApiError(error.status, error.code, error.message)
-      throw error
-    }
-    const file = form.get('file')
-    if (!(file instanceof File)) throw new HttpApiError(400, 'validation_failed', 'file is required')
-    if (file.size > TRANSCRIPTION_MAX_BYTES) throw new HttpApiError(413, 'payload_too_large', 'Audio exceeds 24 MiB.')
-    if (!config.OPENAI_API_KEY) throw new HttpApiError(503, 'provider_key_missing', 'The audio backend is not configured.')
+      const form = await c.req.formData().catch(() => null)
+      if (form === null) throw new HttpApiError(400, 'invalid_json', 'A multipart form with a file field is required.')
+      const model = String(form.get('model') ?? '')
+      journal.model(model)
+      try {
+        resolveMediaCatalogEntry(await audioCatalogOf(deps, 'transcription'), model, { openai: config.OPENAI_API_KEY })
+      } catch (error) {
+        if (error instanceof MediaCatalogError) throw new HttpApiError(error.status, error.code, error.message)
+        throw error
+      }
+      const file = form.get('file')
+      if (!(file instanceof File)) throw new HttpApiError(400, 'validation_failed', 'file is required')
+      if (file.size > TRANSCRIPTION_MAX_BYTES) throw new HttpApiError(413, 'payload_too_large', 'Audio exceeds 24 MiB.')
+      if (!config.OPENAI_API_KEY) throw new HttpApiError(503, 'provider_key_missing', 'The audio backend is not configured.')
 
-    try {
-      const transcript = deps.transcriber
-        ? await deps.transcriber({ model, file, filename: file.name || 'source.mp3' })
-        : await defaultTranscription(config, { model, file, filename: file.name || 'source.mp3' }, c.req.raw.signal)
-      logger.info({ requestId: c.get('requestId'), userId: auth.userId, model }, 'transcription generated')
-      await recordUsage(redis, auth.userId, model)
-      return c.json({ ok: true, ...transcript })
-    } catch (error) {
-      logger.warn({ requestId: c.get('requestId'), model, err: error }, 'transcription failed')
-      throw new HttpApiError(502, 'internal_error', 'Transcription failed.')
-    }
+      try {
+        const transcript = deps.transcriber
+          ? await deps.transcriber({ model, file, filename: file.name || 'source.mp3' })
+          : await defaultTranscription(config, { model, file, filename: file.name || 'source.mp3' }, c.req.raw.signal)
+        logger.info(
+          { requestId: journal.requestId, correlationId: journal.correlationId, userId: auth.userId, model },
+          'transcription generated',
+        )
+        await recordUsage(redis, auth.userId, model)
+        return c.json({ ok: true, ...transcript })
+      } catch (error) {
+        if (error instanceof HttpApiError) throw error
+        logger.warn({ requestId: journal.requestId, model, err: error }, 'transcription failed')
+        throw new HttpApiError(502, 'internal_error', 'Transcription failed.')
+      }
+    })
   })
 
   return routes

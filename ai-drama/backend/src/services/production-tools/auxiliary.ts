@@ -238,6 +238,7 @@ export async function runAuxiliaryTool(ctx: ToolContext): Promise<ToolOutput> {
         },
       ],
       signal: ctx.signal,
+      correlationId: `creative-project-${ctx.projectId}`,
     })
     return jsonFile(
       ctx,

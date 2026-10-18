@@ -183,9 +183,15 @@ export interface DramaAgent {
 async function createAgent(type: string, values: AgentRequestContextValues): Promise<DramaAgent> {
   const requestContext = buildAgentRequestContext(values)
   const instructions = await buildInstructions(type, requestContext)
+  // 关联 id 用现成的请求上下文 id（episode 优先，其次 drama），链路排查可反查任务
+  const correlationId = values.episodeId
+    ? `episode-${values.episodeId}`
+    : values.dramaId
+      ? `drama-${values.dramaId}`
+      : undefined
   return {
     async generate({ messages, signal }) {
-      const result = await runHermesAgent({ instructions, messages, signal })
+      const result = await runHermesAgent({ instructions, messages, signal, correlationId })
       return { text: result.text, toolCalls: [], toolResults: [], steps: [] }
     },
   }

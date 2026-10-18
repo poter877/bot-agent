@@ -8,6 +8,7 @@
  * 领域工具，本客户端只发消息收最终文本（不传 tools）；模型由 hermes drama profile
  * 决定，本侧不再选文本模型。未配置 env 时直接报错，不回落本地编排（公司模式先例）。
  */
+import { randomUUID } from 'node:crypto'
 import { logTaskProgress } from '../utils/task-logger.js'
 
 export type HermesChatRole = 'system' | 'user' | 'assistant' | 'tool'
@@ -32,6 +33,10 @@ export interface RunHermesAgentOptions {
   signal?: AbortSignal
   /** 默认 600s——agent 多步工具循环在 hermes 侧跑完才回包，耗时长 */
   timeoutMs?: number
+  /** 贯穿链路的关联 id：作为 X-Correlation-Id 头发给 gateway（落 turn 日志并
+   *  透传到 bot-backend 模型请求日志），排查任务失败不再对时间戳。调用方有
+   *  任务/运行上下文时传任务 id；缺省生成 uuid。 */
+  correlationId?: string
 }
 
 export interface RunHermesAgentResult {
@@ -60,6 +65,7 @@ async function callGateway(
   body: Record<string, unknown>,
   signal: AbortSignal | undefined,
   timeoutMs: number,
+  correlationId: string,
 ): Promise<Response> {
   const timeout = AbortSignal.timeout(timeoutMs)
   const combined = signal ? AbortSignal.any([signal, timeout]) : timeout
@@ -69,6 +75,7 @@ async function callGateway(
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${hermesAgentKey()}`,
+        'X-Correlation-Id': correlationId,
       },
       body: JSON.stringify(body),
       signal: combined,
@@ -101,13 +108,15 @@ function extractTextContent(content: unknown): string {
 
 /** 非流式：一次 POST，取 choices[0].message.content */
 async function runHermesAgentOnce(options: RunHermesAgentOptions): Promise<RunHermesAgentResult> {
-  const { instructions, messages, signal, timeoutMs = DEFAULT_TIMEOUT_MS } = options
+  const { instructions, messages, signal, timeoutMs = DEFAULT_TIMEOUT_MS, correlationId } = options
+  const correlation = correlationId || randomUUID()
   requireHermesConfig()
-  logTaskProgress('HermesAgent', 'request', { messages: messages.length, stream: false })
+  logTaskProgress('HermesAgent', 'request', { messages: messages.length, stream: false, correlationId: correlation })
   const response = await callGateway(
     { messages: [{ role: 'system', content: instructions }, ...messages] },
     signal,
     timeoutMs,
+    correlation,
   )
   if (!response.ok) throw await errorForStatus(response)
   const payload = await response.json()
@@ -127,13 +136,15 @@ export async function runHermesAgent(options: RunHermesAgentOptions): Promise<Ru
  * 的 async 迭代器。`data: [DONE]` 终止；空增量与坏帧跳过。
  */
 export async function streamHermesAgent(options: RunHermesAgentOptions): Promise<AsyncIterable<string>> {
-  const { instructions, messages, signal, timeoutMs = DEFAULT_TIMEOUT_MS } = options
+  const { instructions, messages, signal, timeoutMs = DEFAULT_TIMEOUT_MS, correlationId } = options
+  const correlation = correlationId || randomUUID()
   requireHermesConfig()
-  logTaskProgress('HermesAgent', 'request', { messages: messages.length, stream: true })
+  logTaskProgress('HermesAgent', 'request', { messages: messages.length, stream: true, correlationId: correlation })
   const response = await callGateway(
     { messages: [{ role: 'system', content: instructions }, ...messages], stream: true },
     signal,
     timeoutMs,
+    correlation,
   )
   if (!response.ok) throw await errorForStatus(response)
   if (!response.body) throw new Error('hermes gateway 流式响应缺少 body')

@@ -17,6 +17,8 @@ export interface RequestLogInput {
   auth: AuthContext
   modelId: string
   status: 'complete' | 'failed' | 'rejected'
+  /** Sanitized X-Correlation-Id from the request context; null when the caller sent none. */
+  correlationId?: string | null
   errorCode?: string
   errorMessage?: string
   finishReason?: string
@@ -33,6 +35,7 @@ export async function recordRequestLog(db: Db, input: RequestLogInput): Promise<
       sessionId: input.auth.sessionId,
       modelId: input.modelId,
       status: input.status,
+      correlationId: input.correlationId ?? null,
       errorCode: input.errorCode ?? null,
       errorMessage: input.errorMessage?.slice(0, 500) ?? null,
       finishReason: input.finishReason ?? null,

@@ -12,9 +12,14 @@ import { Hono } from 'hono'
 import { createHash, timingSafeEqual } from 'node:crypto'
 import type { Context } from 'hono'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
+import { logTaskProgress } from '../utils/task-logger.js'
 import { buildMcpServer } from './server.js'
 
 const app = new Hono()
+
+/** X-Correlation-Id 契约（与 gateway / bot-backend 一致）：≤128 字符且仅
+ *  [A-Za-z0-9._:-]，不合规则忽略不记录。 */
+const CORRELATION_ID_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/
 
 function bearerToken(c: Context): string | null {
   const header = c.req.header('authorization')
@@ -40,6 +45,12 @@ app.all('/', async (c) => {
   }
   if (c.req.method !== 'POST') {
     return c.json({ error: 'Method Not Allowed: stateless MCP endpoint, POST JSON-RPC only' }, 405)
+  }
+  // 带关联头的工具执行请求落一行日志：把 hermes turn（及其上游影片任务）
+  // 与本侧工具执行对上，排查失败不再对时间戳。
+  const correlationId = c.req.header('x-correlation-id')?.trim()
+  if (correlationId && CORRELATION_ID_PATTERN.test(correlationId)) {
+    logTaskProgress('Mcp', 'request', { correlationId })
   }
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined, // 无状态：不分配会话

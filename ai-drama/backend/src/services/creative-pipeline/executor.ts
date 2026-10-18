@@ -101,7 +101,7 @@ async function legacyExtensions(context: StageContext, tools: PipelineTools['ext
   }
   if (
     avatarTool &&
-    ['kling_avatar', 'kling_lip_sync', 'lip_sync', 'talking_head', 'heygen_avatar'].includes(avatarTool)
+    ['lip_sync', 'talking_head', 'heygen_avatar'].includes(avatarTool)
   )
     fields.lipSyncMode = ''
   const extensionContext = {

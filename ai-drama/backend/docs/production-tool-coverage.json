@@ -1,15 +1,15 @@
 {
   "reference": "calesthio/OpenMontage local checkout",
   "referencePythonFiles": 190,
-  "uniqueNamedToolsAndSources": 153,
+  "uniqueNamedToolsAndSources": 150,
   "executionCounts": {
     "local": 45,
-    "provider-adapter": 77,
-    "source-or-analysis": 16,
-    "unified-service": 15
+    "provider-adapter": 61,
+    "unified-service": 28,
+    "source-or-analysis": 16
   },
   "pipelineCoverage": {
-    "matched": 153,
+    "matched": 150,
     "unmapped": [],
     "meaning": "Eligible workflow stages and selection conditions. Alternative models are selected by need; not every tool is run in every video."
   },
@@ -403,8 +403,8 @@
         "tools/audio/azure_tts.py"
       ],
       "implemented": true,
-      "executionFamily": "provider-adapter",
-      "actualProvider": "azure",
+      "executionFamily": "unified-service",
+      "actualProvider": "shared",
       "serviceType": "speech",
       "notes": [],
       "pipeline": {
@@ -558,8 +558,8 @@
         "tools/audio/cartesia_tts.py"
       ],
       "implemented": true,
-      "executionFamily": "provider-adapter",
-      "actualProvider": "cartesia",
+      "executionFamily": "unified-service",
+      "actualProvider": "shared",
       "serviceType": "speech",
       "notes": [],
       "pipeline": {
@@ -1271,8 +1271,8 @@
         "tools/audio/elevenlabs_tts.py"
       ],
       "implemented": true,
-      "executionFamily": "provider-adapter",
-      "actualProvider": "elevenlabs",
+      "executionFamily": "unified-service",
+      "actualProvider": "shared",
       "serviceType": "speech",
       "notes": [],
       "pipeline": {
@@ -1619,8 +1619,8 @@
         "tools/audio/fish_audio_tts.py"
       ],
       "implemented": true,
-      "executionFamily": "provider-adapter",
-      "actualProvider": "fish_audio",
+      "executionFamily": "unified-service",
+      "actualProvider": "shared",
       "serviceType": "speech",
       "notes": [],
       "pipeline": {
@@ -1903,8 +1903,8 @@
         "tools/audio/gemini_tts.py"
       ],
       "implemented": true,
-      "executionFamily": "provider-adapter",
-      "actualProvider": "gemini",
+      "executionFamily": "unified-service",
+      "actualProvider": "shared",
       "serviceType": "speech",
       "notes": [],
       "pipeline": {
@@ -2017,8 +2017,8 @@
         "tools/audio/google_tts.py"
       ],
       "implemented": true,
-      "executionFamily": "provider-adapter",
-      "actualProvider": "google_tts",
+      "executionFamily": "unified-service",
+      "actualProvider": "shared",
       "serviceType": "speech",
       "notes": [],
       "pipeline": {
@@ -2585,8 +2585,8 @@
         "tools/audio/inworld_tts.py"
       ],
       "implemented": true,
-      "executionFamily": "provider-adapter",
-      "actualProvider": "inworld",
+      "executionFamily": "unified-service",
+      "actualProvider": "shared",
       "serviceType": "speech",
       "notes": [],
       "pipeline": {
@@ -2660,8 +2660,8 @@
         "tools/video/jimeng_video.py"
       ],
       "implemented": true,
-      "executionFamily": "provider-adapter",
-      "actualProvider": "volcengine",
+      "executionFamily": "unified-service",
+      "actualProvider": "shared",
       "serviceType": "video",
       "notes": [],
       "pipeline": {
@@ -2686,74 +2686,8 @@
       }
     },
     {
-      "id": "kling_avatar",
-      "referenceProvider": "kling_official",
-      "category": "avatar",
-      "capability": "avatar",
-      "referenceFiles": [
-        "tools/avatar/kling_avatar.py"
-      ],
-      "implemented": true,
-      "executionFamily": "unified-service",
-      "actualProvider": "sync",
-      "serviceType": "lipsync",
-      "notes": [
-        "Uses unified Sync character/lip-sync service; actual provider is shown in the catalog."
-      ],
-      "pipeline": {
-        "toolId": "kling_avatar",
-        "mode": "selectable",
-        "role": "post",
-        "stages": [
-          "assets"
-        ],
-        "categories": [
-          "avatar",
-          "character_animation",
-          "localization",
-          "hybrid"
-        ],
-        "purpose": "将人物画面与真实逐镜头配音送入Sync口型服务，完成后替换镜头视频",
-        "trigger": "开启口型同步、人物画面与配音均已就绪；只调用一个口型适配器",
-        "selectionKey": "avatar"
-      }
-    },
-    {
-      "id": "kling_lip_sync",
-      "referenceProvider": "kling_official",
-      "category": "avatar",
-      "capability": "avatar",
-      "referenceFiles": [
-        "tools/avatar/kling_lip_sync.py"
-      ],
-      "implemented": true,
-      "executionFamily": "unified-service",
-      "actualProvider": "sync",
-      "serviceType": "lipsync",
-      "notes": [
-        "Uses unified Sync character/lip-sync service; actual provider is shown in the catalog."
-      ],
-      "pipeline": {
-        "toolId": "kling_lip_sync",
-        "mode": "selectable",
-        "role": "post",
-        "stages": [
-          "assets"
-        ],
-        "categories": [
-          "avatar",
-          "character_animation",
-          "localization",
-          "hybrid"
-        ],
-        "purpose": "将人物画面与真实逐镜头配音送入Sync口型服务，完成后替换镜头视频",
-        "trigger": "开启口型同步、人物画面与配音均已就绪；只调用一个口型适配器",
-        "selectionKey": "avatar"
-      }
-    },
-    {
       "id": "kling_official_image",
-      "referenceProvider": "kling_official",
+      "referenceProvider": "company",
       "category": "graphics",
       "capability": "image_generation",
       "referenceFiles": [
@@ -2761,7 +2695,7 @@
       ],
       "implemented": true,
       "executionFamily": "provider-adapter",
-      "actualProvider": "kling_official",
+      "actualProvider": "company",
       "serviceType": "image",
       "notes": [],
       "pipeline": {
@@ -2787,7 +2721,7 @@
     },
     {
       "id": "kling_official_video",
-      "referenceProvider": "kling_official",
+      "referenceProvider": "company",
       "category": "video",
       "capability": "video_generation",
       "referenceFiles": [
@@ -2795,7 +2729,7 @@
       ],
       "implemented": true,
       "executionFamily": "provider-adapter",
-      "actualProvider": "kling_official",
+      "actualProvider": "company",
       "serviceType": "video",
       "notes": [],
       "pipeline": {
@@ -2821,7 +2755,7 @@
     },
     {
       "id": "kling_tts",
-      "referenceProvider": "kling_official",
+      "referenceProvider": "company",
       "category": "audio",
       "capability": "tts",
       "referenceFiles": [
@@ -2862,7 +2796,7 @@
     },
     {
       "id": "kling_video",
-      "referenceProvider": "kling",
+      "referenceProvider": "company",
       "category": "video",
       "capability": "video_generation",
       "referenceFiles": [
@@ -2870,7 +2804,7 @@
       ],
       "implemented": true,
       "executionFamily": "provider-adapter",
-      "actualProvider": "kling_official",
+      "actualProvider": "company",
       "serviceType": "video",
       "notes": [],
       "pipeline": {
@@ -3211,8 +3145,8 @@
         "tools/video/minimax_video.py"
       ],
       "implemented": true,
-      "executionFamily": "provider-adapter",
-      "actualProvider": "minimax",
+      "executionFamily": "unified-service",
+      "actualProvider": "shared",
       "serviceType": "video",
       "notes": [],
       "pipeline": {
@@ -3281,8 +3215,8 @@
         "tools/audio/music_gen.py"
       ],
       "implemented": true,
-      "executionFamily": "provider-adapter",
-      "actualProvider": "elevenlabs",
+      "executionFamily": "unified-service",
+      "actualProvider": "shared",
       "serviceType": "music",
       "notes": [],
       "pipeline": {
@@ -3499,8 +3433,8 @@
         "tools/graphics/openai_image.py"
       ],
       "implemented": true,
-      "executionFamily": "provider-adapter",
-      "actualProvider": "openai",
+      "executionFamily": "unified-service",
+      "actualProvider": "shared",
       "serviceType": "image",
       "notes": [],
       "pipeline": {
@@ -3533,8 +3467,8 @@
         "tools/audio/openai_tts.py"
       ],
       "implemented": true,
-      "executionFamily": "provider-adapter",
-      "actualProvider": "openai",
+      "executionFamily": "unified-service",
+      "actualProvider": "shared",
       "serviceType": "speech",
       "notes": [],
       "pipeline": {
@@ -4120,8 +4054,8 @@
         "tools/video/seedance_ark.py"
       ],
       "implemented": true,
-      "executionFamily": "provider-adapter",
-      "actualProvider": "volcengine",
+      "executionFamily": "unified-service",
+      "actualProvider": "shared",
       "serviceType": "video",
       "notes": [],
       "pipeline": {
@@ -4188,8 +4122,8 @@
         "tools/video/seedance_video.py"
       ],
       "implemented": true,
-      "executionFamily": "provider-adapter",
-      "actualProvider": "volcengine",
+      "executionFamily": "unified-service",
+      "actualProvider": "shared",
       "serviceType": "video",
       "notes": [],
       "pipeline": {
@@ -4222,8 +4156,8 @@
         "tools/graphics/seedream_image.py"
       ],
       "implemented": true,
-      "executionFamily": "provider-adapter",
-      "actualProvider": "volcengine",
+      "executionFamily": "unified-service",
+      "actualProvider": "shared",
       "serviceType": "image",
       "notes": [],
       "pipeline": {
@@ -4551,7 +4485,7 @@
       ],
       "implemented": true,
       "executionFamily": "unified-service",
-      "actualProvider": "openai",
+      "actualProvider": "company",
       "serviceType": "transcription",
       "notes": [],
       "pipeline": {

@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from http.cookiejar import Cookie, MozillaCookieJar
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import os
 import threading
 
 import pytest
@@ -128,3 +129,40 @@ def test_managed_inventory_and_selection_share_directory(directory_server, tmp_p
             assert client._base == f"http://127.0.0.1:{directory_server.server_port}"
         finally:
             client.close()
+
+
+def test_request_correlation_id_rides_outbound_account_backend_calls(tmp_path):
+    """The gateway binds X-Correlation-Id per inbound request; company-backend
+    HTTP calls made inside that scope (media/speech/model directory) carry the
+    header so bot-backend journals join back to the originating turn."""
+    from account_backend_session import request_account_backend, request_correlation_scope
+
+    seen: dict[str, str | None] = {}
+
+    class CorrelatingHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            seen["correlation_id"] = self.headers.get("X-Correlation-Id")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b"null")
+
+        def log_message(self, *args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), CorrelatingHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        os.environ["HERMES_BOT_BACKEND_URL"] = f"http://127.0.0.1:{server.server_port}"
+        with _profile(tmp_path / "correlated", "A"):
+            request_account_backend("/api/auth/get-session")  # no scope: header absent
+            assert seen["correlation_id"] is None
+            with request_correlation_scope("film-run-3"):
+                request_account_backend("/api/auth/get-session")
+            assert seen["correlation_id"] == "film-run-3"
+    finally:
+        os.environ.pop("HERMES_BOT_BACKEND_URL", None)
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)

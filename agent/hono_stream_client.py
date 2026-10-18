@@ -680,9 +680,16 @@ class HonoStreamClient:
         model = str(kwargs.get("model") or "")
         payload = _build_payload(model, kwargs.get("messages"), kwargs.get("tools"), kwargs)
         timeout = kwargs.get("timeout") if isinstance(kwargs.get("timeout"), httpx.Timeout) else None
+        headers = {"Origin": self._base, "Accept": "text/event-stream"}
+        # The inbound gateway request's X-Correlation-Id rides along (frozen
+        # contract: turn ↔ llm_request_log correlation); absent outside a turn.
+        from account_backend_session import CORRELATION_ID_HEADER, current_request_correlation_id
+
+        if (correlation_id := current_request_correlation_id()) is not None:
+            headers[CORRELATION_ID_HEADER] = correlation_id
         request = self._http.build_request(
             "POST", self._base + _STREAM_PATH, json=payload,
-            headers={"Origin": self._base, "Accept": "text/event-stream"},
+            headers=headers,
             timeout=timeout,
         )
         if stream:

@@ -8,6 +8,7 @@ import type { AppEnv } from './shared/context.js'
 import { serviceAuth } from './shared/context.js'
 import { HttpApiError } from './shared/http.js'
 import { serverRequestId } from './middleware/requestId.js'
+import { correlationIdMiddleware } from './middleware/correlationId.js'
 import { accessLogMiddleware } from './middleware/accessLog.js'
 import { securityMiddleware } from './middleware/security.js'
 import { realIpMiddleware } from './middleware/realIp.js'
@@ -90,6 +91,7 @@ export async function createApp(deps: AppDeps): Promise<App> {
   app.notFound(notFoundHandler())
 
   app.use(serverRequestId())
+  app.use(correlationIdMiddleware())
   app.use(accessLogMiddleware(logger))
   for (const middleware of securityMiddleware()) {
     app.use(middleware)
@@ -287,8 +289,8 @@ export async function createApp(deps: AppDeps): Promise<App> {
       subject: byAuthUserId,
     }),
   )
-  app.route('/api/media', createMediaRoutes({ config, redis: redis.commands, logger, catalogStore: mediaCatalogStore, ...deps.media }))
-  app.route('/api/media', createAudioRoutes({ config, redis: redis.commands, logger, catalogStore: mediaCatalogStore, ...deps.audio }))
+  app.route('/api/media', createMediaRoutes({ config, db, redis: redis.commands, logger, catalogStore: mediaCatalogStore, ...deps.media }))
+  app.route('/api/media', createAudioRoutes({ config, db, redis: redis.commands, logger, catalogStore: mediaCatalogStore, ...deps.audio }))
 
   // 运营管理后台: same-origin form posts (urlencoded — NOT the JSON body
   // policy), session role check per request, entry-ip flood guard only.

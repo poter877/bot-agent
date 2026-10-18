@@ -255,6 +255,8 @@ async function advance(projectId: number) {
       if (def.id === 'build') {
         const build = await runBuildAgent({
           projectId,
+          // 关联 id = film run id：经 hermes gateway 透传到 bot-backend 请求日志
+          correlationId: `film-run-${row.id}`,
           styleSlug: project.style.slug,
           styleMd: filmStyleMarkdown(project.style.slug),
           systemExtra: `画幅 ${project.aspectRatio}；时长目标 ${project.durationSec} 秒；语言 ${project.language}${project.hasVoice ? '（含配音）' : '（无配音）'}。`,
@@ -290,6 +292,7 @@ async function advance(projectId: number) {
         hasVoice: project.hasVoice,
         aspectRatio: project.aspectRatio,
         accepted,
+        correlationId: `film-run-${row.id}`,
       })
       state.artifact = artifact
       state.error = null

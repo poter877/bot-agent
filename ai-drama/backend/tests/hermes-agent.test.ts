@@ -150,6 +150,33 @@ test('未配置 env：硬报错指向 HERMES_AGENT_URL/HERMES_AGENT_KEY，不发
   }
 })
 
+test('关联 id：correlationId 作为 X-Correlation-Id 头发出，缺省生成 uuid（非流式与流式）', async () => {
+  const sse = () => new Response(
+    'data: {"choices":[{"delta":{"content":"ok"}}]}\n\ndata: [DONE]\n\n',
+    { status: 200, headers: { 'content-type': 'text/event-stream' } },
+  )
+  // 依次应答：非流式 JSON → 流式 SSE → 非流式 JSON（uuid 兜底）
+  const responses = [() => Response.json({ choices: [{ message: { content: '完成' } }] }), sse, () => Response.json({ choices: [{ message: { content: '完成' } }] })]
+  const captured: Captured[] = []
+  const original = globalThis.fetch
+  globalThis.fetch = (async (input: any, init?: any) => {
+    captured.push({ url: String(input), headers: new Headers(init?.headers), body: JSON.parse(init?.body) })
+    return responses[captured.length - 1]!()
+  }) as typeof fetch
+  try {
+    await runHermesAgent({ ...chatBody(), correlationId: 'film-run-42' })
+    // 流式路径同样带头（capture 记录每个出站请求的头）
+    for await (const _delta of await streamHermesAgent({ ...chatBody(), correlationId: 'film-run-42' })) break
+    await runHermesAgent(chatBody()) // 未传：自动 uuid
+
+    assert.equal(captured.length, 3)
+    const [withId, streamed, fallback] = captured
+    assert.equal(withId.headers.get('x-correlation-id'), 'film-run-42')
+    assert.equal(streamed.headers.get('x-correlation-id'), 'film-run-42')
+    assert.match(fallback.headers.get('x-correlation-id')!, /^[0-9a-f-]{36}$/u)
+  } finally { globalThis.fetch = original }
+})
+
 test('agents 注册表薄封装：instructions 装配为 system 消息经 gateway 执行，结果保持旧形状', async () => {
   // agents/context.ts → app-settings → db：导入前指向临时库，避免写用户数据
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'hermes-agent-registry-'))

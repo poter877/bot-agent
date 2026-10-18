@@ -220,6 +220,7 @@ export function createLlmRoutes(deps: LlmRoutesDeps): Hono<AppEnv> {
   routes.post('/stream', async (c) => {
     const auth = requireAuthContext(c)
     const requestId = c.get('requestId')
+    const correlationId = c.get('correlationId') ?? null
     const startedAt = Date.now()
     // 服务主体是服务器到服务器调用，浏览器同源约束不适用。
     if (!isServicePrincipal(auth)) assertSameOrigin(c, new URL(config.BETTER_AUTH_URL).origin)
@@ -229,6 +230,7 @@ export function createLlmRoutes(deps: LlmRoutesDeps): Hono<AppEnv> {
       if (error instanceof HttpApiError) {
         await recordRequestLog(db, {
           requestId, auth, modelId: '(unresolved)', status: 'rejected',
+          correlationId,
           errorCode: error.code, errorMessage: error.message, durationMs: Date.now() - startedAt,
         })
       }
@@ -247,6 +249,7 @@ export function createLlmRoutes(deps: LlmRoutesDeps): Hono<AppEnv> {
       if (error instanceof CatalogError) {
         await recordRequestLog(db, {
           requestId, auth, modelId: request.model, status: 'rejected',
+          correlationId,
           errorCode: error.code, errorMessage: error.message, durationMs: Date.now() - startedAt,
         })
         throw new HttpApiError(error.status, error.code, error.message)
@@ -260,6 +263,7 @@ export function createLlmRoutes(deps: LlmRoutesDeps): Hono<AppEnv> {
     } catch (error) {
       await recordRequestLog(db, {
         requestId, auth, modelId: entry.id, status: 'rejected',
+        correlationId,
         errorCode: error instanceof HttpApiError ? error.code : 'internal_error',
         errorMessage: error instanceof HttpApiError ? error.message : undefined,
         durationMs: Date.now() - startedAt,
@@ -291,6 +295,7 @@ export function createLlmRoutes(deps: LlmRoutesDeps): Hono<AppEnv> {
       if (error instanceof HttpApiError) {
         await recordRequestLog(db, {
           requestId, auth, modelId: entry.id, status: 'rejected',
+          correlationId,
           errorCode: error.code, errorMessage: error.message, durationMs: Date.now() - startedAt,
         })
         throw error
@@ -298,6 +303,7 @@ export function createLlmRoutes(deps: LlmRoutesDeps): Hono<AppEnv> {
       logger.error({ requestId, model: entry.id, err: error }, 'llm model resolution failed')
       await recordRequestLog(db, {
         requestId, auth, modelId: entry.id, status: 'rejected',
+        correlationId,
         errorCode: 'dependency_unavailable', durationMs: Date.now() - startedAt,
       })
       throw new HttpApiError(503, 'dependency_unavailable', 'The model backend is not available.')
@@ -335,6 +341,7 @@ export function createLlmRoutes(deps: LlmRoutesDeps): Hono<AppEnv> {
           logger.info(
             {
               requestId,
+              correlationId,
               userId: auth.userId,
               sessionId: auth.sessionId,
               model: entry.id,
@@ -347,6 +354,7 @@ export function createLlmRoutes(deps: LlmRoutesDeps): Hono<AppEnv> {
           await recordStreamUsage(redis, auth.userId, entry.id, outcome.usage)
           await recordRequestLog(db, {
             requestId, auth, modelId: entry.id, status: outcome.status,
+            correlationId,
             errorMessage: outcome.failureMessage, finishReason: outcome.finishReason,
             usage: outcome.usage, durationMs: Date.now() - startedAt,
           })

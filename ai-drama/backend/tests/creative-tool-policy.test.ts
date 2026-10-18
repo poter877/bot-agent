@@ -105,7 +105,7 @@ function scenePlan(ctx: StageContext, toolId: string, args: Record<string, unkno
 }
 
 test('all inventory tools have explicit category, stage, purpose and activation policy', () => {
-  assert.equal(Object.keys(pipelineToolPolicies).length, 152)
+  assert.equal(Object.keys(pipelineToolPolicies).length, 150)
   assert.deepEqual(Object.keys(pipelineToolPolicies).sort(), inventory.map((item) => item.id).sort())
   for (const policy of Object.values(pipelineToolPolicies)) {
     assert.ok(
@@ -343,13 +343,13 @@ test('Sync avatar workflow waits for fitted speech and a real generated portrait
   assert.equal(steps.filter((step) => step.role === 'voice').length, 1)
 })
 test('Sync reuses existing audio and a bound portrait and never calls another speech model', () => {
-  const ctx = context('avatar', 'assets', { avatarTool: 'kling_avatar', speechTool: 'openai_tts' })
+  const ctx = context('avatar', 'assets', { avatarTool: 'talking_head', speechTool: 'openai_tts' })
   ctx.project.shots[0].audioUrl = '/static/uploads/approved-voice.wav'
   ctx.project.shots[0].imageUrl = '/static/uploads/portrait.png'
   const steps = planPipelineTools(ctx, 'before')
   assert.deepEqual(
     steps.map((step) => step.toolId),
-    ['kling_avatar'],
+    ['talking_head'],
   )
   assert.deepEqual(steps[0].dependsOn, [])
 })

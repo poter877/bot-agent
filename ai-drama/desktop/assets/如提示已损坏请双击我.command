@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # 视频工厂 首次打开修复脚本
 # 未签名 app 从浏览器下载后带 quarantine 属性，Gatekeeper 会误报"已损坏"，
 # 本脚本移除该属性。仅首次安装需要运行一次，后续应用内自动更新不受影响。

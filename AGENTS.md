@@ -2,8 +2,8 @@
 
 For AI coding assistants and developers working on hermes-agent. This root file is a hub: what
 applies everywhere, then a routing table. Each area's `AGENTS.md` loads automatically when you work
-in that directory; read it before editing there. `python scripts/check` caps this file at 12k chars
-and every root-to-area chain at 30k, so it loads whole on 128k+ models: long form goes in the guide.
+in that directory; read it before editing. `python scripts/check` caps this file at 12k chars
+and every root-to-area chain at 30k: long form goes in the guide.
 
 **Never give up on the right solution.**
 
@@ -27,7 +27,7 @@ Two invariants shape almost every design decision and are the lens for reviewing
 
 ## Contribution rubric
 
-The project's intent layer, for contributors and for the triage sweeper (which may only close on
+The intent layer, for contributors and the triage sweeper (which may only close on
 `implemented_on_main`, `cannot_reproduce` or `incoherent`; taste-based closes are a maintainer's
 call, and when in doubt a PR stays open). Long form with examples:
 `website/docs/developer-guide/contributing.md` § Contribution rubric.
@@ -47,7 +47,7 @@ standalone plugin repo).
 
 **Before you call it a bug,** verify the claim AND the intent (`git log -p -S "<symbol>"`): the
 isolation is often the design (profiles are islands on purpose), an absence can be load-bearing,
-and a fix that cannot point to the line where the bug manifests has an unverified premise.
+and a fix that cannot point to the failing line has an unverified premise.
 
 **Security:** `SECURITY.md` is the scope authority. A §3.1 finding goes private (GitHub Security
 Advisories or security@nousresearch.com), never into a public issue, PR, commit or comment; §3.2
@@ -164,6 +164,8 @@ Every former god file is a **facade** (public entry points + the names other pac
 | `tests/` | `tests/AGENTS.md` | runner, placement, OS markers, `wine2e`, banned test shapes |
 | `pm/`, `pyproject.toml` | `pm/AGENTS.md` | pinning policy, PM-owned environments, plugin quarantine |
 | `hermes_platform/` | `hermes_platform/AGENTS.md` | host facts, resolvers |
+| `ai-drama/` | `ai-drama/AGENTS.md`, `ai-drama/docs/hermes-integration.md` | 编排=hermes gateway、模型=bot-backend、工具=MCP `/mcp`；测试 `npx tsx --test`，npm 装依赖 |
+| `bot-backend/` | `bot-backend/AGENTS.md` | Hono 模型网关（全仓唯一模型出口）；测试 vitest；env 仿 `.env.example`；迁移 drizzle-kit |
 
-Long-form background: `website/docs/developer-guide/`. Workflow rules (PR/issue/review/salvage
-process) live in the `hermes-agent-dev` skill, not here.
+Long-form background: `website/docs/developer-guide/`. Workflow rules (PR/issue/review/salvage)
+live in the `hermes-agent-dev` skill, not here.

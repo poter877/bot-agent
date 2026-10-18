@@ -29,6 +29,9 @@ export type AppBindings = {
   Variables: {
     requestId: string
     realIp: string
+    /** Sanitized X-Correlation-Id echo from an authenticated caller (ai-drama
+     * task / hermes turn); undefined when the header was absent or invalid. */
+    correlationId: string | undefined
     /** Undefined until the Better Auth session check has passed. */
     auth: AuthContext | undefined
   }

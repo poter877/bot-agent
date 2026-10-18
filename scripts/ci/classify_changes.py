@@ -85,6 +85,10 @@ import subprocess
 import sys
 
 _FRONTEND = ("ui-tui/", "web/", "apps/")  # TS typecheck-matrix packages
+# Independent TypeScript subtrees with their own lockfiles and test runners (js-tests.yml runs
+# their jobs). They cannot touch the hermes Python suite, so they sit in _PY_SKIP too — except
+# the Python they do carry (below), which ruff/shebangs/no-tmp must keep checking.
+_TS_SUBTREES = ("ai-drama/", "bot-backend/")
 # Shipped page outside those packages, exercised by the desktop Electron suite.
 _FRONTEND_FILES = {"scripts/desktop-update/ui.html"}
 _ROOT_NPM = {"package.json", "package-lock.json"}  # shifts every package's tree
@@ -93,7 +97,11 @@ _NIX_PATHS = ("nix/",) # nix files
 _NIX_FILES = {"flake.nix", "flake.lock"} # base nix files
 _SITE = ("website/", "skills/", "optional-skills/")  # docs site + skill pages
 # Prose/frontend trees that can't touch Python. skills/ is excluded on purpose.
-_PY_SKIP = ("docs/", "website/") + _FRONTEND
+_PY_SKIP = ("docs/", "website/") + _FRONTEND + _TS_SUBTREES
+# The only Python the independent TS subtrees carry: ai-drama's film-core render/audio tools
+# and bot-backend's cloud-computer runtime helpers. The python lane is what runs
+# ruff / shebangs / no-tmp over them, so a change there must not skip it.
+_PY_RELEVANT_SUBTREES = ("ai-drama/backend/film-core/", "bot-backend/cloud-computer-runtime/")
 # Published artifacts that live under website/ but that Python asserts about.
 # The OAuth Client ID Metadata Document is cross-checked against the pinned
 # callback ports in tools/mcp_oauth.py, so editing it alone must still run the
@@ -509,7 +517,8 @@ def _is_nix(p: str) -> bool:
 
 
 def _py_irrelevant(p: str) -> bool:
-    if p.startswith(_PY_RELEVANT_SITE) or p in _PY_RELEVANT_CONTRACT_FILES:
+    if p.startswith(_PY_RELEVANT_SITE) or p in _PY_RELEVANT_CONTRACT_FILES \
+            or p.startswith(_PY_RELEVANT_SUBTREES):
         return False
     return (
         _is_docs(p)
@@ -576,7 +585,7 @@ def classify(files: list[str], run_e2e: bool = False) -> dict[str, bool]:
     python = any(not _py_irrelevant(f) for f in files)
     python_prod = any(not _py_irrelevant(f) and not _py_test_only(f) for f in files)
     frontend = any(
-        f.startswith(_FRONTEND) or f in _ROOT_NPM or f in _FRONTEND_FILES
+        f.startswith(_FRONTEND) or f.startswith(_TS_SUBTREES) or f in _ROOT_NPM or f in _FRONTEND_FILES
         or f.startswith("tests-js/")
         or (f.startswith("scripts/build/") and f.endswith((".mjs", ".js", ".ts")))
         for f in files

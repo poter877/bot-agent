@@ -37,11 +37,13 @@ describe('media model directory', () => {
   const listModels = (headers: Record<string, string>) =>
     testApp.app.request('/api/media/models', { headers })
 
+  type MediaModelsBody = { models: Array<{ id: string; kind: string; provider?: string }> }
+
   it('seeds env image catalogs and the audio defaults once, listing only key-holding providers', async () => {
     const response = await listModels({ cookie: user.cookie })
     expect(response.status).toBe(200)
-    const body = await response.json()
-    const byId = new Map(body.models.map((entry: { id: string }) => [entry.id, entry]))
+    const body = (await response.json()) as MediaModelsBody
+    const byId = new Map(body.models.map((entry) => [entry.id, entry]))
     expect(byId.get('seedream')).toMatchObject({ kind: 'image' })
     expect(byId.get('gpt-4o-mini-tts')).toMatchObject({ kind: 'speech' })
     expect(byId.get('whisper-1')).toMatchObject({ kind: 'transcription' })
@@ -65,7 +67,7 @@ describe('media model directory', () => {
     expect(create.status).toBe(303)
 
     const listed = await listModels({ cookie: user.cookie })
-    const afterCreate = new Map((await listed.json()).models.map((entry: { id: string }) => [entry.id, entry]))
+    const afterCreate = new Map(((await listed.json()) as MediaModelsBody).models.map((entry) => [entry.id, entry]))
     expect(afterCreate.get('seedance')).toMatchObject({ kind: 'video' })
 
     const toggle = await testApp.app.request('/admin/media/seedance/toggle', {
@@ -81,6 +83,6 @@ describe('media model directory', () => {
       body: JSON.stringify({ model: 'seedance', prompt: '一只猫' }),
     })
     expect(generation.status).toBe(403)
-    expect((await generation.json()).error.code).toBe('model_disabled')
+    expect(((await generation.json()) as { error: { code: string } }).error.code).toBe('model_disabled')
   })
 })

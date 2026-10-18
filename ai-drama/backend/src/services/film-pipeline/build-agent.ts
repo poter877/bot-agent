@@ -28,6 +28,8 @@ export interface BuildAgentInput {
   durationSec: number
   aspectRatio: string
   acceptedContent: string
+  /** 贯穿链路关联 id（X-Correlation-Id）：调用方（film run 驱动）传 run id */
+  correlationId?: string
 }
 
 /** 从 agent.log 收集工程产物文件清单：write_file / generate_texture 的工具日志行，
@@ -98,6 +100,7 @@ export async function runBuildAgent(input: BuildAgentInput): Promise<{ summary: 
       },
     ],
     timeoutMs: BUILD_AGENT_TIMEOUT_MS,
+    correlationId: input.correlationId,
   })
 
   log('agent 结束')

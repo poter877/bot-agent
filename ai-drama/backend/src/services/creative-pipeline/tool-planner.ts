@@ -68,7 +68,7 @@ const stockTools = new Set([
   'unsplash',
   'freesound_music',
 ])
-const lips = new Set(['kling_avatar', 'kling_lip_sync', 'lip_sync', 'talking_head'])
+const lips = new Set(['lip_sync', 'talking_head'])
 const composers = new Set(['video_compose', 'hyperframes_compose', 'video_stitch', 'bgm_montage_lite'])
 const selectionSettings: Record<string, keyof PipelineAutomation> = {
   image: 'imageTool',

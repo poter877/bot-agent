@@ -47,7 +47,7 @@ def hz(p): return 440.0 * 2 ** ((midi(p) - 69) / 12)
 
 
 def name(m):
-    m = int(round(m)); return ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'][m % 12] + str(m // 12 - 1)
+    m = round(m); return ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'][m % 12] + str(m // 12 - 1)
 
 
 # —— 乐器注册表 ——

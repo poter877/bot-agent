@@ -702,24 +702,6 @@
     ]
   },
   {
-    "id": "kling_avatar",
-    "referenceProvider": "kling_official",
-    "category": "avatar",
-    "capability": "avatar",
-    "referenceFiles": [
-      "tools/avatar/kling_avatar.py"
-    ]
-  },
-  {
-    "id": "kling_lip_sync",
-    "referenceProvider": "kling_official",
-    "category": "avatar",
-    "capability": "avatar",
-    "referenceFiles": [
-      "tools/avatar/kling_lip_sync.py"
-    ]
-  },
-  {
     "id": "kling_official_image",
     "referenceProvider": "company",
     "category": "graphics",
@@ -739,7 +721,7 @@
   },
   {
     "id": "kling_tts",
-    "referenceProvider": "kling_official",
+    "referenceProvider": "company",
     "category": "audio",
     "capability": "tts",
     "referenceFiles": [

@@ -29,6 +29,13 @@
       "when": 1792321658797,
       "tag": "0003_media-models-directory",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792327819872,
+      "tag": "0004_zippy_prodigy",
+      "breakpoints": true
     }
   ]
 }

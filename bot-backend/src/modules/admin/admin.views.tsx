@@ -374,6 +374,7 @@ export function RequestsPage(props: {
             <th>错误 / 结束原因</th>
             <th>tokens (入/出)</th>
             <th>耗时</th>
+            <th>关联 id</th>
           </tr>
         </thead>
         <tbody>
@@ -391,11 +392,12 @@ export function RequestsPage(props: {
               </td>
               <td>{row.inputTokens ?? '—'} / {row.outputTokens ?? '—'}</td>
               <td>{row.durationMs}ms</td>
+              <td>{row.correlationId ? <code>{row.correlationId}</code> : '—'}</td>
             </tr>
           ))}
           {props.rows.length === 0 ? (
             <tr>
-              <td colspan={7} class="muted">暂无记录。</td>
+              <td colspan={8} class="muted">暂无记录。</td>
             </tr>
           ) : null}
         </tbody>

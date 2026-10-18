@@ -61,3 +61,23 @@ profile 自己的 HOME）。要收窄到仅 ai-drama 领域工具，用该 profi
    模型指向公司后端），起 gateway。
 4. 验证：ai-drama 前端发起一次编剧/规划请求 → 观察 hermes gateway 日志出现该会话
    的 turn、ai-drama `/mcp` 收到 tools/call、bot-backend 请求日志出现模型调用。
+
+### 一键联调（deploy/trio）
+
+仓库带三件套联调编排：`deploy/trio/docker-compose.yml`（postgres + redis +
+bot-backend + ai-drama，hermes gateway 在 `hermes` profile 下）与
+`deploy/trio/smoke.sh`（逐环冒烟：bot-backend 健康/目录 → `/mcp` 工具清单与
+fail-closed → gateway `/v1/models` → 可选端到端一次真实 turn，需提供
+`DRAMA_ACCOUNT_EMAIL/PASSWORD`，脚本会登录 bot-backend 并把会话写进 drama home
+的 `account-auth-cookies.txt`）。
+
+### 并发标定（drama 账号是所有 agent turn 的主体）
+
+| 旋钮 | 位置 | 默认 | 说明 |
+|---|---|---|---|
+| `LLM_STREAM_MAX_CONCURRENT_PER_USER` | bot-backend env | 2 | **必调**：drama 账号承载全部任务，默认 2 会卡住并行 film 任务；按预期并行任务数 × 每任务单 turn 设（compose 里默认给 8） |
+| `RATE_LIMIT_LLM_STREAM_*` | bot-backend env | 60/min | 同理放大（compose 给 240/min） |
+| 每用户额度覆盖 | 运营后台 用户页 | 服务默认 | 目录/并发/额度的按账号覆盖，比 env 更细 |
+| agent 缓存容量 | `gateway/agent_cache_pressure.py`（`AgentCacheBounds`） | 为会话聊天设计 | 长任务（分钟级）大量驻留时按负载调 LRU 上限；改代码，无 env |
+| 任务派发并发 | ai-drama 任务队列 | — | 瞬时大批任务时的准入控制放这里，避免全压进 gateway |
+

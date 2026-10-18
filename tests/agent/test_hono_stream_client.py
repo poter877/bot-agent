@@ -355,3 +355,17 @@ class TestClientEndToEnd:
         with make_client(self._handler(log, sse_body(*text_stream_frames())), cookie_jar=jar) as client:
             client.chat.completions.create(model="m", messages=[{"role": "user", "content": "hi"}])
         assert "better-auth.session_token=tok123" in log[0].headers.get("cookie", "")
+
+    def test_request_correlation_id_rides_the_outbound_header(self):
+        from account_backend_session import request_correlation_scope
+
+        log: list[httpx.Request] = []
+        body = sse_body(*text_stream_frames())
+        with make_client(self._handler(log, body)) as client:
+            client.chat.completions.create(model="m", messages=[{"role": "user", "content": "hi"}])
+        assert "x-correlation-id" not in log[0].headers
+
+        log.clear()
+        with make_client(self._handler(log, body)) as client, request_correlation_scope("film-run-21"):
+            client.chat.completions.create(model="m", messages=[{"role": "user", "content": "hi"}])
+        assert log[0].headers.get("x-correlation-id") == "film-run-21"

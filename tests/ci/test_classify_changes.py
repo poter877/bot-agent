@@ -106,6 +106,19 @@ CASES = {
     "uv.lock → python": (["uv.lock"], _lanes(python=True, uv_lock=True, docker=True, nix=True, e2e_upgrade=True)),
     "ts package → frontend": (["apps/desktop/src/app.tsx"], _lanes(frontend=True)),
     "ui-tui → frontend": (["ui-tui/src/entry.ts"], _lanes(frontend=True)),
+    # Independent TS subtrees run their js-tests.yml jobs; their TS alone cannot touch
+    # the hermes Python suite, but the Python they do carry keeps the python lane on
+    # (that lane is what runs ruff / shebangs / no-tmp over film-core).
+    "bot-backend TS → frontend": (["bot-backend/src/app.ts"], _lanes(frontend=True)),
+    "ai-drama TS → frontend": (["ai-drama/backend/src/index.ts"], _lanes(frontend=True)),
+    "ai-drama Python → python + frontend": (
+        ["ai-drama/backend/film-core/audio/sfx.py"],
+        _lanes(python=True, frontend=True, scan=True),
+    ),
+    "bot-backend Python → python + frontend": (
+        ["bot-backend/cloud-computer-runtime/control.py"],
+        _lanes(python=True, frontend=True, scan=True),
+    ),
     # Lockfile bump shifts every TS package's tree, but not the Python suite.
     "root lockfile → frontend, not python": (["package-lock.json"], _lanes(frontend=True, npm_lock=True, docker=True, nix=True)),
     "nested lockfile → npm_lock": (["website/package-lock.json"], _lanes(site=True, npm_lock=True)),

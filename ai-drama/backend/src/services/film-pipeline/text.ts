@@ -18,6 +18,8 @@ export interface FilmStageInput {
   hasVoice: boolean
   aspectRatio: string
   accepted: Record<string, FilmArtifact | null>
+  /** 贯穿链路关联 id（X-Correlation-Id）：调用方（film run 驱动）传 run id */
+  correlationId?: string
 }
 
 /** 各阶段需要引用的指南章节（按 DIRECTOR/TECHNIQUE 的节号截取，控制注入体积） */
@@ -97,6 +99,7 @@ export async function generateFilmStageArtifact(input: FilmStageInput): Promise<
     ].join('\n'),
     messages: [{ role: 'user', content: payload }],
     timeoutMs: 300_000,
+    correlationId: input.correlationId,
   })
   const raw = result.text
     .trim()

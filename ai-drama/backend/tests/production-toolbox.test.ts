@@ -70,8 +70,8 @@ after(async () => {
 
 test('full inventory resolves, dependencies are explicit, retired APIs are identified', async () => {
   const c = await toolboxCatalog()
-  assert.equal(c.referenceCount, 152)
-  assert.equal(new Set(c.tools.map((t) => t.id)).size, 152)
+  assert.equal(c.referenceCount, 150)
+  assert.equal(new Set(c.tools.map((t) => t.id)).size, 150)
   assert.deepEqual(
     c.tools.filter((t) => !t.implemented).map((t) => t.id),
     [],

@@ -6,12 +6,12 @@ SR = 48000
 _rng = np.random.default_rng(7)
 
 
-def t_(d): return np.arange(int(round(d * SR))) / SR   # 与 noise() 同样取整，避免长度差 1 相乘报错
+def t_(d): return np.arange(round(d * SR)) / SR   # 与 noise() 同样取整，避免长度差 1 相乘报错
 def env_exp(d, tau): return np.exp(-t_(d) / tau)
 def bp(x, lo, hi, o=2): return sosfilt(butter(o, [lo, hi], 'band', fs=SR, output='sos'), x)
 def lp(x, f, o=2): return sosfilt(butter(o, f, 'low', fs=SR, output='sos'), x)
 def hp(x, f, o=2): return sosfilt(butter(o, f, 'high', fs=SR, output='sos'), x)
-def noise(d): return _rng.standard_normal(int(round(d * SR)))
+def noise(d): return _rng.standard_normal(round(d * SR))
 def norm(x, p=1.0): m = np.abs(x).max(); return x * (p / m) if m > 0 else x
 
 

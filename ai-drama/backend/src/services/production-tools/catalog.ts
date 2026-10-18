@@ -92,8 +92,6 @@ export const sharedToolSpecs: Record<string, { serviceType?: string; provider: s
   transcriber: { serviceType: 'transcription', provider: 'company', mode: 'transcription' },
   lip_sync: { serviceType: 'lipsync', provider: 'sync', mode: 'lipsync' },
   talking_head: { serviceType: 'lipsync', provider: 'sync', mode: 'lipsync' },
-  kling_lip_sync: { serviceType: 'lipsync', provider: 'sync', mode: 'lipsync' },
-  kling_avatar: { serviceType: 'lipsync', provider: 'sync', mode: 'lipsync' },
   piper_tts: { provider: 'local', mode: 'piper' },
 }
 const generationKinds: Record<string, string> = {

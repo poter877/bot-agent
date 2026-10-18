@@ -1,11 +1,13 @@
-import { Hono } from 'hono'
+import { Hono, type Context } from 'hono'
 import { experimental_generateVideo, generateImage, type GeneratedFile } from 'ai'
 import type { RedisClientType } from 'redis'
 import type { AppConfig } from '../../config/env.js'
+import type { Db } from '../../db/client.js'
 import type { AppEnv } from '../../shared/context.js'
 import { isServicePrincipal, requireAuthContext } from '../../shared/context.js'
 import { HttpApiError, assertSameOrigin } from '../../shared/http.js'
 import type { Logger } from '../../shared/logger.js'
+import { recordRequestLog } from '../llm/requestLog.js'
 import type { MediaCatalogEntry, MediaKind } from './catalog.js'
 import { MediaCatalogError, MediaCatalogStore, parseMediaCatalog, publicMediaCatalog, resolveMediaCatalogEntry, type MediaDirectoryEntry } from './catalog.js'
 import { generateFalQueue, generateKlingImage, generateKlingVideo, generatePollingVideo, generateVolcengineImage, type PollingProviderDeps } from './polling-providers.js'
@@ -29,6 +31,7 @@ const FAL_MODEL_ID = /^(?!.*(?:^|\/)\.\.(?:\/|$))[a-zA-Z0-9_-]+(\/[a-zA-Z0-9_.-]
 
 export interface MediaRoutesDeps {
   config: AppConfig
+  db: Db
   redis: RedisClientType
   logger: Logger
   imageCatalog?: MediaCatalogEntry[]
@@ -123,8 +126,110 @@ const asAspectRatio = (value: unknown): `${number}:${number}` | 'adaptive' | und
     ? (value as `${number}:${number}` | 'adaptive')
     : undefined
 
+function parseImageRequest(raw: Record<string, unknown>): ImageRequest {
+  return {
+    model: String(raw['model'] ?? ''),
+    prompt: String(raw['prompt'] ?? ''),
+    n: typeof raw['n'] === 'number' ? Math.floor(raw['n']) : 1,
+    ...(asSize(raw['size']) !== undefined ? { size: asSize(raw['size']) } : {}),
+    ...(asImageAspectRatio(raw['aspectRatio']) !== undefined ? { aspectRatio: asImageAspectRatio(raw['aspectRatio']) } : {}),
+    ...(typeof raw['seed'] === 'number' ? { seed: Math.floor(raw['seed']) } : {}),
+  }
+}
+
+function parseVideoRequest(raw: Record<string, unknown>): VideoRequest {
+  return {
+    model: String(raw['model'] ?? ''),
+    prompt: String(raw['prompt'] ?? ''),
+    ...(asString(raw['aspectRatio']) !== undefined ? { aspectRatio: asString(raw['aspectRatio']) } : {}),
+    ...(asString(raw['resolution']) !== undefined ? { resolution: asString(raw['resolution']) } : {}),
+    ...(typeof raw['duration'] === 'number' ? { duration: raw['duration'] } : {}),
+    ...(typeof raw['fps'] === 'number' ? { fps: Math.floor(raw['fps']) } : {}),
+    ...(typeof raw['seed'] === 'number' ? { seed: Math.floor(raw['seed']) } : {}),
+    ...(typeof raw['generateAudio'] === 'boolean' ? { generateAudio: raw['generateAudio'] } : {}),
+    ...(typeof raw['promptExtend'] === 'boolean' ? { promptExtend: raw['promptExtend'] } : {}),
+    ...(typeof raw['watermark'] === 'boolean' ? { watermark: raw['watermark'] } : {}),
+    ...(asString(raw['mode']) !== undefined ? { mode: asString(raw['mode']) } : {}),
+  }
+}
+
+/** Reference-media fields (disjoint from parseVideoRequest's keys, so the two
+ * objects merge in either order). */
+function videoReferenceFields(raw: Record<string, unknown>): Partial<VideoRequest> {
+  return {
+    ...(asString(raw['imageUrl']) !== undefined ? { imageUrl: asString(raw['imageUrl']) } : {}),
+    ...(asString(raw['firstFrameUrl']) !== undefined ? { firstFrameUrl: asString(raw['firstFrameUrl']) } : {}),
+    ...(asString(raw['lastFrameUrl']) !== undefined ? { lastFrameUrl: asString(raw['lastFrameUrl']) } : {}),
+    ...(asUrlArray(raw['referenceImages']) !== undefined ? { referenceImages: asUrlArray(raw['referenceImages']) } : {}),
+    ...(asUrlArray(raw['referenceVideos']) !== undefined ? { referenceVideos: asUrlArray(raw['referenceVideos']) } : {}),
+    ...(asUrlArray(raw['referenceAudios']) !== undefined ? { referenceAudios: asUrlArray(raw['referenceAudios']) } : {}),
+    ...(asString(raw['referenceFileUrl']) !== undefined ? { referenceFileUrl: asString(raw['referenceFileUrl']) } : {}),
+    ...(asString(raw['referenceLinkUrl']) !== undefined ? { referenceLinkUrl: asString(raw['referenceLinkUrl']) } : {}),
+  }
+}
+
+/** Resolve a catalog entry, mapping catalog errors to the HTTP error surface. */
+async function resolveEntry(
+  catalog: Promise<MediaCatalogEntry[]>, model: string, keys: ProviderKeys,
+): Promise<MediaCatalogEntry> {
+  try {
+    return resolveMediaCatalogEntry(await catalog, model, keys)
+  } catch (error) {
+    if (error instanceof MediaCatalogError) {
+      throw new HttpApiError(error.status, error.code, error.message)
+    }
+    throw error
+  }
+}
+
 export function createMediaRoutes(deps: MediaRoutesDeps): Hono<AppEnv> {
-  const { config, redis, logger } = deps
+  const { config, db, redis, logger } = deps
+
+  /** Journal context shared by every media handler: one llm_request_log row per
+   * generation (complete / failed / rejected) so the console's 失败请求 page
+   * covers media too — film-task failures are usually here, and the
+   * X-Correlation-Id column joins them back to the hermes turn. A 502
+   * internal_error is the vendor-call failure; other HttpApiErrors are
+   * admission rejections (auth/origin/catalog/validation/key config). */
+  const journalRequest = (c: Context<AppEnv>) => {
+    const auth = requireAuthContext(c)
+    const requestId = c.get('requestId')
+    const correlationId = c.get('correlationId') ?? null
+    let modelId = ''
+    const write = async (
+      status: 'complete' | 'failed' | 'rejected', startedAt: number,
+      error?: { code: string; message: string },
+    ) => {
+      await recordRequestLog(db, {
+        requestId, auth, modelId: modelId || '(unresolved)', status, correlationId,
+        errorCode: error?.code, errorMessage: error?.message, durationMs: Date.now() - startedAt,
+      })
+    }
+    return {
+      auth,
+      requestId,
+      /** Names the model once the request carries one ('' journals as unresolved). */
+      model(id: string) { modelId = id },
+      /** Wrap a handler: journals complete on success, failed/rejected per the error kind. */
+      async run(handle: () => Promise<Response>): Promise<Response> {
+        const startedAt = Date.now()
+        try {
+          const response = await handle()
+          await write('complete', startedAt)
+          return response
+        } catch (error) {
+          if (error instanceof HttpApiError) {
+            const failed = error.status === 502 && error.code === 'internal_error'
+            await write(failed ? 'failed' : 'rejected', startedAt, { code: error.code, message: error.message })
+          } else {
+            await write('failed', startedAt, { code: 'internal_error', message: 'Unexpected server error.' })
+          }
+          throw error
+        }
+      },
+    }
+  }
+
   // Static test seams win; production reads the console-owned table (TTL
   // cache inside the store) with the env catalogs as the empty-table seed.
   const loadImageCatalog = deps.imageCatalog
@@ -159,153 +264,118 @@ export function createMediaRoutes(deps: MediaRoutesDeps): Hono<AppEnv> {
   })
 
   routes.post('/image', async (c) => {
-    const auth = requireAuthContext(c)
-    const requestId = c.get('requestId')
-    // 服务主体是服务器到服务器调用，浏览器同源约束不适用。
-    if (!isServicePrincipal(auth)) assertSameOrigin(c, new URL(config.BETTER_AUTH_URL).origin)
+    const journal = journalRequest(c)
+    const { auth, requestId } = journal
+    return journal.run(async () => {
+      // 服务主体是服务器到服务器调用，浏览器同源约束不适用。
+      if (!isServicePrincipal(auth)) assertSameOrigin(c, new URL(config.BETTER_AUTH_URL).origin)
 
-    const body = await c.req.json().catch(() => null)
-    if (body === null) {
-      throw new HttpApiError(400, 'invalid_json', 'Request body is not valid JSON.')
-    }
-    const raw = body as Record<string, unknown>
-    const request: ImageRequest = {
-      model: String(raw['model'] ?? ''),
-      prompt: String(raw['prompt'] ?? ''),
-      n: typeof raw['n'] === 'number' ? Math.floor(raw['n']) : 1,
-      ...(asSize(raw['size']) !== undefined ? { size: asSize(raw['size']) } : {}),
-      ...(asImageAspectRatio(raw['aspectRatio']) !== undefined ? { aspectRatio: asImageAspectRatio(raw['aspectRatio']) } : {}),
-      ...(typeof raw['seed'] === 'number' ? { seed: Math.floor(raw['seed']) } : {}),
-    }
-    if (request.model.trim() === '') throw new HttpApiError(400, 'validation_failed', 'model is required')
-    if (request.prompt.trim() === '' || request.prompt.length > 4_000) {
-      throw new HttpApiError(400, 'validation_failed', 'prompt is required (max 4000 chars)')
-    }
-    if (request.n < 1 || request.n > 4) throw new HttpApiError(400, 'validation_failed', 'n must be 1..4')
-
-    let entry: MediaCatalogEntry
-    try {
-      entry = resolveMediaCatalogEntry(await loadImageCatalog(), request.model, keys)
-    } catch (error) {
-      if (error instanceof MediaCatalogError) {
-        throw new HttpApiError(error.status, error.code, error.message)
+      const body = await c.req.json().catch(() => null)
+      if (body === null) {
+        throw new HttpApiError(400, 'invalid_json', 'Request body is not valid JSON.')
       }
-      throw error
-    }
-    const n = entry.maxImages !== undefined ? Math.min(request.n, entry.maxImages) : request.n
-
-    try {
-      let images: Array<{ media_type: string; base64: string }>
-      if (deps.imageGenerator) {
-        images = await deps.imageGenerator(request, entry)
-      } else if (entry.provider === 'volcengine') {
-        const key = keys.volcengine
-        if (key === undefined) throw new HttpApiError(503, 'provider_key_missing', 'The media backend is not configured.')
-        images = await generateVolcengineImage(key, entry, request, config.MEDIA_REQUEST_TIMEOUT_MS, c.req.raw.signal, deps.pollingDeps)
-      } else if (entry.provider === 'kling') {
-        const key = keys.kling
-        if (key === undefined) throw new HttpApiError(503, 'provider_key_missing', 'The media backend is not configured.')
-        images = await generateKlingImage(key, entry, { ...request, n }, config.MEDIA_REQUEST_TIMEOUT_MS, c.req.raw.signal, deps.pollingDeps)
-      } else {
-        images = await defaultImageGenerator(config, request, entry, n, c.req.raw.signal)
+      const raw = body as Record<string, unknown>
+      const request: ImageRequest = parseImageRequest(raw)
+      journal.model(request.model)
+      if (request.model.trim() === '') throw new HttpApiError(400, 'validation_failed', 'model is required')
+      if (request.prompt.trim() === '' || request.prompt.length > 4_000) {
+        throw new HttpApiError(400, 'validation_failed', 'prompt is required (max 4000 chars)')
       }
-      logger.info({ requestId, userId: auth.userId, model: entry.id, images: images.length }, 'media image generated')
-      await recordMediaUsage(redis, auth.userId, entry.id, images.length)
-      return c.json({ ok: true, images })
-    } catch (error) {
-      if (error instanceof HttpApiError) throw error
-      logger.warn({ requestId, model: entry.id, err: error }, 'media image generation failed')
-      throw new HttpApiError(502, 'internal_error', 'Media generation failed.')
-    }
+      if (request.n < 1 || request.n > 4) throw new HttpApiError(400, 'validation_failed', 'n must be 1..4')
+
+      const entry = await resolveEntry(loadImageCatalog(), request.model, keys)
+      journal.model(entry.id)
+      const n = entry.maxImages !== undefined ? Math.min(request.n, entry.maxImages) : request.n
+
+      try {
+        let images: Array<{ media_type: string; base64: string }>
+        if (deps.imageGenerator) {
+          images = await deps.imageGenerator(request, entry)
+        } else if (entry.provider === 'volcengine') {
+          const key = keys.volcengine
+          if (key === undefined) throw new HttpApiError(503, 'provider_key_missing', 'The media backend is not configured.')
+          images = await generateVolcengineImage(key, entry, request, config.MEDIA_REQUEST_TIMEOUT_MS, c.req.raw.signal, deps.pollingDeps)
+        } else if (entry.provider === 'kling') {
+          const key = keys.kling
+          if (key === undefined) throw new HttpApiError(503, 'provider_key_missing', 'The media backend is not configured.')
+          images = await generateKlingImage(key, entry, { ...request, n }, config.MEDIA_REQUEST_TIMEOUT_MS, c.req.raw.signal, deps.pollingDeps)
+        } else {
+          images = await defaultImageGenerator(config, request, entry, n, c.req.raw.signal)
+        }
+        logger.info({ requestId, userId: auth.userId, model: entry.id, images: images.length }, 'media image generated')
+        await recordMediaUsage(redis, auth.userId, entry.id, images.length)
+        return c.json({ ok: true, images })
+      } catch (error) {
+        if (error instanceof HttpApiError) throw error
+        logger.warn({ requestId, model: entry.id, err: error }, 'media image generation failed')
+        throw new HttpApiError(502, 'internal_error', 'Media generation failed.')
+      }
+    })
   })
 
   routes.post('/video', async (c) => {
-    const auth = requireAuthContext(c)
-    const requestId = c.get('requestId')
-    if (!isServicePrincipal(auth)) assertSameOrigin(c, new URL(config.BETTER_AUTH_URL).origin)
+    const journal = journalRequest(c)
+    const { auth, requestId } = journal
+    return journal.run(async () => {
+      if (!isServicePrincipal(auth)) assertSameOrigin(c, new URL(config.BETTER_AUTH_URL).origin)
 
-    const body = await c.req.json().catch(() => null)
-    if (body === null) {
-      throw new HttpApiError(400, 'invalid_json', 'Request body is not valid JSON.')
-    }
-    const raw = body as Record<string, unknown>
-    const request: VideoRequest = {
-      model: String(raw['model'] ?? ''),
-      prompt: String(raw['prompt'] ?? ''),
-      ...(asString(raw['aspectRatio']) !== undefined ? { aspectRatio: asString(raw['aspectRatio']) } : {}),
-      ...(asString(raw['resolution']) !== undefined ? { resolution: asString(raw['resolution']) } : {}),
-      ...(typeof raw['duration'] === 'number' ? { duration: raw['duration'] } : {}),
-      ...(typeof raw['fps'] === 'number' ? { fps: Math.floor(raw['fps']) } : {}),
-      ...(typeof raw['seed'] === 'number' ? { seed: Math.floor(raw['seed']) } : {}),
-      ...(typeof raw['generateAudio'] === 'boolean' ? { generateAudio: raw['generateAudio'] } : {}),
-      ...(asString(raw['imageUrl']) !== undefined ? { imageUrl: asString(raw['imageUrl']) } : {}),
-      ...(asString(raw['firstFrameUrl']) !== undefined ? { firstFrameUrl: asString(raw['firstFrameUrl']) } : {}),
-      ...(asString(raw['lastFrameUrl']) !== undefined ? { lastFrameUrl: asString(raw['lastFrameUrl']) } : {}),
-      ...(asUrlArray(raw['referenceImages']) !== undefined ? { referenceImages: asUrlArray(raw['referenceImages']) } : {}),
-      ...(asUrlArray(raw['referenceVideos']) !== undefined ? { referenceVideos: asUrlArray(raw['referenceVideos']) } : {}),
-      ...(asUrlArray(raw['referenceAudios']) !== undefined ? { referenceAudios: asUrlArray(raw['referenceAudios']) } : {}),
-      ...(asString(raw['referenceFileUrl']) !== undefined ? { referenceFileUrl: asString(raw['referenceFileUrl']) } : {}),
-      ...(asString(raw['referenceLinkUrl']) !== undefined ? { referenceLinkUrl: asString(raw['referenceLinkUrl']) } : {}),
-      ...(typeof raw['promptExtend'] === 'boolean' ? { promptExtend: raw['promptExtend'] } : {}),
-      ...(typeof raw['watermark'] === 'boolean' ? { watermark: raw['watermark'] } : {}),
-      ...(asString(raw['mode']) !== undefined ? { mode: asString(raw['mode']) } : {}),
-    }
-    if (request.model.trim() === '') throw new HttpApiError(400, 'validation_failed', 'model is required')
-    if (request.prompt.trim() === '' || request.prompt.length > 20_000) {
-      throw new HttpApiError(400, 'validation_failed', 'prompt is required (max 20000 chars)')
-    }
-
-    let entry: MediaCatalogEntry
-    try {
-      entry = resolveMediaCatalogEntry(await loadVideoCatalog(), request.model, keys)
-    } catch (error) {
-      if (error instanceof MediaCatalogError) {
-        throw new HttpApiError(error.status, error.code, error.message)
+      const body = await c.req.json().catch(() => null)
+      if (body === null) {
+        throw new HttpApiError(400, 'invalid_json', 'Request body is not valid JSON.')
       }
-      throw error
-    }
-
-    try {
-      let videos: Array<{ media_type: string; base64: string }>
-      if (deps.videoGenerator) {
-        videos = await deps.videoGenerator(request, entry)
-      } else if (entry.provider === 'fal') {
-        videos = await defaultVideoGenerator(config, request, entry, c.req.raw.signal)
-      } else if (entry.provider === 'kling') {
-        const key = keys.kling
-        if (key === undefined) throw new HttpApiError(503, 'provider_key_missing', 'The media backend is not configured.')
-        videos = await generateKlingVideo(
-          key, entry,
-          {
-            prompt: request.prompt,
-            ...(request.aspectRatio !== undefined ? { aspectRatio: request.aspectRatio } : {}),
-            ...(request.duration !== undefined ? { duration: request.duration } : {}),
-            ...(request.mode !== undefined ? { mode: request.mode } : {}),
-            ...(request.generateAudio !== undefined ? { generateAudio: request.generateAudio } : {}),
-            // image2video first frame: ai-drama sends local files as data URIs;
-            // plain https URLs ride through for the vendor to fetch.
-            ...(request.imageUrl !== undefined ? { imageUrl: request.imageUrl } : {}),
-          },
-          config.MEDIA_REQUEST_TIMEOUT_MS, c.req.raw.signal, deps.pollingDeps,
-        )
-      } else if (POLLING_VIDEO_PROVIDERS.has(entry.provider)) {
-        const key = keys[entry.provider]
-        if (key === undefined) throw new HttpApiError(503, 'provider_key_missing', 'The media backend is not configured.')
-        videos = await generatePollingVideo(
-          entry.provider as 'volcengine' | 'minimax' | 'aliyun',
-          key, entry, request, config.MEDIA_REQUEST_TIMEOUT_MS, c.req.raw.signal, deps.pollingDeps,
-        )
-      } else {
-        throw new HttpApiError(503, 'provider_key_missing', 'Video generation is not available for this provider.')
+      const raw = body as Record<string, unknown>
+      const request: VideoRequest = { ...parseVideoRequest(raw), ...videoReferenceFields(raw) }
+      journal.model(request.model)
+      if (request.model.trim() === '') throw new HttpApiError(400, 'validation_failed', 'model is required')
+      if (request.prompt.trim() === '' || request.prompt.length > 20_000) {
+        throw new HttpApiError(400, 'validation_failed', 'prompt is required (max 20000 chars)')
       }
-      logger.info({ requestId, userId: auth.userId, model: entry.id, videos: videos.length }, 'media video generated')
-      await recordMediaUsage(redis, auth.userId, entry.id, 1)
-      return c.json({ ok: true, videos })
-    } catch (error) {
-      if (error instanceof HttpApiError) throw error
-      logger.warn({ requestId, model: entry.id, err: error }, 'media video generation failed')
-      throw new HttpApiError(502, 'internal_error', 'Media generation failed.')
-    }
+
+      const entry = await resolveEntry(loadVideoCatalog(), request.model, keys)
+      journal.model(entry.id)
+
+      try {
+        let videos: Array<{ media_type: string; base64: string }>
+        if (deps.videoGenerator) {
+          videos = await deps.videoGenerator(request, entry)
+        } else if (entry.provider === 'fal') {
+          videos = await defaultVideoGenerator(config, request, entry, c.req.raw.signal)
+        } else if (entry.provider === 'kling') {
+          const key = keys.kling
+          if (key === undefined) throw new HttpApiError(503, 'provider_key_missing', 'The media backend is not configured.')
+          videos = await generateKlingVideo(
+            key, entry,
+            {
+              prompt: request.prompt,
+              ...(request.aspectRatio !== undefined ? { aspectRatio: request.aspectRatio } : {}),
+              ...(request.duration !== undefined ? { duration: request.duration } : {}),
+              ...(request.mode !== undefined ? { mode: request.mode } : {}),
+              ...(request.generateAudio !== undefined ? { generateAudio: request.generateAudio } : {}),
+              // image2video first frame: ai-drama sends local files as data URIs;
+              // plain https URLs ride through for the vendor to fetch.
+              ...(request.imageUrl !== undefined ? { imageUrl: request.imageUrl } : {}),
+            },
+            config.MEDIA_REQUEST_TIMEOUT_MS, c.req.raw.signal, deps.pollingDeps,
+          )
+        } else if (POLLING_VIDEO_PROVIDERS.has(entry.provider)) {
+          const key = keys[entry.provider]
+          if (key === undefined) throw new HttpApiError(503, 'provider_key_missing', 'The media backend is not configured.')
+          videos = await generatePollingVideo(
+            entry.provider as 'volcengine' | 'minimax' | 'aliyun',
+            key, entry, request, config.MEDIA_REQUEST_TIMEOUT_MS, c.req.raw.signal, deps.pollingDeps,
+          )
+        } else {
+          throw new HttpApiError(503, 'provider_key_missing', 'Video generation is not available for this provider.')
+        }
+        logger.info({ requestId, userId: auth.userId, model: entry.id, videos: videos.length }, 'media video generated')
+        await recordMediaUsage(redis, auth.userId, entry.id, 1)
+        return c.json({ ok: true, videos })
+      } catch (error) {
+        if (error instanceof HttpApiError) throw error
+        logger.warn({ requestId, model: entry.id, err: error }, 'media video generation failed')
+        throw new HttpApiError(502, 'internal_error', 'Media generation failed.')
+      }
+    })
   })
 
   // Internalized fal queue (ai-drama's production tools): the submit payload
@@ -313,40 +383,43 @@ export function createMediaRoutes(deps: MediaRoutesDeps): Hono<AppEnv> {
   // the mount; the caller must be a service principal and the poll/download
   // loop runs on this server's key within the media request deadline.
   routes.post('/queue', async (c) => {
-    const auth = requireAuthContext(c)
-    if (!isServicePrincipal(auth)) {
-      throw new HttpApiError(403, 'forbidden', 'The queue endpoint serves internal services only.')
-    }
-    if (!keys.fal) throw new HttpApiError(503, 'provider_key_missing', 'The media backend is not configured.')
+    const journal = journalRequest(c)
+    const { auth, requestId } = journal
+    return journal.run(async () => {
+      if (!isServicePrincipal(auth)) {
+        throw new HttpApiError(403, 'forbidden', 'The queue endpoint serves internal services only.')
+      }
+      if (!keys.fal) throw new HttpApiError(503, 'provider_key_missing', 'The media backend is not configured.')
 
-    const body = await c.req.json().catch(() => null)
-    if (body === null || typeof body !== 'object' || Array.isArray(body)) {
-      throw new HttpApiError(400, 'invalid_json', 'Request body is not valid JSON.')
-    }
-    const raw = body as Record<string, unknown>
-    const model = typeof raw['model'] === 'string' ? raw['model'].trim() : ''
-    if (!FAL_MODEL_ID.test(model)) {
-      throw new HttpApiError(400, 'validation_failed', 'model must be a fal directory id like fal-ai/flux/schnell')
-    }
-    const input = raw['input']
-    if (input !== undefined && (typeof input !== 'object' || input === null || Array.isArray(input))) {
-      throw new HttpApiError(400, 'validation_failed', 'input must be a JSON object')
-    }
+      const body = await c.req.json().catch(() => null)
+      if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+        throw new HttpApiError(400, 'invalid_json', 'Request body is not valid JSON.')
+      }
+      const raw = body as Record<string, unknown>
+      const model = typeof raw['model'] === 'string' ? raw['model'].trim() : ''
+      journal.model(model)
+      if (!FAL_MODEL_ID.test(model)) {
+        throw new HttpApiError(400, 'validation_failed', 'model must be a fal directory id like fal-ai/flux/schnell')
+      }
+      const input = raw['input']
+      if (input !== undefined && (typeof input !== 'object' || input === null || Array.isArray(input))) {
+        throw new HttpApiError(400, 'validation_failed', 'input must be a JSON object')
+      }
 
-    const requestId = c.get('requestId')
-    try {
-      const result = await generateFalQueue(
-        keys.fal, model, (input ?? {}) as Record<string, unknown>,
-        config.MEDIA_REQUEST_TIMEOUT_MS, c.req.raw.signal, deps.pollingDeps,
-      )
-      logger.info({ requestId, userId: auth.userId, model, assets: result.assets.length }, 'fal queue generated')
-      await recordMediaUsage(redis, auth.userId, model, 1)
-      return c.json({ ok: true, request_id: result.requestId, assets: result.assets })
-    } catch (error) {
-      if (error instanceof HttpApiError) throw error
-      logger.warn({ requestId, model, err: error }, 'fal queue generation failed')
-      throw new HttpApiError(502, 'internal_error', 'Media generation failed.')
-    }
+      try {
+        const result = await generateFalQueue(
+          keys.fal, model, (input ?? {}) as Record<string, unknown>,
+          config.MEDIA_REQUEST_TIMEOUT_MS, c.req.raw.signal, deps.pollingDeps,
+        )
+        logger.info({ requestId, userId: auth.userId, model, assets: result.assets.length }, 'fal queue generated')
+        await recordMediaUsage(redis, auth.userId, model, 1)
+        return c.json({ ok: true, request_id: result.requestId, assets: result.assets })
+      } catch (error) {
+        if (error instanceof HttpApiError) throw error
+        logger.warn({ requestId, model, err: error }, 'fal queue generation failed')
+        throw new HttpApiError(502, 'internal_error', 'Media generation failed.')
+      }
+    })
   })
 
   return routes

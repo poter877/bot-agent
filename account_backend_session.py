@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import tempfile
 import threading
 import urllib.error
@@ -26,6 +27,43 @@ ACCOUNT_AUTH_COOKIE_FILE = "account-auth-cookies.txt"
 _ACCOUNT_LOCKS: dict[str, threading.RLock] = {}
 _ACCOUNT_LOCKS_LOCK = threading.Lock()
 _ACCOUNT_GENERATIONS: dict[str, tuple[int, threading.Event]] = {}
+
+# X-Correlation-Id contract shared by ai-drama → gateway api_server → company
+# backend: ≤128 chars of [A-Za-z0-9._:-], caller-chosen, recorded verbatim.
+CORRELATION_ID_HEADER = "X-Correlation-Id"
+_CORRELATION_ID_RE = re.compile(r"[A-Za-z0-9._:-]{1,128}")
+
+
+def sanitize_correlation_id(raw: object) -> str | None:
+    """Return the header value when it fits the wire contract, else None."""
+    if not isinstance(raw, str):
+        return None
+    value = raw.strip()
+    return value if _CORRELATION_ID_RE.fullmatch(value) else None
+
+
+_REQUEST_CORRELATION_ID: ContextVar[str | None] = ContextVar(
+    "request_correlation_id", default=None)
+
+
+def current_request_correlation_id() -> str | None:
+    """The inbound request's sanitized correlation id, when this context serves one."""
+    return _REQUEST_CORRELATION_ID.get()
+
+
+@contextmanager
+def request_correlation_scope(correlation_id: str | None):
+    """Bind the request correlation id for the duration of an inbound request.
+
+    The gateway api_server sets this per handled request; outbound company-backend
+    calls (model stream + account backend HTTP) copy it into the
+    ``X-Correlation-Id`` header so bot-backend journals can be joined back to the
+    originating turn. ContextVar semantics keep concurrent requests isolated."""
+    token = _REQUEST_CORRELATION_ID.set(correlation_id)
+    try:
+        yield
+    finally:
+        _REQUEST_CORRELATION_ID.reset(token)
 
 
 class AccountBackendError(RuntimeError):
@@ -200,11 +238,14 @@ def _request_account_backend(path: str, *, payload: dict | None, timeout: float)
     jar = load_account_auth_jar()
     opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar), _NoBackendRedirects())
     parsed = urlsplit(base)
+    headers = {"Content-Type": "application/json", "Accept": "application/json",
+               "Origin": f"{parsed.scheme}://{parsed.netloc}"}
+    if (correlation_id := current_request_correlation_id()) is not None:
+        headers[CORRELATION_ID_HEADER] = correlation_id
     request = urllib.request.Request(
         base + path, data=json.dumps(payload).encode() if payload is not None else None,
         method="POST" if payload is not None else "GET",
-        headers={"Content-Type": "application/json", "Accept": "application/json",
-                 "Origin": f"{parsed.scheme}://{parsed.netloc}"},
+        headers=headers,
     )
     try:
         with opener.open(request, timeout=timeout) as response:

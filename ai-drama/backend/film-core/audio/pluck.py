@@ -105,7 +105,7 @@ PRESETS = {
 def _excite(kind, N, vel, pos, bright, noise):
     """激励：初始位移形状（按拨弦位置的三角形）+ 少量噪声，按力度/亮度低通"""
     n = max(4, int(N))
-    k = max(1, int(round(pos * n)))
+    k = max(1, round(pos * n))
     tri = np.concatenate([np.linspace(0, 1, k, endpoint=False), np.linspace(1, 0, n - k)])
     e = tri - tri.mean()
     if kind in ('pick', 'bachi'):   # 拨片：更尖锐的初始速度 + 高频
@@ -114,7 +114,7 @@ def _excite(kind, N, vel, pos, bright, noise):
     fc = float(np.clip(700 + 15000 * bright * vel ** 1.3, 400, SR / 2 * .9))
     e = sosfilt(butter(2, fc, 'low', fs=SR, output='sos'), np.concatenate([e, np.zeros(n)]))[:n]
     # 拨弦位置梳状（去掉节点处的谐波）
-    d = int(round(pos * n)); e2 = e.copy(); e2[d:] -= e[:-d] * .6 if d > 0 else 0
+    d = round(pos * n); e2 = e.copy(); e2[d:] -= e[:-d] * .6 if d > 0 else 0
     return e2 / (np.abs(e2).max() + 1e-9)
 
 
