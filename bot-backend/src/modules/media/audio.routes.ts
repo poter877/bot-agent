@@ -4,7 +4,7 @@ import type { RedisClientType } from 'redis'
 import type { AppConfig } from '../../config/env.js'
 import type { Db } from '../../db/client.js'
 import type { AppEnv } from '../../shared/context.js'
-import { isServicePrincipal, requireAuthContext } from '../../shared/context.js'
+import { isNonBrowserPrincipal, requireAuthContext } from '../../shared/context.js'
 import { HttpApiError, assertSameOrigin } from '../../shared/http.js'
 import type { Logger } from '../../shared/logger.js'
 import { recordRequestLog } from '../llm/requestLog.js'
@@ -125,7 +125,7 @@ export function createAudioRoutes(deps: AudioRoutesDeps): Hono<AppEnv> {
     const journal = journalRequest(c)
     const { auth } = journal
     return journal.run(async () => {
-      if (!isServicePrincipal(auth)) assertSameOrigin(c, new URL(config.BETTER_AUTH_URL).origin)
+      if (!isNonBrowserPrincipal(auth)) assertSameOrigin(c, new URL(config.BETTER_AUTH_URL).origin)
 
       const raw = asRecord(await c.req.json().catch(() => null))
       if (raw === null) throw new HttpApiError(400, 'invalid_json', 'Request body is not valid JSON.')
@@ -169,7 +169,7 @@ export function createAudioRoutes(deps: AudioRoutesDeps): Hono<AppEnv> {
     const journal = journalRequest(c)
     const { auth } = journal
     return journal.run(async () => {
-      if (!isServicePrincipal(auth)) assertSameOrigin(c, new URL(config.BETTER_AUTH_URL).origin)
+      if (!isNonBrowserPrincipal(auth)) assertSameOrigin(c, new URL(config.BETTER_AUTH_URL).origin)
 
       const form = await c.req.formData().catch(() => null)
       if (form === null) throw new HttpApiError(400, 'invalid_json', 'A multipart form with a file field is required.')

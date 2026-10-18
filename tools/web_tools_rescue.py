@@ -52,8 +52,15 @@ def _rescue_eligible(provider) -> bool:
     Eligible: any call that did NOT go through the keyless ring — a non-ring backend, a ring vendor
     in keyed mode, or a ring vendor routed through a self-hosted instance. A
     ring vendor that walked the ring is NOT eligible: its failure means the ring already failed.
+
+    公司模式硬切：keyless 救场环也是厂商匿名额度，公司模式的兜底是公司工具
+    网关（tools/web_tools_company.py），本地失败让厂商的真实错误浮出。
     """
     if not _keyless_rescue_enabled() or provider is None:
+        return False
+    from tools.web_tools import company_mode
+
+    if company_mode():
         return False
     try:
         from plugins.web.keyless_mcp import _KEYLESS_RING

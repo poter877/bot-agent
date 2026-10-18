@@ -20,6 +20,7 @@ from plugins.web.firecrawl.provider import check_firecrawl_api_key
 from tools.debug_helpers import DebugSession
 from tools.tool_backend_helpers import selection_exists
 from tools.url_safety import async_is_safe_url
+from tools.web_tools_company import company_gateway_search, company_mode, locally_keyed_provider
 from tools.web_tools_rescue import _rescue_eligible, _rescue_search
 from tools.web_tools_truncate import _effective_char_limit, _trim_results, _truncate_results, convert_base64_images_to_links
 from tools.web_tools_extract import (
@@ -297,7 +298,13 @@ def web_search_tool(query: str, limit: int = 5) -> str:
             # Never-configured install: legacy availability-walked autodetect.
             provider = get_active_search_provider()
 
-        if provider is None:
+        if company_mode() and not locally_keyed_provider(provider):
+            # 公司模式解析链：本地已配置密钥的 provider 优先（现状保留）→ 公司
+            # 工具网关 /api/tools/search（服务端持厂商密钥）。本地 keyless/DDG
+            # 兜底被硬切——对齐 image_generation_tool 的公司模式先例（公司模式
+            # 从不花厂商匿名额度）。网关结果不进本地 memo：记账在公司侧。
+            response_data = company_gateway_search(query, limit)
+        elif provider is None:
             fallback = "No web search provider configured. Run `hermes tools` to set one up."
             response_data = {"success": False, "error": _no_provider_error("search", fallback)}
         else:
@@ -471,6 +478,15 @@ def check_web_api_key() -> bool:
         return False
 
 
+def _web_search_check() -> bool:
+    """``check_fn`` gate for web_search: any local web backend, or company mode.
+
+    公司模式下工具网关用服务端密钥服务搜索，零本地凭证也该点亮 web_search
+    （web_extract 没有网关能力，维持 :func:`check_web_api_key` 的本地判定）。
+    """
+    return check_web_api_key() or company_mode()
+
+
 # ─── Registry ─────────────────────────────────────────────────────────────────
 from tools.registry import registry, tool_error
 
@@ -521,7 +537,7 @@ WEB_EXTRACT_SCHEMA = {
 registry.register(
     name="web_search", toolset="web", schema=WEB_SEARCH_SCHEMA,
     handler=lambda args, **kw: web_search_tool(args.get("query", ""), limit=args.get("limit", 5)),
-    check_fn=check_web_api_key, requires_env=_web_requires_env(), emoji="🔍",
+    check_fn=_web_search_check, requires_env=_web_requires_env(), emoji="🔍",
     max_result_size_chars=100_000,
 )
 registry.register(

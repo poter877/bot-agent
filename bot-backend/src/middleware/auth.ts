@@ -9,9 +9,19 @@ import type { Auth } from '../modules/auth/auth.js'
  * client claim. `disableCookieCache` forces the authoritative store lookup on
  * every request so a revoked or expired session cannot ride on a cached
  * cookie. A database failure is 503, never an implicit allow.
+ *
+ * When an earlier middleware has already settled the identity with an equally
+ * verified credential (a `bat_` user API token — see authenticateUserToken),
+ * the session check steps aside instead of rejecting the cookie-less request.
+ * Only auth-writing middleware registered before this one can set the context;
+ * handlers still read identity exclusively from `c.get('auth')`.
  */
 export function authenticate(auth: Auth): MiddlewareHandler<AppEnv> {
   return async (c, next) => {
+    if (c.get('auth') !== undefined) {
+      await next()
+      return
+    }
     let result: { session: { id: string; userId: string }; user: { id: string } } | null
     try {
       result = (await auth.api.getSession({

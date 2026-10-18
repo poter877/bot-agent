@@ -97,6 +97,16 @@ const envSchema = z.object({
   MEDIA_SERVICE_TOKEN: z.string().min(24).optional(),
   MEDIA_SERVICE_USER_ID: z.string().min(1).default('company-media'),
 
+  // Managed tool gateway — unified search (the Tool Gateway's first capability:
+  // 服务端持厂商密钥，客户端零密钥). Catalog follows the media catalogs' shape
+  // ([{id, provider, enabled, priority?}]); keys stay server-side and missing
+  // keys fail closed with 503 (no keyless DDG fallback — that is hermes-local).
+  TOOLS_SEARCH_CATALOG: z.string().default('[]'),
+  TAVILY_API_KEY: z.string().optional(),
+  BRAVE_API_KEY: z.string().optional(),
+  RATE_LIMIT_TOOLS_MAX: z.coerce.number().int().min(1).default(60),
+  RATE_LIMIT_TOOLS_WINDOW_SECONDS: z.coerce.number().int().min(1).default(60),
+
   // A private worker owns Docker. The public API never mounts its socket.
   CLOUD_COMPUTER_ENABLED: z.enum(['true', 'false']).default('false').transform((value) => value === 'true'),
   CLOUD_COMPUTER_WORKER_URL: z.string().url().optional(),

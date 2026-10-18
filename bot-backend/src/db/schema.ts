@@ -182,3 +182,58 @@ export const llmRequestLog = pgTable(
 )
 
 export type LlmRequestLogRow = typeof llmRequestLog.$inferSelect
+
+// ── 用户自服务层（account portal + API tokens + device login） ──
+
+/**
+ * User-owned bearer tokens for programmatic API access (`bat_` prefix). Only
+ * the sha256 hash is stored — the plaintext appears exactly once, in the
+ * creation response (portal page or JSON API), and can never be recovered.
+ * Revocation is a timestamp, not a delete, so usage history stays attributable.
+ */
+export const apiTokens = pgTable(
+  'api_tokens',
+  {
+    id: text('id').primaryKey(),
+    hash: text('hash').notNull().unique(), // sha256 hex of the full bat_… secret
+    name: text('name').notNull(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  },
+  (table) => [
+    index('api_tokens_user_idx').on(table.userId),
+    index('api_tokens_hash_idx').on(table.hash),
+  ],
+)
+
+export type ApiTokenRow = typeof apiTokens.$inferSelect
+
+/**
+ * Device-login codes for headless terminals (hermes 无头 profile 换令牌，替代
+ * 手工 cookie jar 手术). The code itself is only stored hashed; userId stays
+ * null until a session-authenticated user approves it on the portal. Expiry
+ * and consumption are enforced by query predicates — no cleanup cron: stale
+ * rows are filtered out and age away naturally.
+ */
+export const deviceCodes = pgTable(
+  'device_codes',
+  {
+    id: text('id').primaryKey(),
+    codeHash: text('code_hash').notNull().unique(), // sha256 hex of the normalized XXXXXXXX code
+    /** Bound at approval time; null until then. */
+    userId: text('user_id').references(() => user.id, { onDelete: 'cascade' }),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    approvedAt: timestamp('approved_at', { withTimezone: true }),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    /** Applicant's User-Agent, shown on the approval page. */
+    userAgent: text('user_agent'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('device_codes_expires_at_idx').on(table.expiresAt)],
+)
+
+export type DeviceCodeRow = typeof deviceCodes.$inferSelect

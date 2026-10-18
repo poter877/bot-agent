@@ -25,6 +25,21 @@ export function isServicePrincipal(auth: AuthContext): boolean {
   return auth.sessionId.startsWith('service:')
 }
 
+/**
+ * A user API token (`bat_` bearer) authenticates a non-browser client: no
+ * cookies ride the request, so browser-only admissions (same-origin checks)
+ * must not apply — same stance as service principals, but user-scoped.
+ */
+export function isApiTokenPrincipal(auth: AuthContext): boolean {
+  return auth.sessionId === 'api-token'
+}
+
+/** Non-browser principals (service tokens, user API tokens): exempt from the
+ * browser-only same-origin admission while every quota/limit still applies. */
+export function isNonBrowserPrincipal(auth: AuthContext): boolean {
+  return isServicePrincipal(auth) || isApiTokenPrincipal(auth)
+}
+
 export type AppBindings = {
   Variables: {
     requestId: string

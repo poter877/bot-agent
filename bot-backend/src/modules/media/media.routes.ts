@@ -4,7 +4,7 @@ import type { RedisClientType } from 'redis'
 import type { AppConfig } from '../../config/env.js'
 import type { Db } from '../../db/client.js'
 import type { AppEnv } from '../../shared/context.js'
-import { isServicePrincipal, requireAuthContext } from '../../shared/context.js'
+import { isNonBrowserPrincipal, isServicePrincipal, requireAuthContext } from '../../shared/context.js'
 import { HttpApiError, assertSameOrigin } from '../../shared/http.js'
 import type { Logger } from '../../shared/logger.js'
 import { recordRequestLog } from '../llm/requestLog.js'
@@ -268,7 +268,7 @@ export function createMediaRoutes(deps: MediaRoutesDeps): Hono<AppEnv> {
     const { auth, requestId } = journal
     return journal.run(async () => {
       // 服务主体是服务器到服务器调用，浏览器同源约束不适用。
-      if (!isServicePrincipal(auth)) assertSameOrigin(c, new URL(config.BETTER_AUTH_URL).origin)
+      if (!isNonBrowserPrincipal(auth)) assertSameOrigin(c, new URL(config.BETTER_AUTH_URL).origin)
 
       const body = await c.req.json().catch(() => null)
       if (body === null) {
@@ -317,7 +317,7 @@ export function createMediaRoutes(deps: MediaRoutesDeps): Hono<AppEnv> {
     const journal = journalRequest(c)
     const { auth, requestId } = journal
     return journal.run(async () => {
-      if (!isServicePrincipal(auth)) assertSameOrigin(c, new URL(config.BETTER_AUTH_URL).origin)
+      if (!isNonBrowserPrincipal(auth)) assertSameOrigin(c, new URL(config.BETTER_AUTH_URL).origin)
 
       const body = await c.req.json().catch(() => null)
       if (body === null) {

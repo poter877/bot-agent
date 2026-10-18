@@ -138,6 +138,24 @@ ai-drama 领域工具需用该 profile 的 toolsets 配置，集成本身不要�
   ④ 可选端到端一次真实 turn（设 `DRAMA_ACCOUNT_EMAIL/PASSWORD`：脚本登录 bot-backend
   并把会话写进 drama home 的 `account-auth-cookies.txt`）。
 
+## 账号自服务层（对标上游 Portal 的账号面）
+
+- **API 令牌**：`POST /api/account/tokens`（会话登录）签发 `bat_` 前缀的按用户令牌；
+  `Authorization: Bearer bat_…` 与会话 cookie、服务令牌同权访问 `/api/llm/*`、`/api/media/*`。
+  明文只在签发响应出现一次，库存为 sha256 哈希。
+- **设备码登录**（无头终端的 `hermes portal` 等价物）：`POST /api/auth/device/code` 取
+  `XXXX-XXXX` 码与 `verify_url` → 用户在 `/account/device` 页批准 → 终端
+  `POST /api/auth/device/token` 轮询换得 API 令牌。替代往 profile 手工装 cookie jar。
+- **用户门户 `/account`**：用量总览（近 7 天请求/失败/token/按模型，Redis 账本 +
+  `llm_request_log`）、活跃会话管理、令牌管理、改密。运营后台 `/admin` 仍是运维专属。
+
+## 托管工具网关（对标上游 Tool Gateway）
+
+`POST /api/tools/search`（会话或服务令牌）：服务端持 `TAVILY_API_KEY`/`BRAVE_API_KEY`，
+目录 `TOOLS_SEARCH_CATALOG` 决定可用项与优先级，结果归一 `{title,url,snippet}[]`，用量
+记 `tools:usage:*`。hermes 公司模式下 `web_search` 解析链：本地已配密钥的 provider →
+公司网关（无本地 DDG 匿名兜底，硬切先例）。
+
 ## 术语表
 
 | 术语 | 含义 |

@@ -23,6 +23,9 @@ export const ERROR_CODES = [
   'model_not_allowed',
   'provider_key_missing',
   'conflict',
+  // device-login flow states (POST /api/auth/device/*)
+  'authorization_pending',
+  'device_code_expired',
   // 413/415
   'payload_too_large',
   'unsupported_media_type',

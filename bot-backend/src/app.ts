@@ -12,6 +12,8 @@ import { correlationIdMiddleware } from './middleware/correlationId.js'
 import { accessLogMiddleware } from './middleware/accessLog.js'
 import { securityMiddleware } from './middleware/security.js'
 import { realIpMiddleware } from './middleware/realIp.js'
+import { mountAccount } from './modules/account/mount.js'
+import { mountToolsGateway } from './modules/tools/mount.js'
 import { processingTimeout } from './middleware/timeout.js'
 import { bodyPolicyMiddleware } from './middleware/bodyPolicy.js'
 import { byAuthUserId, accountBucketKey, rateLimitMiddleware, enforceBucket } from './middleware/rateLimit.js'
@@ -114,6 +116,8 @@ export async function createApp(deps: AppDeps): Promise<App> {
   // Media generation (video especially) legitimately runs for minutes: give the
   // media tree its own budget BEFORE the global mount, which would kill it at 10s.
   app.use('/api/media/*', processingTimeout(config.MEDIA_REQUEST_TIMEOUT_MS))
+  // Managed tool gateway (search today): own short budget before the global mount.
+  mountToolsGateway(app, { config, auth, redis, logger })
   app.use(processingTimeout(config.REQUEST_TIMEOUT_MS))
 
   for (const tree of ['/api/auth/*', '/v1/*']) {
@@ -166,6 +170,10 @@ export async function createApp(deps: AppDeps): Promise<App> {
       windowSeconds: config.RATE_LIMIT_REGISTER_IP_WINDOW_SECONDS,
     },
   ] as const
+
+  // User self-service (API tokens, device-code flow, /account portal) mounts its
+  // trees and the bat_ bearer check ahead of the wildcard handler below.
+  mountAccount(app, { config, db, redis: redis.commands, logger, auth })
 
   app.all('/api/auth/*', async (c) => {
     const contentType = c.req.header('content-type') ?? ''

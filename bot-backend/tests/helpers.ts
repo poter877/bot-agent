@@ -1,14 +1,20 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
+import { Hono } from 'hono'
 import { loadConfig, type Config } from '../src/config/env.js'
 import { closeDatabase, createDatabase, type Database } from '../src/db/client.js'
 import { closeRedisConnections, createRedisConnections, type RedisConnections } from '../src/redis/client.js'
 import { createLogger, type Logger } from '../src/shared/logger.js'
 import { createApp } from '../src/app.js'
+import { errorHandler, notFoundHandler } from '../src/middleware/errorHandler.js'
+import { realIpMiddleware } from '../src/middleware/realIp.js'
+import { bodyPolicyMiddleware } from '../src/middleware/bodyPolicy.js'
+import { rateLimitMiddleware } from '../src/middleware/rateLimit.js'
+import { mountAccount } from '../src/modules/account/mount.js'
+import { mountToolsGateway } from '../src/modules/tools/mount.js'
 import type { MediaCatalogEntry } from '../src/modules/media/catalog.js'
 import type { createMediaRoutes } from '../src/modules/media/media.routes.js'
 import type { AudioRoutesDeps } from '../src/modules/media/audio.routes.js'
-import type { Hono } from 'hono'
 import type { AppEnv } from '../src/shared/context.js'
 import type { CloudComputerService } from '../src/modules/cloud-computer/service.js'
 
@@ -42,6 +48,9 @@ export async function createTestApp(
   cloudComputer?: Parameters<typeof createApp>[0]['cloudComputer'],
   media?: Pick<Parameters<typeof createMediaRoutes>[0], 'imageGenerator' | 'videoGenerator' | 'imageCatalog' | 'videoCatalog' | 'pollingDeps'>,
   audio?: Pick<AudioRoutesDeps, 'speechGenerator' | 'transcriber'>,
+  /** Mount the managed tool gateway (/api/tools) — the app.ts snippet runs in
+   * the main session; tests exercise the same mountToolsGateway call. */
+  tools?: boolean,
 ): Promise<TestApp> {
   const infra = testInfra()
   const config = loadConfig({
@@ -59,14 +68,40 @@ export async function createTestApp(
   })
   const redis = await createRedisConnections(config.REDIS_URL)
   const logger = createLogger(config)
-  const { hono, cloudComputers } = await createApp({ config, database, redis, logger, llm, cloudComputer, media, audio })
+  const real = await createApp({ config, database, redis, logger, llm, cloudComputer, media, audio })
+  if (tools) {
+    // Same helper the app.ts snippet calls: entry-ip guard → session/service
+    // auth → tools-scope per-user budget → routes, on the real app tree.
+    mountToolsGateway(real.hono, { config, auth: real.auth, redis, logger })
+  }
+  // src/app.ts 由主会话统一接线：这里用同一份 mountAccount（生产挂载片段）
+  // 包一层，仅补齐生产里由 /api/auth/* 树提供的 body/entry-ip 策略与 realIp
+  // （wrapper 内设备码路由先于真 app 命中，拿不到 app 内的全局中间件）。
+  const app = new Hono<AppEnv>()
+  app.onError(errorHandler(logger))
+  // route() 合并的是路由而非 sub-app 的 notFound：未命中路径由 wrapper 自己兜底。
+  app.notFound(notFoundHandler())
+  app.use(realIpMiddleware(config.TRUSTED_PROXIES))
+  app.use('/api/auth/device/*', bodyPolicyMiddleware(config.API_BODY_LIMIT_BYTES))
+  app.use(
+    '/api/auth/device/*',
+    rateLimitMiddleware({
+      redis: redis.commands,
+      scope: 'entry-ip',
+      limit: config.RATE_LIMIT_ENTRY_MAX,
+      windowSeconds: config.RATE_LIMIT_ENTRY_WINDOW_SECONDS,
+      subject: (c) => c.get('realIp'),
+    }),
+  )
+  mountAccount(app, { config, db: database.db, redis: redis.commands, logger, auth: real.auth })
+  app.route('/', real.hono)
   return {
     config,
     database,
     redis,
     logger,
-    app: hono,
-    cloudComputers,
+    app,
+    cloudComputers: real.cloudComputers,
     close: async () => {
       await closeRedisConnections(redis)
       await closeDatabase(database)
@@ -75,7 +110,9 @@ export async function createTestApp(
 }
 
 export async function truncateAll(database: Database): Promise<void> {
-  await database.pool.query('TRUNCATE "user", session, account, verification, llm_models, media_models, user_quotas, llm_request_log CASCADE')
+  await database.pool.query(
+    'TRUNCATE "user", session, account, verification, llm_models, media_models, user_quotas, llm_request_log, api_tokens, device_codes CASCADE',
+  )
 }
 
 export async function flushRateLimits(redis: RedisConnections): Promise<void> {
