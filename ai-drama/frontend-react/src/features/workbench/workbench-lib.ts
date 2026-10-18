@@ -4,7 +4,7 @@
  */
 import type { Character, Prop, Scene } from '@/entities/asset/model'
 import type { Storyboard } from '@/entities/storyboard/model'
-import type { AiConfig } from '@/entities/ai-config/model'
+import type { AiConfig, CompanyModelCatalog } from '@/entities/ai-config/model'
 
 // ===== 资产视图（Character/Scene/Prop 的统一只读访问器，供详情弹窗等使用） =====
 
@@ -98,6 +98,8 @@ export interface ModelOption {
   /** 旧版 'provider/model' 复合键，仅用于偏好迁移匹配 */
   legacyKey: string
   model: string
+  /** 目录 displayName（与 id 不同时展示） */
+  label?: string
   provider: string
   configId: number
   configName: string
@@ -122,11 +124,49 @@ export function collectModelOptions(cfgs: AiConfig[]): ModelOption[] {
   return out
 }
 
+/**
+ * 目录优先的模型选项：公司目录是模型 id 的唯一真相源（配置行 model 只是历史
+ * 收藏），目录条目挂到该类型当前启用配置上；defaultModel 排首位作为默认。
+ * 配置行里目录没有的模型（工具行/历史行）追加在后，按 key 去重。
+ */
+export function mergeModelOptions(cfgs: AiConfig[], catalog: CompanyModelCatalog | undefined): ModelOption[] {
+  const fromConfigs = collectModelOptions(cfgs)
+  if (!catalog || !catalog.models.length) return fromConfigs
+  const active = [...cfgs].filter((c) => c.isActive).sort((a, b) => (b.priority || 0) - (a.priority || 0))[0]
+  if (!active) return fromConfigs
+  const ordered = catalog.defaultModel
+    ? [...catalog.models].sort((a, b) => (a.id === catalog.defaultModel ? -1 : b.id === catalog.defaultModel ? 1 : 0))
+    : catalog.models
+  const out: ModelOption[] = ordered.map((entry) => ({
+    key: `${active.id}:${entry.id}`,
+    legacyKey: `${active.provider}/${entry.id}`,
+    model: entry.id,
+    ...(entry.displayName && entry.displayName !== entry.id ? { label: entry.displayName } : {}),
+    provider: active.provider,
+    configId: active.id,
+    configName: active.name || active.provider,
+  }))
+  const seen = new Set(out.map((o) => o.key))
+  for (const option of fromConfigs) {
+    if (!seen.has(option.key)) {
+      seen.add(option.key)
+      out.push(option)
+    }
+  }
+  return out
+}
+
 /** 复合键 → 裸模型名（后端适配器按厂商校验模型名，不能带 provider 前缀） */
 export function bareModelName(key: string | undefined | null): string {
   if (!key) return ''
   const i = key.indexOf('/')
   return i >= 0 ? key.slice(i + 1) : key
+}
+
+/** 选择键 → 裸模型名：优先查选项表（目录 id 可含 ':'/'/'，不能靠字符串切割） */
+export function modelOfKey(options: ModelOption[], key: string | undefined | null): string {
+  if (!key) return ''
+  return options.find((o) => o.key === key)?.model || bareModelName(key)
 }
 
 export function ownerConfigId(options: ModelOption[], key: string | undefined | null): number | undefined {

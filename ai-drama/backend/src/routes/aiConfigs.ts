@@ -5,6 +5,7 @@ import { success, notFound, created, badRequest, now } from '../utils/response.j
 import { toSnakeCase } from '../utils/transform.js'
 import { isOfficialProvider, parseConfigTemperature, parseServiceOptions } from '../services/ai.js'
 import { companyBackendUrl, companyBaseUrl, companyConfigured, companyServiceToken } from '../services/company-backend.js'
+import { fetchCompanyModelCatalog, isCompanyModelKind } from '../services/company-model-catalog.js'
 import { redactUrl, logTaskError, logTaskProgress, logTaskSuccess } from '../utils/task-logger.js'
 
 import { migrateServiceConfigs, configModels, validateServiceConfig, toolServices } from '../services/ai-registry.js'
@@ -207,20 +208,16 @@ app.post('/test', async (c) => {
   }
 })
 
-// GET /ai-configs/company-models — 公司 LLM 目录（前端模型下拉数据源；令牌由服务端注入）
+// GET /ai-configs/company-models?kind=text|image|video|speech|transcription
+// 公司模型目录代理（前端模型下拉的唯一数据源；令牌由服务端注入）。
+// 返回 { models: [{id, displayName}], defaultModel }：text 转发 /api/llm/models
+// （defaultModel 直通），媒体 kind 转发 /api/media/models 并按 kind 过滤（默认取首项）。
 app.get('/company-models', async (c) => {
   if (!companyConfigured()) return badRequest(c, '未配置公司后端（COMPANY_BACKEND_URL / COMPANY_SERVICE_TOKEN）')
+  const kind = c.req.query('kind') || 'text'
+  if (!isCompanyModelKind(kind)) return badRequest(c, 'kind 须为 text/image/video/speech/transcription')
   try {
-    const resp = await fetch(`${companyBackendUrl()}/api/llm/models`, {
-      headers: { Authorization: `Bearer ${companyServiceToken()}` },
-      signal: AbortSignal.timeout(30000),
-    })
-    if (!resp.ok) return badRequest(c, `公司模型目录请求失败（${resp.status}）`)
-    const payload = await resp.json() as any
-    // bot-backend publicModelCatalog: { models: [{ id, … }], defaultModel }；
-    // 兼容 OpenAI { data: [{ id }] } 形，便于目录端点将来换协议。
-    const list = Array.isArray(payload?.models) ? payload.models : Array.isArray(payload?.data) ? payload.data : []
-    return success(c, list.map((item: any) => (typeof item?.id === 'string' ? item.id : '')).filter(Boolean))
+    return success(c, await fetchCompanyModelCatalog(kind))
   } catch (error: any) {
     return badRequest(c, error.message || '公司模型目录请求失败')
   }

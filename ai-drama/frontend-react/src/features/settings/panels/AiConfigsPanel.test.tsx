@@ -56,7 +56,8 @@ describe('AiConfigsPanel interactions', { timeout: 30_000 }, () => {
     vi.spyOn(aiConfigApi, 'list').mockResolvedValue([])
     mountPanel()
     await user.click(screen.getByRole('button', { name: '文本' }))
-    const input = screen.getByPlaceholderText(/模型名/) as HTMLInputElement
+    // 文本预设即 company：手动输入是「自定义目录 id」兜底入口
+    const input = screen.getByPlaceholderText(/自定义目录 id|模型名/) as HTMLInputElement
     await user.type(input, '候选模型')
     fireEvent.keyDown(input, { key: 'Enter', code: 'Enter', isComposing: true, keyCode: 229 })
     expect(input.value).toBe('候选模型')
@@ -65,6 +66,26 @@ describe('AiConfigsPanel interactions', { timeout: 30_000 }, () => {
     expect(input.value).toBe('')
     expect(screen.getByText('候选模型')).toBeTruthy()
   })
+})
+
+it('sources company model chips from the kind-routed catalog proxy', async () => {
+  vi.spyOn(aiConfigApi, 'list').mockResolvedValue([])
+  const companyModels = vi.spyOn(aiConfigApi, 'companyModels').mockResolvedValue({
+    models: [{ id: 'seedream-x', displayName: 'Seedream 目录项' }, { id: 'wan-x', displayName: 'wan-x' }],
+    defaultModel: 'seedream-x',
+  })
+  const create = vi.spyOn(aiConfigApi, 'create').mockResolvedValue({})
+  mountPanel()
+  fireEvent.click(screen.getByRole('button', { name: '图片' }))
+  const chip = await screen.findByRole('button', { name: 'Seedream 目录项' })
+  expect(screen.getByText('wan-x')).toBeTruthy()
+  expect(screen.getByText(/目录默认：seedream-x/)).toBeTruthy()
+  expect(companyModels).toHaveBeenCalledWith('image', expect.anything())
+  fireEvent.click(chip)
+  fireEvent.click(screen.getByRole('button', { name: '保存' }))
+  await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({
+    service_type: 'image', provider: 'company', model: ['seedream-x'],
+  })))
 })
 
 it('creates a specialist service through the same configuration API', async () => {

@@ -7,7 +7,7 @@ import { isServicePrincipal, requireAuthContext } from '../../shared/context.js'
 import { HttpApiError, assertSameOrigin } from '../../shared/http.js'
 import type { Logger } from '../../shared/logger.js'
 import type { MediaCatalogEntry, MediaKind } from './catalog.js'
-import { MediaCatalogError, parseMediaCatalog, resolveMediaCatalogEntry } from './catalog.js'
+import { MediaCatalogError, MediaCatalogStore, parseMediaCatalog, publicMediaCatalog, resolveMediaCatalogEntry, type MediaDirectoryEntry } from './catalog.js'
 import { generateFalQueue, generateKlingImage, generateKlingVideo, generatePollingVideo, generateVolcengineImage, type PollingProviderDeps } from './polling-providers.js'
 
 /**
@@ -38,6 +38,10 @@ export interface MediaRoutesDeps {
   videoGenerator?: (request: VideoRequest, entry: MediaCatalogEntry) => Promise<{ media_type: string; base64: string }[]>
   /** Test seam over the polling providers' vendor HTTP, queue included (global fetch by default). */
   pollingDeps?: PollingProviderDeps
+  /** Production directory source (media_models table, console CRUD). */
+  catalogStore?: MediaCatalogStore
+  /** Test seam: static speech/transcription catalog rows. */
+  audioCatalog?: Array<{ id: string; kind: 'speech' | 'transcription'; provider: string; model: string; enabled?: boolean }>
 }
 
 type ProviderKeys = Readonly<Record<string, string | undefined>>
@@ -121,11 +125,38 @@ const asAspectRatio = (value: unknown): `${number}:${number}` | 'adaptive' | und
 
 export function createMediaRoutes(deps: MediaRoutesDeps): Hono<AppEnv> {
   const { config, redis, logger } = deps
-  const imageCatalog = deps.imageCatalog ?? parseMediaCatalog(config.LLM_IMAGE_CATALOG, 'image')
-  const videoCatalog = deps.videoCatalog ?? parseMediaCatalog(config.LLM_VIDEO_CATALOG, 'video')
+  // Static test seams win; production reads the console-owned table (TTL
+  // cache inside the store) with the env catalogs as the empty-table seed.
+  const loadImageCatalog = deps.imageCatalog
+    ? async () => deps.imageCatalog!
+    : deps.catalogStore
+      ? () => deps.catalogStore!.loadKind('image')
+      : async () => parseMediaCatalog(config.LLM_IMAGE_CATALOG, 'image')
+  const loadVideoCatalog = deps.videoCatalog
+    ? async () => deps.videoCatalog!
+    : deps.catalogStore
+      ? () => deps.catalogStore!.loadKind('video')
+      : async () => parseMediaCatalog(config.LLM_VIDEO_CATALOG, 'video')
   const keys = providerKeysOf(config)
 
   const routes = new Hono<AppEnv>()
+
+  routes.get('/models', async (c) => {
+    requireAuthContext(c)
+    c.header('Cache-Control', 'private, no-store')
+    const [images, videos] = await Promise.all([loadImageCatalog(), loadVideoCatalog()])
+    const audio: MediaDirectoryEntry[] = deps.audioCatalog
+      ? deps.audioCatalog.map((row) => ({ ...row, enabled: row.enabled ?? true, displayName: null, provider: row.provider as MediaDirectoryEntry['provider'] }))
+      : deps.catalogStore
+        ? await deps.catalogStore.load().then((entries) => entries.filter((entry) => entry.kind === 'speech' || entry.kind === 'transcription'))
+        : []
+    const directory: MediaDirectoryEntry[] = [
+      ...images.map((entry) => ({ ...entry, kind: 'image' as const, displayName: null })),
+      ...videos.map((entry) => ({ ...entry, kind: 'video' as const, displayName: null })),
+      ...audio,
+    ]
+    return c.json(publicMediaCatalog(directory, keys))
+  })
 
   routes.post('/image', async (c) => {
     const auth = requireAuthContext(c)
@@ -154,7 +185,7 @@ export function createMediaRoutes(deps: MediaRoutesDeps): Hono<AppEnv> {
 
     let entry: MediaCatalogEntry
     try {
-      entry = resolveMediaCatalogEntry(imageCatalog, request.model, keys)
+      entry = resolveMediaCatalogEntry(await loadImageCatalog(), request.model, keys)
     } catch (error) {
       if (error instanceof MediaCatalogError) {
         throw new HttpApiError(error.status, error.code, error.message)
@@ -226,7 +257,7 @@ export function createMediaRoutes(deps: MediaRoutesDeps): Hono<AppEnv> {
 
     let entry: MediaCatalogEntry
     try {
-      entry = resolveMediaCatalogEntry(videoCatalog, request.model, keys)
+      entry = resolveMediaCatalogEntry(await loadVideoCatalog(), request.model, keys)
     } catch (error) {
       if (error instanceof MediaCatalogError) {
         throw new HttpApiError(error.status, error.code, error.message)

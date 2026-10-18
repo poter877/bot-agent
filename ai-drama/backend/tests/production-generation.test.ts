@@ -233,6 +233,64 @@ test('company image generation posts the media contract and writes back the base
   }
 })
 
+test('company image tasks with no explicit model fall back to the catalog default', async () => {
+  const { resetCompanyModelCatalogCache } = await import('../src/services/company-model-catalog.js')
+  resetCompanyModelCatalogCache()
+  const now = new Date().toISOString(),
+    projectId = getInsertId(
+      db.insert(schema.dramas).values({ title: '目录默认', createdAt: now, updatedAt: now }).run(),
+    )
+  // 迁移后的常态：company 行 model 为空数组，模型 id 的真相源在公司目录
+  const configId = getInsertId(
+    db
+      .insert(schema.aiServiceConfigs)
+      .values({
+        serviceType: 'image',
+        provider: 'company',
+        name: '公司图片目录默认',
+        baseUrl: 'https://company.invalid',
+        apiKey: 'company-token',
+        model: '[]',
+        priority: 200,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run(),
+  )
+  const image = await sharp({ create: { width: 32, height: 32, channels: 3, background: '#654321' } })
+    .png()
+    .toBuffer()
+  const original = globalThis.fetch
+  const gets: string[] = []
+  let post: { url: string; body: unknown } | undefined
+  globalThis.fetch = (async (url, init) => {
+    const target = String(url)
+    if (target === 'https://company.invalid/api/media/models') {
+      gets.push(target)
+      return Response.json({ models: [
+        { id: 'vid-first', kind: 'video' },
+        { id: 'seedream-catalog', kind: 'image', displayName: 'Seedream 目录项' },
+      ] })
+    }
+    if (!target.startsWith('data:')) post = { url: target, body: JSON.parse(String(init?.body)) }
+    return Response.json({ ok: true, images: [{ media_type: 'image/png', base64: image.toString('base64') }] })
+  }) as typeof fetch
+  try {
+    const id = await generateImage({ dramaId: projectId, prompt: '目录默认', configId })
+    const row = await terminal(id)
+    assert.equal(row.status, 'completed')
+    // 入队即解析目录默认并落到任务行，按 kind 过滤（不会误取 video 条目）
+    assert.equal(row.model, 'seedream-catalog')
+    assert.match(post!.url, /\/api\/media\/image$/)
+    assert.equal((post!.body as Record<string, unknown>).model, 'seedream-catalog')
+    assert.deepEqual(gets, ['https://company.invalid/api/media/models'])
+  } finally {
+    globalThis.fetch = original
+    resetCompanyModelCatalogCache()
+    db.delete(schema.aiServiceConfigs).where(eq(schema.aiServiceConfigs.id, configId)).run()
+  }
+})
+
 test('company video generation sends reference fields as JSON arrays and decodes the base64 video', async () => {
   const now = new Date().toISOString(),
     projectId = getInsertId(

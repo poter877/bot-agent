@@ -23,7 +23,7 @@ export const qk = {
   aiConfigs: (type?: string) =>
     ['workspace', WORKSPACE_SCOPE, 'ai-configs', type ?? 'all'] as const,
   aiProviders: () => ['workspace', WORKSPACE_SCOPE, 'ai-providers'] as const,
-  companyModels: () => ['workspace', WORKSPACE_SCOPE, 'company-models'] as const,
+  companyModels: (kind: string = 'text') => ['workspace', WORKSPACE_SCOPE, 'company-models', kind] as const,
   skills: (lang: string) => ['workspace', WORKSPACE_SCOPE, 'skills', lang] as const,
   prompts: (lang: string) => ['workspace', WORKSPACE_SCOPE, 'prompts', lang] as const,
   promptDetail: (type: string, lang: string) =>

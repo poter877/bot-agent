@@ -75,7 +75,7 @@ export async function createTestApp(
 }
 
 export async function truncateAll(database: Database): Promise<void> {
-  await database.pool.query('TRUNCATE "user", session, account, verification, llm_models, user_quotas, llm_request_log CASCADE')
+  await database.pool.query('TRUNCATE "user", session, account, verification, llm_models, media_models, user_quotas, llm_request_log CASCADE')
 }
 
 export async function flushRateLimits(redis: RedisConnections): Promise<void> {

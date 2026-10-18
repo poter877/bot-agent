@@ -113,17 +113,21 @@ export function resolveServiceRow(type: ServiceType, id?: number, includeDisable
     (serviceProviders()[type] || []).includes(r.provider || '')).sort(rankConfigs)[0]
 }
 
-/** These service adapters currently target the official API contract and origin. */
+/** These service adapters currently target the official API contract and origin.
+ *  company 行不再校验 model：模型 id 的真相源是公司目录（company-model-catalog），
+ *  配置行 model 只是历史展示/手工收藏，运行时不读它。 */
 export function validateServiceConfig(type: string, provider: string, baseUrl: string, models: unknown): string | null {
   if (!Object.hasOwn(serviceProviders(), type) || !(serviceProviders()[type as ServiceType] as readonly string[]).includes(provider)) return '不支持的服务类型或服务商'
-  if (!Array.isArray(models) || models.some(v => typeof v !== 'string' || !v.trim())) return '模型须为非空名称组成的数组'
+  const isCompanyRow = provider === 'company'
+  const modelList = Array.isArray(models) ? (models as unknown[]) : []
+  if (!isCompanyRow && (!Array.isArray(models) || modelList.some(v => typeof v !== 'string' || !v.trim()))) return '模型须为非空名称组成的数组'
   if (Object.hasOwn(toolServices, provider)) {
     const spec = toolServices[provider as keyof typeof toolServices]
     if (baseUrl.replace(/\/$/, '') !== spec.baseUrl) return '该专用服务目前使用官方地址，请保留预设地址'
     const allowed = provider === 'sync' ? ['lipsync-2', 'lipsync-2-pro', 'sync-3'] : [spec.model]
-    if (!models.length || models.some(m => !allowed.includes(m))) return '该服务的模型或接口不受支持，请使用预设'
+    if (!modelList.length || modelList.some(m => typeof m !== 'string' || !allowed.includes(m))) return '该服务的模型或接口不受支持，请使用预设'
   }
-  if (provider === 'company') {
+  if (isCompanyRow) {
     if (!companyConfigured()) return '未配置公司后端（COMPANY_BACKEND_URL / COMPANY_SERVICE_TOKEN）'
     if (baseUrl.replace(/\/+$/, '') !== companyBaseUrl(type)) return '公司服务地址由服务端环境注入，请保留预设地址'
   }

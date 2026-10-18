@@ -11,6 +11,7 @@ import {
   type AIConfig,
 } from "./ai.js";
 import { CreativeError } from "./creative-model.js";
+import { defaultCompanyModel } from "./company-model-catalog.js";
 import {
   approveCreativeProject,
   requireCreativeRevision,
@@ -272,7 +273,11 @@ export async function transcribeCreativeSource(
           new Blob([bytes], { type: "audio/mpeg" }),
           "source.mp3",
         );
-        form.set("model", config.model || "default");
+        // 配置行 model 不再是真相源：company 行空模型回落公司转写目录默认
+        form.set(
+          "model",
+          config.model || ((await defaultCompanyModel("transcription")) ?? "") || "default",
+        );
         const response = await respond(
           deps.fetch(`${config.url}/api/media/transcription`, {
             method: "POST",

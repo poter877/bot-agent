@@ -3,10 +3,10 @@ import { generateSpeech, transcribe } from 'ai'
 import type { RedisClientType } from 'redis'
 import type { AppConfig } from '../../config/env.js'
 import type { AppEnv } from '../../shared/context.js'
-import { requireAuthContext } from '../../shared/context.js'
+import { isServicePrincipal, requireAuthContext } from '../../shared/context.js'
 import { HttpApiError, assertSameOrigin } from '../../shared/http.js'
 import type { Logger } from '../../shared/logger.js'
-import { isServicePrincipal } from '../../shared/context.js'
+import { MediaCatalogError, resolveMediaCatalogEntry, type MediaCatalogEntry, type MediaDirectoryEntry } from './catalog.js'
 
 /**
  * POST /api/media/speech|transcription — audio generation and transcription
@@ -20,6 +20,10 @@ export interface AudioRoutesDeps {
   config: AppConfig
   redis: RedisClientType
   logger: Logger
+  /** Production directory source (speech/transcription kinds). */
+  catalogStore?: { load(): Promise<MediaDirectoryEntry[]> }
+  /** Test seam: static audio catalog rows (kind speech/transcription). */
+  audioCatalog?: Array<{ id: string; kind: 'speech' | 'transcription'; provider: string; model: string; enabled?: boolean }>
   /** Test seams over the AI SDK calls. */
   speechGenerator?: (request: SpeechRequest) => Promise<{ media_type: string; base64: string }>
   transcriber?: (request: { model: string; file: Blob; filename: string }) => Promise<{
@@ -36,9 +40,18 @@ export interface SpeechRequest {
   speed?: number
 }
 
-const SPEECH_MODELS = new Set(['gpt-4o-mini-tts', 'tts-1', 'tts-1-hd'])
-const TRANSCRIPTION_MODELS = new Set(['whisper-1'])
 const TRANSCRIPTION_MAX_BYTES = 24 * 1024 * 1024
+
+/** The audio model families live in the media directory (console CRUD); the
+ * gateway fail-closes on anything the directory does not answer for. */
+async function audioCatalogOf(deps: AudioRoutesDeps, kind: 'speech' | 'transcription'): Promise<MediaCatalogEntry[]> {
+  if (deps.audioCatalog) return deps.audioCatalog.filter((row) => row.kind === kind).map((row) => ({ ...row, enabled: row.enabled ?? true }) as MediaCatalogEntry)
+  if (deps.catalogStore) {
+    const entries = await deps.catalogStore.load()
+    return entries.filter((entry) => entry.kind === kind).map((entry) => ({ ...entry, maxImages: entry.maxImages ?? undefined }))
+  }
+  throw new HttpApiError(503, 'provider_key_missing', 'The audio directory is not configured.')
+}
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : null
@@ -72,11 +85,15 @@ export function createAudioRoutes(deps: AudioRoutesDeps): Hono<AppEnv> {
       responseFormat: raw['response_format'] === 'wav' ? 'wav' : 'mp3',
       ...(typeof raw['speed'] === 'number' ? { speed: Math.min(4, Math.max(0.25, raw['speed'])) } : {}),
     }
-    if (!SPEECH_MODELS.has(request.model)) throw new HttpApiError(404, 'model_not_found', `Unknown speech model "${request.model}".`)
+    try {
+      resolveMediaCatalogEntry(await audioCatalogOf(deps, 'speech'), request.model, { openai: config.OPENAI_API_KEY })
+    } catch (error) {
+      if (error instanceof MediaCatalogError) throw new HttpApiError(error.status, error.code, error.message)
+      throw error
+    }
     if (request.input.trim() === '' || request.input.length > 20_000) {
       throw new HttpApiError(400, 'validation_failed', 'input is required (max 20000 chars)')
     }
-    if (!config.OPENAI_API_KEY) throw new HttpApiError(503, 'provider_key_missing', 'The audio backend is not configured.')
 
     try {
       const audio = deps.speechGenerator
@@ -98,7 +115,12 @@ export function createAudioRoutes(deps: AudioRoutesDeps): Hono<AppEnv> {
     const form = await c.req.formData().catch(() => null)
     if (form === null) throw new HttpApiError(400, 'invalid_json', 'A multipart form with a file field is required.')
     const model = String(form.get('model') ?? '')
-    if (!TRANSCRIPTION_MODELS.has(model)) throw new HttpApiError(404, 'model_not_found', `Unknown transcription model "${model}".`)
+    try {
+      resolveMediaCatalogEntry(await audioCatalogOf(deps, 'transcription'), model, { openai: config.OPENAI_API_KEY })
+    } catch (error) {
+      if (error instanceof MediaCatalogError) throw new HttpApiError(error.status, error.code, error.message)
+      throw error
+    }
     const file = form.get('file')
     if (!(file instanceof File)) throw new HttpApiError(400, 'validation_failed', 'file is required')
     if (file.size > TRANSCRIPTION_MAX_BYTES) throw new HttpApiError(413, 'payload_too_large', 'Audio exceeds 24 MiB.')

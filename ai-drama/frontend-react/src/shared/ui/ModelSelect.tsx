@@ -15,6 +15,8 @@ export interface ModelOption {
   /** 选择值；'' 未用（defaultLabel 项用空串） */
   key: string
   model: string
+  /** 展示名（公司目录 displayName）；缺省用 model */
+  label?: string
   provider: string
   configId?: number
   configName?: string
@@ -32,8 +34,9 @@ interface ModelSelectProps {
 
 /** 同名模型来自不同配置时，显示名带配置名以示区分（文档 §12.2） */
 function optionLabelOf(option: ModelOption, options: ModelOption[]): string {
+  const base = option.label || option.model
   const duplicated = options.filter((o) => o.model === option.model).length > 1
-  return duplicated && option.configName ? `${option.model} · ${option.configName}` : option.model
+  return duplicated && option.configName ? `${base} · ${option.configName}` : base
 }
 
 export function ModelSelect({ label, value, onChange, options, defaultLabel, hideDefault, disabled }: ModelSelectProps) {

@@ -1,5 +1,5 @@
 import type { Child } from 'hono/jsx'
-import type { LlmModelRow, LlmRequestLogRow, UserQuotaRow } from '../../db/schema.js'
+import type { LlmModelRow, LlmRequestLogRow, MediaModelRow, UserQuotaRow } from '../../db/schema.js'
 
 /**
  * Operations console views (server-rendered, 中文界面). Everything escapes
@@ -15,6 +15,7 @@ export interface AdminIdentity {
 const NAV = [
   { href: '/admin', label: '用户' },
   { href: '/admin/models', label: '模型' },
+  { href: '/admin/media', label: '媒体模型' },
   { href: '/admin/requests', label: '请求' },
   { href: '/admin/status', label: '状态' },
 ]
@@ -461,6 +462,91 @@ export function StatusPage(props: {
           <div class="lbl">24h 流内失败率（{props.stats.dayFailed} 失败 / {props.stats.dayRejected} 拒绝）</div>
         </div>
       </div>
+    </Layout>
+  )
+}
+
+export function MediaModelsPage(props: {
+  identity: AdminIdentity
+  models: MediaModelRow[]
+  editId: string | null
+  ok?: string
+  err?: string
+}) {
+  const editing = props.editId ? (props.models.find((model) => model.id === props.editId) ?? null) : null
+  const kinds = ['image', 'video', 'speech', 'transcription'] as const
+  const providers = ['fal', 'openai', 'google', 'xai', 'volcengine', 'minimax', 'aliyun', 'kling'] as const
+  return (
+    <Layout identity={props.identity} active="媒体模型" ok={props.ok} err={props.err}>
+      <div class="card stack">
+        <h2>{editing ? `编辑媒体模型 ${editing.id}` : '新增媒体模型'}</h2>
+        <form method="post" action="/admin/media">
+          <label for="mm-id">模型 ID（客户端用名）</label>
+          <input id="mm-id" name="id" required value={editing?.id ?? ''} />
+          <label for="mm-kind">类型</label>
+          <select id="mm-kind" name="kind">
+            {kinds.map((kind) => (
+              <option value={kind} selected={editing?.kind === kind}>{kind}</option>
+            ))}
+          </select>
+          <label for="mm-provider">Provider</label>
+          <select id="mm-provider" name="provider">
+            {providers.map((provider) => (
+              <option value={provider} selected={editing?.provider === provider}>{provider}</option>
+            ))}
+          </select>
+          <label for="mm-model">上游模型串（保密）</label>
+          <input id="mm-model" name="model" required value={editing?.model ?? ''} />
+          <label for="mm-display">展示名</label>
+          <input id="mm-display" name="display_name" value={editing?.displayName ?? ''} />
+          <label for="mm-max-img">单次最多图片数（image 可空）</label>
+          <input id="mm-max-img" name="max_images" type="number" min="1" max="4" value={editing?.maxImages ?? ''} />
+          <label for="mm-note">备注</label>
+          <input id="mm-note" name="note" value={editing?.note ?? ''} />
+          <label for="mm-enabled">启用</label>
+          <input id="mm-enabled" name="enabled" type="checkbox" checked={editing ? editing.enabled : true} />
+          <div class="full">
+            <button class="primary">保存</button>
+            {editing ? (
+              <a href="/admin/media" style={{ marginLeft: 10 }}>取消编辑</a>
+            ) : null}
+          </div>
+        </form>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>类型</th>
+            <th>Provider</th>
+            <th>上游模型</th>
+            <th>状态</th>
+            <th>备注</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {props.models.map((model) => (
+            <tr>
+              <td>{model.id}</td>
+              <td>{model.kind}</td>
+              <td>{model.provider}</td>
+              <td>{model.model}</td>
+              <td>{model.enabled ? '启用' : '停用'}</td>
+              <td>{model.note ?? ''}</td>
+              <td>
+                <a href={`/admin/media?edit=${encodeURIComponent(model.id)}`}>编辑</a>
+                <form method="post" action={`/admin/media/${encodeURIComponent(model.id)}/toggle`} style={{ display: 'inline' }}>
+                  <button>{model.enabled ? '停用' : '启用'}</button>
+                </form>
+                <form method="post" action={`/admin/media/${encodeURIComponent(model.id)}/delete`} style={{ display: 'inline' }}>
+                  <button class="danger">删除</button>
+                </form>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </Layout>
   )
 }

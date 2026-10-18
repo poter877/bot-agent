@@ -11,6 +11,8 @@ import {
   getShotReferenceImages,
   hasMultiConfigs,
   isNarratorCharacter,
+  mergeModelOptions,
+  modelOfKey,
   ownerConfigId,
   pruneStaleModel,
   resolveVideoPromptRefs,
@@ -129,6 +131,51 @@ function sb(partial: Partial<Storyboard>): Storyboard {
     ...partial,
   }
 }
+
+describe('mergeModelOptions（公司目录优先）', () => {
+  it('目录条目挂到当前启用配置，defaultModel 排首位作为默认', () => {
+    const configs = [cfg({ id: 5, provider: 'company', name: '公司后端', models: [] })]
+    const options = mergeModelOptions(configs, {
+      models: [{ id: 'wan/x', displayName: '万相' }, { id: 'seedance', displayName: 'seedance' }],
+      defaultModel: 'seedance',
+    })
+    expect(options.map((o) => o.key)).toEqual(['5:seedance', '5:wan/x'])
+    expect(options[0]).toMatchObject({ model: 'seedance', provider: 'company', configId: 5 })
+    expect(options[1]).toMatchObject({ model: 'wan/x', label: '万相' })
+    expect(options[1]!.label).toBe('万相')
+    expect(options[0]!.label).toBeUndefined()
+  })
+
+  it('目录与配置行按 key 去重，配置行里目录没有的模型追加在后', () => {
+    const configs = [
+      cfg({ id: 5, provider: 'company', models: ['seedance', 'legacy-pin'] }),
+      cfg({ id: 9, provider: 'fal', name: 'Fal 工具行', models: ['flux-pro'], priority: -1 }),
+    ]
+    const options = mergeModelOptions(configs, { models: [{ id: 'seedance', displayName: 'seedance' }], defaultModel: 'seedance' })
+    expect(options.map((o) => o.key)).toEqual(['5:seedance', '5:legacy-pin', '9:flux-pro'])
+  })
+
+  it('无目录数据或无启用配置时回退配置行选项', () => {
+    const configs = [cfg({ id: 5, provider: 'company', models: ['seedance'] })]
+    expect(mergeModelOptions(configs, undefined).map((o) => o.key)).toEqual(['5:seedance'])
+    expect(mergeModelOptions([], { models: [{ id: 'seedance', displayName: 'seedance' }], defaultModel: 'seedance' })).toEqual([])
+  })
+})
+
+describe('modelOfKey', () => {
+  it('目录 id 可含 ":" 或 "/"：按选项表取裸模型名，不靠字符串切割', () => {
+    const options = mergeModelOptions(
+      [cfg({ id: 5, provider: 'company', models: [] })],
+      { models: [{ id: 'bytedance/seedream-v5/pro', displayName: 'Seedream' }], defaultModel: 'bytedance/seedream-v5/pro' },
+    )
+    const key = options[0]!.key
+    expect(modelOfKey(options, key)).toBe('bytedance/seedream-v5/pro')
+    expect(modelOfKey(options, '')).toBe('')
+    expect(modelOfKey(options, undefined)).toBe('')
+    // 偏好里存的旧 provider/model 复合键仍可解析
+    expect(modelOfKey(options, 'company/gone')).toBe('gone')
+  })
+})
 
 describe('参考图序号映射（@名字 → @图片N）', () => {
   const chars = [char(1, '小美', 'static/images/a.png'), char(2, '阿强', 'static/images/b.png')]

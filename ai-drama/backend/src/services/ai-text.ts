@@ -1,6 +1,7 @@
 /** Text model construction shared by drama agents, creative planning, chat and translation. */
 import { createCompanyLanguageModel } from './company-llm-model.js'
 import { getTextConfig, getConfigById } from './ai.js'
+import { getCompanyModelCatalog } from './company-model-catalog.js'
 import { logTaskProgress } from '../utils/task-logger.js'
 
 // Agent 每一步都会重新解析模型，相同端点只打一次日志避免刷屏
@@ -20,8 +21,17 @@ export async function getTextModel(options: { fallbackModel?: string; model?: st
   const { fallbackModel: fileModel, model: modelOverride, configId: textConfigId } = options
   // 请求可指定文本配置（含其 provider/baseUrl/apiKey），否则回退到当前启用配置
   const textConfig = (textConfigId ? await getConfigById(textConfigId, 'text') : null) || await getTextConfig()
-  const modelName = modelOverride || fileModel || textConfig.model
-  if (!modelName) throw new Error('文本配置尚未选择模型，请先在模型与服务中选择模型')
+  // 模型解析链：请求显式指定 → prompt 文件 frontmatter → 公司目录 defaultModel
+  // （配置行 model 不再是真相源；provider 收敛后文本只有 company 一种 provider）
+  let modelName = modelOverride || fileModel
+  if (!modelName) {
+    if (textConfig.provider === 'company') {
+      modelName = (await getCompanyModelCatalog('text')).defaultModel ?? ''
+    } else {
+      modelName = textConfig.model
+    }
+  }
+  if (!modelName) throw new Error('公司文本模型目录为空，请先在公司后台配置文本模型，或在请求中指定模型')
   const temperature = textConfig.temperature ?? null
   const endpointKey = `${textConfig.provider}|${textConfig.baseUrl}|${modelName}|t=${temperature ?? 'default'}`
   if (endpointKey !== lastLoggedTextEndpointKey) {

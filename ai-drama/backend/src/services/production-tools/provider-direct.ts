@@ -2,6 +2,7 @@ import { regionalToolSpecs, runRegional } from './provider-regional.js'
 import { assetBytes, assetExtension } from './provider-queue.js'
 import { extraToolSpecs, runExtra } from './provider-extra.js'
 import { runMediaProvider, mediaToolSpecs } from './provider-media.js'
+import { defaultCompanyModel } from '../company-model-catalog.js'
 import {
   bearer,
   checkpoint,
@@ -64,7 +65,10 @@ function base64Audio(value: unknown) {
 async function speech(ctx: ProviderContext, deps: ProviderDependencies): Promise<ProviderResult> {
   const config = ctx.config!,
     text = required(ctx.args, ['text', 'script', 'prompt'], '朗读文本'),
-    model = config.model || directToolSpecs[ctx.toolId as keyof typeof directToolSpecs]?.model
+    // 配置行 model 不再是真相源：company 行回落公司目录默认，工具预设只作最后兜底
+    model = config.model
+      || (config.provider === 'company' ? ((await defaultCompanyModel('speech')) ?? '') : '')
+      || directToolSpecs[ctx.toolId as keyof typeof directToolSpecs]?.model
   if (text.length > 20000) throw new Error('单次朗读文本不能超过 20000 字，请拆分为多个片段')
   const format = str(ctx.args, 'response_format', 'mp3')
   if (!['mp3', 'wav'].includes(format)) throw new Error('语音输出请选择 mp3 或 wav')

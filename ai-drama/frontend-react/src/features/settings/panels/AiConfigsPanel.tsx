@@ -12,7 +12,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { qk } from '@/shared/api/query-keys'
-import { aiConfigApi, type AiConfig, type ConfigTestResult, type ServiceType } from '@/entities/ai-config/model'
+import { aiConfigApi, type AiConfig, type CompanyModelKind, type ConfigTestResult, type ServiceType } from '@/entities/ai-config/model'
 import { toolboxQueries } from '@/entities/creative/toolbox'
 import { toastError } from '@/shared/lib/errors'
 import { providerIconUrl } from '@/shared/lib/provider-icons'
@@ -249,15 +249,17 @@ export function AiConfigsPanel() {
     defaultValues: { name: '', provider: '', priority: 0, api_key: '', base_url: '', temperature: '' },
   })
 
-  // 公司后端连接数据由服务端环境注入；文本模型列表拉公司目录（经后端代理）
-  const companyModelsQuery = useQuery({
-    queryKey: qk.companyModels(),
-    queryFn: ({ signal }) => aiConfigApi.companyModels(signal),
-    enabled: dialogOpen && dialogType === 'text' && form.watch('provider') === 'company',
-    staleTime: 5 * 60_000,
-  })
   const currentProvider = form.watch('provider')
   const companyMode = isCompanyProvider(dialogType, currentProvider)
+
+  // 公司后端连接数据由服务端环境注入；五类核心服务的模型列表拉公司目录（经后端代理）
+  // （companyMode 守卫下 dialogType 必为五类之一，收窄交给运行时开关）
+  const companyModelsQuery = useQuery({
+    queryKey: qk.companyModels(dialogType),
+    queryFn: ({ signal }) => aiConfigApi.companyModels(dialogType as CompanyModelKind, signal),
+    enabled: dialogOpen && companyMode,
+    staleTime: 5 * 60_000,
+  })
 
   function presetsByType(type: ServiceType) {
     const group = providerPresets[type] || {}
@@ -485,22 +487,31 @@ export function AiConfigsPanel() {
                     {!c.isActive && <Badge>{t('settings.common.disabled')}</Badge>}
                   </div>
                   <div className={CONFIG_MODELS}>
-                    {c.models.map((m) => (
-                      <button
-                        key={m}
-                        type="button"
-                        className={cn(
-                          'font-code',
-                          CFG_MODEL_CHIP_COMMON,
-                          isDefaultModel(st.type, c, m) ? CFG_MODEL_CHIP_DEFAULT : CFG_MODEL_CHIP_IDLE,
-                        )}
-                        title={isDefaultModel(st.type, c, m) ? t('settings.ai.currentDefault') : t('settings.ai.setDefault')}
-                        onClick={() => setDefaultModelMutation.mutate({ c, m, type: st.type })}
-                      >
-                        {isDefaultModel(st.type, c, m) && <Star size={9} className={CFG_MODEL_STAR} />}
-                        {m}
-                      </button>
-                    ))}
+                    {isCompanyProvider(st.type, c.provider) ? (
+                      // company 行的默认模型由公司目录指定：模型 chips 只作展示，不再是"设为默认"入口
+                      c.models.map((m) => (
+                        <span key={m} className={cn('font-code', CFG_MODEL_CHIP_COMMON, 'cursor-default border-outline bg-transparent text-content-muted')}>
+                          {m}
+                        </span>
+                      ))
+                    ) : (
+                      c.models.map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          className={cn(
+                            'font-code',
+                            CFG_MODEL_CHIP_COMMON,
+                            isDefaultModel(st.type, c, m) ? CFG_MODEL_CHIP_DEFAULT : CFG_MODEL_CHIP_IDLE,
+                          )}
+                          title={isDefaultModel(st.type, c, m) ? t('settings.ai.currentDefault') : t('settings.ai.setDefault')}
+                          onClick={() => setDefaultModelMutation.mutate({ c, m, type: st.type })}
+                        >
+                          {isDefaultModel(st.type, c, m) && <Star size={9} className={CFG_MODEL_STAR} />}
+                          {m}
+                        </button>
+                      ))
+                    )}
                   </div>
                   <div className={`font-code truncate ${CONFIG_SUB}`}>{c.baseUrl || t('settings.ai.noBaseUrl')}</div>
                 </div>
@@ -629,20 +640,26 @@ export function AiConfigsPanel() {
                 ))}
               </div>
             )}
-            {companyMode && dialogType === 'text' && (
+            {companyMode && (
               <div className={MODEL_CHIPS}>
-                {(companyModelsQuery.data ?? []).map((m) => (
+                {(companyModelsQuery.data?.models ?? []).map((entry) => (
                   <button
-                    key={m}
+                    key={entry.id}
                     type="button"
-                    className={cn(MODEL_CHIP_COMMON, models.includes(m) ? MODEL_CHIP_DEFAULT : MODEL_CHIP_IDLE)}
-                    onClick={() => setModels((prev) => (prev.includes(m) ? prev.filter((x) => x !== m) : [m, ...prev.filter((x) => x !== m)]))}
+                    className={cn(MODEL_CHIP_COMMON, models.includes(entry.id) ? MODEL_CHIP_DEFAULT : MODEL_CHIP_IDLE)}
+                    title={entry.displayName !== entry.id ? entry.id : undefined}
+                    onClick={() => setModels((prev) => (prev.includes(entry.id) ? prev.filter((x) => x !== entry.id) : [entry.id, ...prev.filter((x) => x !== entry.id)]))}
                   >
-                    {m}
+                    {entry.displayName}
                   </button>
                 ))}
-                {companyModelsQuery.data && !companyModelsQuery.data.length && (
+                {companyModelsQuery.data && !companyModelsQuery.data.models.length && (
                   <span className="text-[11px] text-content-subtle">公司目录暂无可用模型</span>
+                )}
+                {!!companyModelsQuery.data?.defaultModel && (
+                  <span className="text-[11px] text-content-subtle">
+                    目录默认：{companyModelsQuery.data.defaultModel}（制作时未指定模型则使用它）
+                  </span>
                 )}
               </div>
             )}
@@ -651,7 +668,7 @@ export function AiConfigsPanel() {
                 value={modelInput}
                 onChange={(e) => setModelInput(e.target.value)}
                 className="flex-1"
-                placeholder={t('settings.cfg.modelPlaceholder')}
+                placeholder={companyMode ? '自定义目录 id（目录暂未展示时手动输入）' : t('settings.cfg.modelPlaceholder')}
                 onKeyDown={(e) => {
                   if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return
                   if (e.key === 'Enter') {
@@ -665,7 +682,11 @@ export function AiConfigsPanel() {
                 {t('common.add')}
               </Button>
             </div>
-            <span className="text-micro leading-[1.5] text-content-subtle">{t('settings.cfg.modelsHint')}</span>
+            <span className="text-micro leading-[1.5] text-content-subtle">
+              {companyMode
+                ? '模型清单来自公司目录（公司后台维护）；此处勾选只作常用收藏，制作时的模型选择与目录默认优先生效。'
+                : t('settings.cfg.modelsHint')}
+            </span>
           </div>
           <label className="flex flex-col gap-1.5">
             <span className="text-xs font-[550] text-content-secondary">服务参数（JSON）</span>

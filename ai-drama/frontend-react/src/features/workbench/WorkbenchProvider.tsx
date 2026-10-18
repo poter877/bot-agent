@@ -19,7 +19,7 @@ import type { Drama } from '@/entities/drama/model'
 import { episodeQueries } from '@/entities/episode/queries'
 import { episodeApi } from '@/entities/episode/api'
 import { aiConfigQueries } from '@/entities/ai-config/queries'
-import type { AiConfig } from '@/entities/ai-config/model'
+import { aiConfigApi, type AiConfig } from '@/entities/ai-config/model'
 import { agentChat } from '@/entities/ai-config/workspace-api'
 import { mergeApi, taskApi } from '@/entities/generation-task/api'
 import type { VideoMerge, SysTask } from '@/entities/generation-task/model'
@@ -36,14 +36,14 @@ import { t as globalT } from '@/shared/config/i18n'
 import { useAgent } from './use-agent'
 import { createWorkbenchStore, WorkbenchStoreProvider } from './workbench-store'
 import {
-  bareModelName,
   breakdownMessage,
-  collectModelOptions,
   configModels,
   getShotReferenceImages,
   hasVid,
   hasMultiConfigs,
   isNarratorCharacter,
+  mergeModelOptions,
+  modelOfKey,
   ownerConfigId,
   pruneStaleModel,
   resolutionProviderOf,
@@ -267,6 +267,25 @@ export function WorkbenchProvider({
   const textConfigs = textCfgQuery.data ?? []
   const imageConfigs = imageCfgQuery.data ?? []
   const videoConfigs = videoCfgQuery.data ?? []
+  // 公司模型目录是模型 id 的唯一真相源：下拉选项目录优先，配置行模型只作历史补充
+  const textCatalogQuery = useQuery({
+    queryKey: qk.companyModels('text'),
+    queryFn: ({ signal }) => aiConfigApi.companyModels('text', signal),
+    staleTime: 60_000,
+    retry: false,
+  })
+  const imageCatalogQuery = useQuery({
+    queryKey: qk.companyModels('image'),
+    queryFn: ({ signal }) => aiConfigApi.companyModels('image', signal),
+    staleTime: 60_000,
+    retry: false,
+  })
+  const videoCatalogQuery = useQuery({
+    queryKey: qk.companyModels('video'),
+    queryFn: ({ signal }) => aiConfigApi.companyModels('video', signal),
+    staleTime: 60_000,
+    retry: false,
+  })
 
   const { running: agentRunning, runningType: agentRunningType, run: runAgent } = useAgent()
 
@@ -275,9 +294,9 @@ export function WorkbenchProvider({
   const imageModelPref = prefs.modelPrefs.image
   const videoModelPref = prefs.modelPrefs.video
 
-  const textModelOptions = useMemo(() => collectModelOptions(textConfigs), [textConfigs])
-  const imageModelOptions = useMemo(() => collectModelOptions(imageConfigs), [imageConfigs])
-  const videoModelOptions = useMemo(() => collectModelOptions(videoConfigs), [videoConfigs])
+  const textModelOptions = useMemo(() => mergeModelOptions(textConfigs, textCatalogQuery.data), [textConfigs, textCatalogQuery.data])
+  const imageModelOptions = useMemo(() => mergeModelOptions(imageConfigs, imageCatalogQuery.data), [imageConfigs, imageCatalogQuery.data])
+  const videoModelOptions = useMemo(() => mergeModelOptions(videoConfigs, videoCatalogQuery.data), [videoConfigs, videoCatalogQuery.data])
 
   useEffect(() => {
     if (chatModelPref && textModelOptions.length) {
@@ -301,14 +320,14 @@ export function WorkbenchProvider({
      
   }, [videoModelOptions])
 
-  const chatModelOverride = useCallback(() => bareModelName(chatModelPref) || undefined, [chatModelPref])
+  const chatModelOverride = useCallback(() => modelOfKey(textModelOptions, chatModelPref) || undefined, [textModelOptions, chatModelPref])
   const chatConfigId = useCallback(() => ownerConfigId(textModelOptions, chatModelPref), [textModelOptions, chatModelPref])
   const imageModelParams = useCallback(
-    () => ({ model: bareModelName(imageModelPref) || undefined, configId: ownerConfigId(imageModelOptions, imageModelPref) }),
+    () => ({ model: modelOfKey(imageModelOptions, imageModelPref) || undefined, configId: ownerConfigId(imageModelOptions, imageModelPref) }),
     [imageModelOptions, imageModelPref],
   )
   const videoModelParams = useCallback(
-    () => ({ model: bareModelName(videoModelPref) || undefined, configId: ownerConfigId(videoModelOptions, videoModelPref) }),
+    () => ({ model: modelOfKey(videoModelOptions, videoModelPref) || undefined, configId: ownerConfigId(videoModelOptions, videoModelPref) }),
     [videoModelOptions, videoModelPref],
   )
 
@@ -321,7 +340,7 @@ export function WorkbenchProvider({
     return [...videoConfigs].filter((c) => c.isActive).sort((a, b) => (b.priority || 0) - (a.priority || 0))[0] ?? null
   }, [videoModelOptions, videoModelPref, videoConfigs, lockedVideoConfigId])
 
-  const isWan3Video = selectedVideoConfig?.provider === 'aliyun' || bareModelName(videoModelPref).startsWith('wan3.0-video')
+  const isWan3Video = selectedVideoConfig?.provider === 'aliyun' || modelOfKey(videoModelOptions, videoModelPref).startsWith('wan3.0-video')
   const refImageLimit = isWan3Video ? 10 : 9
 
   const resolutionProvider = resolutionProviderOf(selectedVideoConfig?.provider)
@@ -334,7 +353,8 @@ export function WorkbenchProvider({
     return resolutionKeys.includes(v) ? v : '720p'
   }, [episode?.resolution, resolutionKeys])
 
-  const effectiveVideoModelLabel = bareModelName(videoModelPref) || configModels(selectedVideoConfig)[0] || ''
+  // 默认模型取目录 defaultModel（mergeModelOptions 已把默认排到首位）
+  const effectiveVideoModelLabel = modelOfKey(videoModelOptions, videoModelPref) || videoModelOptions[0]?.model || configModels(selectedVideoConfig)[0] || ''
   const dramaAspectRatio = dramaQuery.data?.aspectRatio || '16:9'
 
   const visualChars = useMemo(() => chars.filter((c) => !isNarratorCharacter(c)), [chars])

@@ -24,6 +24,7 @@ import { createMediaRoutes } from './modules/media/media.routes.js'
 import { createAudioRoutes } from './modules/media/audio.routes.js'
 import type { MediaCatalogEntry } from './modules/media/catalog.js'
 import { CatalogStore, parseModelCatalog } from './modules/llm/catalog.js'
+import { DEFAULT_AUDIO_CATALOG, MediaCatalogStore, parseMediaCatalog, type MediaModelKind } from './modules/media/catalog.js'
 import { createAdminRoutes } from './modules/admin/admin.routes.js'
 import { createCloudComputerRoutes } from './modules/cloud-computer/cloud-computer.routes.js'
 import { CloudComputerService } from './modules/cloud-computer/service.js'
@@ -75,6 +76,13 @@ export async function createApp(deps: AppDeps): Promise<App> {
   // The console-owned model directory: llm_models is the source of truth,
   // LLM_MODEL_CATALOG only seeds an empty table (运营后台 CRUD 目标).
   const catalogStore = new CatalogStore(db, parseModelCatalog(config.LLM_MODEL_CATALOG))
+  // The media directory: env image/video catalogs + the audio defaults seed an
+  // empty media_models table once; the console owns it afterwards.
+  const mediaCatalogStore = new MediaCatalogStore(db, [
+    ...parseMediaCatalog(config.LLM_IMAGE_CATALOG, 'image').map((entry) => ({ ...entry, kind: 'image' as MediaModelKind })),
+    ...parseMediaCatalog(config.LLM_VIDEO_CATALOG, 'video').map((entry) => ({ ...entry, kind: 'video' as MediaModelKind })),
+    ...DEFAULT_AUDIO_CATALOG,
+  ])
 
   const app = new Hono<AppEnv>()
 
@@ -279,8 +287,8 @@ export async function createApp(deps: AppDeps): Promise<App> {
       subject: byAuthUserId,
     }),
   )
-  app.route('/api/media', createMediaRoutes({ config, redis: redis.commands, logger, ...deps.media }))
-  app.route('/api/media', createAudioRoutes({ config, redis: redis.commands, logger, ...deps.audio }))
+  app.route('/api/media', createMediaRoutes({ config, redis: redis.commands, logger, catalogStore: mediaCatalogStore, ...deps.media }))
+  app.route('/api/media', createAudioRoutes({ config, redis: redis.commands, logger, catalogStore: mediaCatalogStore, ...deps.audio }))
 
   // 运营管理后台: same-origin form posts (urlencoded — NOT the JSON body
   // policy), session role check per request, entry-ip flood guard only.
@@ -294,7 +302,7 @@ export async function createApp(deps: AppDeps): Promise<App> {
       subject: (c) => c.get('realIp'),
     }),
   )
-  app.route('/admin', createAdminRoutes({ config, db, redis: redis.commands, logger, auth, catalogStore }))
+  app.route('/admin', createAdminRoutes({ config, db, redis: redis.commands, logger, auth, catalogStore, mediaCatalogStore }))
 
   app.route('/', createHealthRoutes(database, redis.commands))
 

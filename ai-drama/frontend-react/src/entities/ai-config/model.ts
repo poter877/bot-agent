@@ -97,11 +97,44 @@ export const aiConfigApi = {
     return api.post('/ai-configs/test', data)
   },
 
-  /** 公司 LLM 目录（后端注入服务令牌转发 bot-backend /api/llm/models） */
-  async companyModels(signal?: AbortSignal): Promise<string[]> {
-    const ids = await api.get<string[]>('/ai-configs/company-models', { signal })
-    return asArray(ids).map(String)
+  /** 公司模型目录（后端注入服务令牌转发 bot-backend；kind 缺省为 text） */
+  async companyModels(kind: CompanyModelKind = 'text', signal?: AbortSignal): Promise<CompanyModelCatalog> {
+    const raw = await api.get<unknown>(`/ai-configs/company-models${qs({ kind })}`, { signal })
+    return mapCompanyModelCatalog(raw)
   },
+}
+
+/** 公司模型目录（bot-backend 唯一真相源）：kind 对应五类核心服务 */
+export type CompanyModelKind = 'text' | 'image' | 'video' | 'speech' | 'transcription'
+
+export interface CompanyModelEntry {
+  id: string
+  displayName: string
+}
+
+export interface CompanyModelCatalog {
+  models: CompanyModelEntry[]
+  defaultModel: string | null
+}
+
+/** 解析 /ai-configs/company-models?kind= 代理返回的目录（兼容旧的裸 id 数组形态） */
+export function mapCompanyModelCatalog(raw: unknown): CompanyModelCatalog {
+  if (Array.isArray(raw)) {
+    const legacy = raw.map(String).filter(Boolean).map((id) => ({ id, displayName: id }))
+    return { models: legacy, defaultModel: legacy[0]?.id ?? null }
+  }
+  const o = asRecord(raw)
+  const models = asArray(field(o, 'models'))
+    .map((item) => {
+      const entry = asRecord(item)
+      const id = String(field(entry, 'id') ?? '')
+      const displayName = String(field(entry, 'displayName') ?? id)
+      return id ? { id, displayName } : null
+    })
+    .filter((entry): entry is CompanyModelEntry => !!entry)
+  const declared = field(o, 'defaultModel')
+  const defaultModel = typeof declared === 'string' && models.some((m) => m.id === declared) ? declared : (models[0]?.id ?? null)
+  return { models, defaultModel }
 }
 
 /** 厂商预设（ai_service_providers，含 preset_models） */

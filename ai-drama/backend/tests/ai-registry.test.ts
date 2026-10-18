@@ -135,35 +135,75 @@ test('probes resolve saved keys server-side and reject forwarding them to anothe
   } finally { globalThis.fetch = original }
 })
 
-test('company models endpoint forwards the catalog with the server-side token', async () => {
+test('company models endpoint routes by kind and forwards the catalog with the server-side token', async () => {
   const original = globalThis.fetch
-  let calls = 0
+  const seen: string[] = []
   globalThis.fetch = async (url, init) => {
-    calls++
-    assert.equal(String(url), 'https://company.invalid/api/llm/models')
+    seen.push(String(url))
     assert.equal((init?.headers as Record<string, string>).Authorization, 'Bearer company-token')
-    return Response.json({ data: [{ id: 'catalog-model-a' }, { id: 'catalog-model-b' }] })
+    if (String(url) === 'https://company.invalid/api/llm/models')
+      return Response.json({ models: [{ id: 'llm-a', displayName: '模型甲' }, { id: 'llm-b' }], defaultModel: 'llm-b' })
+    return Response.json({ models: [
+      { id: 'img-1', kind: 'image', displayName: '图片甲' },
+      { id: 'img-2', kind: 'image' },
+      { id: 'vid-1', kind: 'video' },
+      { id: 'tts-1', kind: 'speech' },
+      { id: 'whisper-1', kind: 'transcription' },
+    ] })
   }
   try {
-    const result = await request('/company-models')
-    assert.deepEqual(result.body.data, ['catalog-model-a', 'catalog-model-b'])
-  } finally { globalThis.fetch = original; void calls }
+    // 缺省 kind=text：转发 /api/llm/models，defaultModel 直通，displayName 缺省回落 id
+    const text = await request('/company-models')
+    assert.deepEqual(text.body.data, {
+      models: [{ id: 'llm-a', displayName: '模型甲' }, { id: 'llm-b', displayName: 'llm-b' }],
+      defaultModel: 'llm-b',
+    })
+    // 媒体 kind：转发 /api/media/models 并按 kind 过滤；默认取该 kind 首项
+    const image = await request('/company-models?kind=image')
+    assert.deepEqual(image.body.data, {
+      models: [{ id: 'img-1', displayName: '图片甲' }, { id: 'img-2', displayName: 'img-2' }],
+      defaultModel: 'img-1',
+    })
+    const speech = await request('/company-models?kind=speech')
+    assert.deepEqual(speech.body.data, { models: [{ id: 'tts-1', displayName: 'tts-1' }], defaultModel: 'tts-1' })
+    assert.equal((await request('/company-models?kind=bogus')).status, 400)
+    assert.deepEqual(seen, [
+      'https://company.invalid/api/llm/models',
+      'https://company.invalid/api/media/models',
+      'https://company.invalid/api/media/models',
+    ])
+  } finally { globalThis.fetch = original }
+})
+
+test('company rows no longer require a model; tool rows still validate theirs', async () => {
+  const created = await request('/', 'POST', { service_type: 'image', provider: 'company', model: [] })
+  assert.equal(created.status, 201)
+  db.delete(schema.aiServiceConfigs).where(eq(schema.aiServiceConfigs.id, created.body.data.id)).run()
+  assert.equal((await request('/', 'POST', { service_type: 'lipsync', provider: 'sync', base_url: 'https://api.sync.so', model: [] })).status, 400)
 })
 
 test('shared text factory applies the selected model, credentials and temperature to real SDK requests', async () => {
   const { getTextModel } = await import('../src/services/ai-text.js')
+  const { resetCompanyModelCatalogCache } = await import('../src/services/company-model-catalog.js')
+  resetCompanyModelCatalogCache()
   const row = resolveServiceRow('text')!
+  // 公司行 model 置空（迁移后的常态）：无显式模型时回落公司目录 defaultModel
   db.update(schema.aiServiceConfigs).set({
-    model: '["catalog-model"]', settings: '{"temperature":0.6}',
+    model: '[]', settings: '{"temperature":0.6}',
   }).where(eq(schema.aiServiceConfigs.id, row.id)).run()
   const original = globalThis.fetch
-  let calls = 0
+  let calls = 0, catalogCalls = 0
   globalThis.fetch = async (url, init) => {
+    if (String(url) === 'https://company.invalid/api/llm/models') {
+      catalogCalls++
+      assert.equal((init?.headers as Record<string, string>).Authorization, 'Bearer company-token')
+      return Response.json({ models: [{ id: 'catalog-default' }], defaultModel: 'catalog-default' })
+    }
     calls++
     // 直连原生 /api/llm/stream（AI SDK Core 事件流），不再是 chat/completions
     assert.equal(String(url), 'https://company.invalid/api/llm/stream')
     const body = JSON.parse(init!.body as string)
-    assert.equal(body.model, calls === 1 ? 'catalog-model' : 'explicit-model')
+    assert.equal(body.model, calls === 1 ? 'catalog-default' : 'explicit-model')
     assert.equal(body.temperature, 0.6)
     assert.equal(body.maxOutputTokens, 16384)
     assert.deepEqual(body.messages, [{ role: 'user', content: 'hi' }])
@@ -200,7 +240,9 @@ test('shared text factory applies the selected model, credentials and temperatur
       assert.deepEqual(result.finishReason, { unified: 'stop', raw: undefined })
     }
     assert.equal(calls, 2)
-  } finally { globalThis.fetch = original }
+    // TTL 缓存：两次解析只打一跳目录
+    assert.equal(catalogCalls, 1)
+  } finally { globalThis.fetch = original; resetCompanyModelCatalogCache() }
 })
 
 test('service options round-trip with temperature while credential fields remain forbidden',async()=>{

@@ -5,6 +5,7 @@
  */
 import { getActiveConfig } from '../ai.js'
 import { getImageAdapter, imageAdapters } from '../adapters/registry.js'
+import { defaultCompanyModel } from '../company-model-catalog.js'
 
 export async function hasImageModel(): Promise<boolean> {
   return (await getActiveConfig('image')) !== null
@@ -18,7 +19,9 @@ export async function generateTextureImage(opts: { prompt: string; size?: string
     throw new Error(`厂商 ${config.provider} 暂不支持作为贴图来源`)
   }
   const adapter = getImageAdapter(config.provider)
-  const record = { id: 0, model: config.model, prompt: opts.prompt, size: opts.size ?? '1536x1536', frameType: null, referenceImages: null }
+  // 配置行 model 不再是真相源：company 行空模型回落公司图片目录默认
+  const model = config.model || (config.provider === 'company' ? ((await defaultCompanyModel('image')) ?? '') : '')
+  const record = { id: 0, model, prompt: opts.prompt, size: opts.size ?? '1536x1536', frameType: null, referenceImages: null }
 
   const { url, method, headers, body } = adapter.buildGenerateRequest(config, record)
   const resp = await fetch(url, {

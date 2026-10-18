@@ -113,6 +113,26 @@ export const llmModels = pgTable('llm_models', {
 export type LlmModelRow = typeof llmModels.$inferSelect
 
 /**
+ * The media directory — same story as llm_models, one row per client-facing
+ * generation model (image/video/speech/transcription kinds). The console CRUDs
+ * it; LLM_IMAGE_CATALOG/LLM_VIDEO_CATALOG only seed an empty table.
+ */
+export const mediaModels = pgTable('media_models', {
+  id: text('id').primaryKey(),
+  kind: text('kind').notNull(), // image | video | speech | transcription
+  provider: text('provider').notNull(), // registry key inside this service
+  model: text('model').notNull(), // upstream model string, never echoed to clients
+  enabled: boolean('enabled').notNull().default(true),
+  displayName: text('display_name'),
+  maxImages: integer('max_images'), // image only: server-side per-call clamp
+  note: text('note'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export type MediaModelRow = typeof mediaModels.$inferSelect
+
+/**
  * Per-user quota overrides; absent row = service defaults (doc §7: 按认证用户
  * 限制并发、模型访问及额度). null columns mean "not overridden".
  */

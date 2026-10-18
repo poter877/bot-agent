@@ -12,6 +12,7 @@ import { CreativeError } from '../creative-model.js'
 import { renderCreativeVideo, inspectCreativeSource } from '../creative-renderer.js'
 import { creativeToolService, getToolJob } from '../creative-tools/jobs.js'
 import { runProviderTool, providerToolSpecs, providerPresets } from './providers.js'
+import { defaultCompanyModel } from '../company-model-catalog.js'
 import {
   checkpoint,
   ensureCanSubmit,
@@ -173,7 +174,8 @@ async function runTranscription(ctx: ToolContext): Promise<ToolOutput> {
     if (bytes.length > 24 * 1024 * 1024) throw new CreativeError('音频超过识别大小限制，请先裁剪')
     const form = new FormData()
     form.set('file', new Blob([new Uint8Array(bytes)], { type: 'audio/mpeg' }), 'source.mp3')
-    form.set('model', config.model || 'default')
+    // 配置行 model 不再是真相源：company 行空模型回落公司转写目录默认
+    form.set('model', config.model || ((await defaultCompanyModel('transcription')) ?? '') || 'default')
     checkpoint(ctx, { submissionStarted: true })
     data = await jsonRequest(
       ctx,

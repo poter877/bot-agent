@@ -3,12 +3,14 @@ import { count, desc, eq, gte, ilike, or, sql } from 'drizzle-orm'
 import type { RedisClientType } from 'redis'
 import type { AppConfig } from '../../config/env.js'
 import type { Db } from '../../db/client.js'
-import { llmModels, llmRequestLog, user, userQuotas } from '../../db/schema.js'
+import { llmModels, llmRequestLog, mediaModels, user, userQuotas } from '../../db/schema.js'
 import type { AppEnv } from '../../shared/context.js'
 import { HttpApiError, assertSameOrigin } from '../../shared/http.js'
 import type { Logger } from '../../shared/logger.js'
 import type { Auth } from '../auth/auth.js'
 import type { CatalogStore } from '../llm/catalog.js'
+import { isMediaModelKind, type MediaCatalogStore } from '../media/catalog.js'
+import { MediaModelsPage } from './admin.views.js'
 import { listRequestLog } from '../llm/requestLog.js'
 import {
   ForbiddenPage,
@@ -38,6 +40,7 @@ export interface AdminDeps {
   logger: Logger
   auth: Auth
   catalogStore: CatalogStore
+  mediaCatalogStore?: MediaCatalogStore
   startedAt?: number
 }
 
@@ -82,6 +85,7 @@ function optionalInt(fields: Record<string, string>, key: string, min: number): 
 
 export function createAdminRoutes(deps: AdminDeps): Hono<AppEnv> {
   const { config, db, redis, logger, auth, catalogStore } = deps
+  const mediaCatalogStore = deps.mediaCatalogStore
   const startedAt = deps.startedAt ?? Date.now()
   const origin = new URL(config.BETTER_AUTH_URL).origin
 
@@ -281,6 +285,55 @@ export function createAdminRoutes(deps: AdminDeps): Hono<AppEnv> {
     const id = pathParam(c, 'id')
     await catalogStore.remove(id)
     return redirectTo(c, '/admin/models', { ok: `模型 ${id} 已删除。` })
+  }))
+
+  routes.get('/media', async (c) =>
+    page(c, async (who) => {
+      const url = new URL(c.req.url)
+      const rows = await db.select().from(mediaModels).orderBy(mediaModels.kind, mediaModels.id)
+      return MediaModelsPage({
+        identity: who,
+        models: rows,
+        editId: url.searchParams.get('edit'),
+        ...flash(c),
+      }).toString()
+    }),
+  )
+
+  routes.post('/media', action(async (c) => {
+    const fields = await formFields(c)
+    const id = (fields.id ?? '').trim()
+    const kind = (fields.kind ?? '').trim()
+    const provider = (fields.provider ?? '').trim()
+    const model = (fields.model ?? '').trim()
+    const providers = ['fal', 'openai', 'google', 'xai', 'volcengine', 'minimax', 'aliyun', 'kling']
+    if (!id || !model || !providers.includes(provider) || !isMediaModelKind(kind)) {
+      throw new Error('ID、类型、上游模型串与 Provider 均必填')
+    }
+    const maxImagesRaw = (fields.max_images ?? '').trim()
+    await mediaCatalogStore!.upsert({
+      id, kind, provider, model,
+      enabled: fields.enabled === 'on',
+      displayName: (fields.display_name ?? '').trim() || null,
+      maxImages: maxImagesRaw ? Number(maxImagesRaw) : null,
+      note: (fields.note ?? '').trim() || null,
+    })
+    return redirectTo(c, '/admin/media', { ok: `媒体模型 ${id} 已保存（目录缓存 15 秒内刷新）。` })
+  }))
+
+  routes.post('/media/:id/toggle', action(async (c) => {
+    const id = pathParam(c, 'id')
+    const rows = await db.select().from(mediaModels).where(eq(mediaModels.id, id)).limit(1)
+    const current = rows[0]
+    if (current === undefined) throw new Error('媒体模型不存在')
+    await mediaCatalogStore!.setEnabled(id, !current.enabled)
+    return redirectTo(c, '/admin/media', { ok: `媒体模型 ${id} 已${current.enabled ? '停用' : '启用'}。` })
+  }))
+
+  routes.post('/media/:id/delete', action(async (c) => {
+    const id = pathParam(c, 'id')
+    await mediaCatalogStore!.remove(id)
+    return redirectTo(c, '/admin/media', { ok: `媒体模型 ${id} 已删除。` })
   }))
 
   routes.get('/requests', async (c) =>

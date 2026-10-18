@@ -12,12 +12,24 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { STORAGE_ROOT } from '../utils/paths.js'
 import { getImageAdapter, getVideoAdapter, imageAdapters, videoAdapters } from './adapters/registry'
+import { defaultCompanyModel } from './company-model-catalog.js'
 import type { AIConfig } from './ai.js'
 import { logTaskError, logTaskPayload, logTaskProgress, logTaskStart, logTaskSuccess, logTaskWarn, redactUrl } from '../utils/task-logger.js'
 
 type TaskType = 'image' | 'video'
 
 const taskLabel = (type: TaskType) => (type === 'image' ? 'ImageTask' : 'VideoTask')
+
+/**
+ * 任务模型解析链：请求显式指定 → 公司目录默认（仅 company 行；配置行 model 不再是
+ * 真相源）→ 空（适配器自身的 'default' 兜底）。目录一跳失败不拦任务创建，
+ * 返回空让既有兜底继续。
+ */
+async function resolveTaskModel(explicit: string | undefined, config: AIConfig, kind: TaskType): Promise<string> {
+  if (explicit) return explicit
+  if (config.provider === 'company') return (await defaultCompanyModel(kind)) ?? ''
+  return config.model
+}
 
 interface GenerateImageParams {
   storyboardId?: number
@@ -64,6 +76,7 @@ export async function generateImage(params: GenerateImageParams): Promise<number
     : await getActiveConfig('image')
   if (!config) throw new Error('未配置图片模型，请先到「设置」页添加并启用 AI 服务')
 
+  const model = await resolveTaskModel(params.model, config, 'image')
   const id = await createTask('image', config, {
     storyboardId: params.storyboardId,
     dramaId: params.dramaId,
@@ -71,7 +84,7 @@ export async function generateImage(params: GenerateImageParams): Promise<number
     characterId: params.characterId,
     propId: params.propId,
     prompt: params.prompt,
-    model: params.model || config.model,
+    model,
   }, {
     size: params.size || '1920x1080',
     frameType: params.frameType,
@@ -85,7 +98,7 @@ export async function generateImage(params: GenerateImageParams): Promise<number
     sceneId: params.sceneId,
     characterId: params.characterId,
     frameType: params.frameType,
-    model: params.model || config.model,
+    model,
   })
   logTaskPayload('ImageTask', 'enqueue params', {
     id,
@@ -102,11 +115,12 @@ export async function generateVideo(params: GenerateVideoParams): Promise<number
     : await getActiveConfig('video')
   if (!config) throw new Error('未配置视频模型，请先到「设置」页添加并启用 AI 服务')
 
+  const model = await resolveTaskModel(params.model, config, 'video')
   const id = await createTask('video', config, {
     storyboardId: params.storyboardId,
     dramaId: params.dramaId,
     prompt: params.prompt,
-    model: params.model || config.model,
+    model,
   }, {
     referenceMode: params.referenceMode || 'reference',
     imageUrl: params.imageUrl,
