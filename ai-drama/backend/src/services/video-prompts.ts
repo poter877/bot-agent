@@ -62,7 +62,7 @@ export async function startVideoPromptBatch(
       dramaId,
       modelOverride: opts.model || undefined,
       textConfigId: opts.configId || undefined,
-    }, { maxSteps: 8 })
+    })
     if (!agent) throw new Error('视频提示词 Agent 不可用')
     for (const sb of pending) {
       task.current_storyboard_id = sb.id

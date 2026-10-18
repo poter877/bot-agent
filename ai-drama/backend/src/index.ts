@@ -31,6 +31,7 @@ import props from './routes/props.js'
 import settings from './routes/settings.js'
 import storage from './routes/storage.js'
 import serverUpdate from './routes/serverUpdate.js'
+import mcp from './mcp/route.js'
 import { requestLogger, errorHandler } from './middleware/logger.js'
 import { db, schema } from './db/index.js'
 import { eq } from 'drizzle-orm'
@@ -81,6 +82,9 @@ api.route('/settings', settings)
 api.route('/server-update', serverUpdate)
 
 app.route('/api/v1', api)
+
+// MCP 工具服务（hermes 经 streamable HTTP 调用；Bearer AI_DRAMA_MCP_TOKEN，未配置时 403）
+app.route('/mcp', mcp)
 
 // Serve static files (storage)
 // 生成的图片/视频按 uuid 命名、内容不变，标记为 immutable 让浏览器长缓存

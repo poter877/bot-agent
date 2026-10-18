@@ -24,7 +24,7 @@ async function runPromptAgent(episodeId: number, dramaId: number, message: strin
     dramaId,
     modelOverride: opts?.model || undefined,
     textConfigId: opts?.configId || undefined,
-  }, { maxSteps: 12 })
+  })
   if (!agent) throw new Error('图片提示词 Agent 不可用')
   await agent.generate({ messages: [{ role: 'user', content: message }] })
 }

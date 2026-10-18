@@ -4,7 +4,7 @@
  * 任务状态为进程内内存态：后端重启后运行中的任务状态丢失（Agent 调用本身已被中断）
  */
 import { getAgent } from '../agents/index.js'
-import { logTaskError, logTaskProgress, logTaskStart, logTaskSuccess } from '../utils/task-logger.js'
+import { logTaskError, logTaskStart, logTaskSuccess } from '../utils/task-logger.js'
 
 export type ExtractTarget = 'characters' | 'scenes' | 'props'
 export const EXTRACT_TARGETS: ExtractTarget[] = ['characters', 'scenes', 'props']
@@ -43,19 +43,9 @@ export function startExtraction(episodeId: number, dramaId: number, target: Extr
       textConfigId: opts.configId || undefined,
     })
     if (!agent) throw new Error('提取 Agent 不可用')
+    // 工具循环在 hermes 侧执行（逐步轨迹不回流）；最终文本只用于任务日志
     return agent.generate({
       messages: [{ role: 'user', content: EXTRACT_MESSAGES[target] }],
-      // 逐步打印 Agent 进展：调用了哪些工具、输出了什么
-      onStepFinish: (step) => {
-        const tools = (step?.toolCalls || [])
-          .map((t: any) => t?.toolName || t?.payload?.toolName)
-          .filter(Boolean)
-        logTaskProgress('Extract', `${target}-step`, {
-          episodeId,
-          tools: tools.length ? tools.join(',') : undefined,
-          text: (step?.text || '').slice(0, 200) || undefined,
-        })
-      },
     })
   })()
     .then((result: any) => {

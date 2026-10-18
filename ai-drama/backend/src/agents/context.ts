@@ -1,5 +1,5 @@
 /**
- * Agent 请求上下文 — 按请求构建的普通对象，经 ToolLoopAgent 的 toolsContext 注入工具
+ * Agent 请求上下文 — 按请求构建的普通对象，经工具循环的 toolsContext 注入工具
  * 路由层 build → getAgent(...) → 工具 execute 内读取（ai tool() 的 options.context）
  */
 import { z } from 'zod'

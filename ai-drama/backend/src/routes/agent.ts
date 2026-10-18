@@ -4,29 +4,13 @@
 import { Hono } from 'hono'
 import { getAgent, validAgentTypes } from '../agents/index.js'
 import { success, badRequest } from '../utils/response.js'
-import { logTaskError, logTaskPayload, logTaskProgress, logTaskStart, logTaskSuccess } from '../utils/task-logger.js'
+import { logTaskError, logTaskPayload, logTaskStart, logTaskSuccess } from '../utils/task-logger.js'
 
 const app = new Hono()
 
-// ai@7 工具循环产物形状：
-// tool-call: { type: 'tool-call', toolCallId, toolName, input }
-// tool-result: { type: 'tool-result', toolCallId, toolName, input, output }
-function normalizeToolName(entry: any) {
-  return entry?.payload?.toolName
-    || entry?.toolName
-    || entry?.tool?.toolName
-    || entry?.tool?.id
-    || entry?.name
-    || entry?.type
-    || null
-}
-
-function normalizeToolResult(entry: any) {
-  const result = entry?.payload?.result ?? entry?.result ?? entry?.payload?.output ?? entry?.output ?? entry?.data ?? null
-  return typeof result === 'string' ? result : JSON.stringify(result)
-}
-
 // POST /agent/:type/chat — 非流式 Agent 对话
+// 工具循环在 hermes gateway 侧执行，工具轨迹不回流；toolCalls/toolResults 恒为空
+// 数组（保持响应形状，前端与任务日志消费方不变）
 app.post('/:type/chat', async (c) => {
   const agentType = c.req.param('type')
   if (!validAgentTypes.includes(agentType)) {
@@ -69,30 +53,11 @@ app.post('/:type/chat', async (c) => {
     const elapsed = ((performance.now() - startTime) / 1000).toFixed(1)
     logTaskSuccess('Agent', agentType, { elapsedSeconds: elapsed })
 
-    // 收集所有 tool calls 和 results
-    const toolCalls = result.toolCalls || []
-    const toolResults = result.toolResults || []
-    const normalizedToolCalls = toolCalls.map((tc: any) => ({
-      toolName: normalizeToolName(tc),
-      args: tc?.payload?.args ?? tc?.args ?? tc?.input ?? null,
-    }))
-    const normalizedToolResults = toolResults.map((tr: any) => ({
-      toolName: normalizeToolName(tr),
-      result: normalizeToolResult(tr),
-    }))
-
-    logTaskProgress('Agent', 'tool-summary', {
-      agentType,
-      toolCalls: normalizedToolCalls.map((tc: any) => tc.toolName),
-      toolResults: normalizedToolResults.map((tr: any) => tr.toolName),
-    })
-    logTaskPayload('Agent', `${agentType} tool-results`, normalizedToolResults)
-
     return success(c, {
       type: 'done',
       text: result.text || '',
-      toolCalls: normalizedToolCalls,
-      toolResults: normalizedToolResults,
+      toolCalls: result.toolCalls,
+      toolResults: result.toolResults,
     })
   } catch (err: any) {
     const elapsed = ((performance.now() - startTime) / 1000).toFixed(1)

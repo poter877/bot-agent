@@ -27,6 +27,9 @@ services:
       # 公司模型后端（bot-backend）：见 .env.example；不配置则公司能力不可用
       COMPANY_BACKEND_URL: ${COMPANY_BACKEND_URL:-}
       COMPANY_SERVICE_TOKEN: ${COMPANY_SERVICE_TOKEN:-}
+      # hermes gateway（编排大脑）：所有 agent 执行外移到 hermes；不配置则 agent 调用报错
+      HERMES_AGENT_URL: ${HERMES_AGENT_URL:-}
+      HERMES_AGENT_KEY: ${HERMES_AGENT_KEY:-}
     volumes:
       - huobao-data:/app/data
     labels:

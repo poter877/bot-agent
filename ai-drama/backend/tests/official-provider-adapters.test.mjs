@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync, readdirSync } from 'node:fs'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
@@ -15,16 +15,12 @@ const routeBlock = (source, route) => {
 test('direct vendor adapters are removed; the company backend is the only adapter path', () => {
   const registry = read('src/services/adapters/registry.ts')
   const ai = read('src/services/ai.ts')
-  const aiText = read('src/services/ai-text.ts')
 
   for (const vendor of ['openai-image', 'gemini-image', 'volcengine-image', 'volcengine-video', 'minimax-video', 'aliyun-wan-video']) {
     assert.doesNotMatch(registry, new RegExp(vendor, 'i'))
   }
   assert.doesNotMatch(ai, /gemini/i)
-  assert.doesNotMatch(aiText, /createGoogleGenerativeAI/)
-  assert.doesNotMatch(aiText, /isOfficialTextHost|isOfficialOpenAIHost/)
-  assert.match(aiText, /createOpenAI/)
-  assert.match(aiText, /return provider\.chat\(modelName\)/)
+  // ai-text.ts / company-llm-model.ts 已随编排外移删除（见下方 orchestration 测试）
 })
 
 test('core service types collapse to the company provider with tool rows exempt', () => {
@@ -104,10 +100,31 @@ test('adapter registry fails closed for unsupported providers', () => {
   assert.doesNotMatch(registry, /ttsAdapters/)
 })
 
-test('both engines construct text models through the shared factory', () => {
-  for (const file of ['src/agents/index.ts', 'src/services/creative-planner.ts', 'src/services/creative-chat.ts', 'src/services/creative-pipeline/text.ts']) {
+test('agent orchestration moved to the hermes gateway; zero local tool loops remain', () => {
+  for (const file of [
+    'src/agents/index.ts',
+    'src/services/creative-planner.ts',
+    'src/services/creative-chat.ts',
+    'src/services/creative-pipeline/text.ts',
+    'src/services/film-pipeline/text.ts',
+    'src/services/film-pipeline/build-agent.ts',
+    'src/services/production-tools/auxiliary.ts',
+  ]) {
     const source = read(file)
-    assert.match(source, /getTextModel/)
-    assert.doesNotMatch(source, /createOpenAI|createGoogleGenerativeAI/)
+    assert.match(source, /runHermesAgent/, `${file} 应经 hermes gateway 编排`)
+    assert.doesNotMatch(source, /ToolLoopAgent|getTextModel|createOpenAI|createGoogleGenerativeAI/)
   }
+  // 编排归一：全后端源码零本地 ToolLoopAgent / 本地文本模型工厂（含 film build 循环）
+  const walk = (rel) => readdirSync(new URL(rel, root), { withFileTypes: true })
+    .flatMap((e) => (e.isDirectory() ? walk(`${rel}/${e.name}`) : [`${rel}/${e.name}`]))
+    .filter((f) => f.endsWith('.ts'))
+  for (const file of walk('src')) {
+    assert.doesNotMatch(read(file), /ToolLoopAgent|getTextModel/, `${file} 不应再持有本地工具循环/本地模型`)
+  }
+  assert.ok(!existsSync(new URL('src/services/ai-text.ts', root)), 'ai-text.ts 已删除')
+  assert.ok(!existsSync(new URL('src/services/company-llm-model.ts', root)), 'company-llm-model.ts 已删除')
+  // build 预算对齐原本地循环的 30 分钟超时，且超时确实下发到 gateway 请求
+  const build = read('src/services/film-pipeline/build-agent.ts')
+  assert.match(build, /export const BUILD_AGENT_TIMEOUT_MS = 30 \* 60_000/)
+  assert.match(build, /timeoutMs: BUILD_AGENT_TIMEOUT_MS/)
 })

@@ -1,23 +1,20 @@
 /**
- * Agent 注册表 — ai ToolLoopAgent 按请求构建
- * instructions/model 按请求解析（workspace/prompts/<agent_type>.md 文件 + 请求上下文中的
- * model/config_id 覆盖），episodeId/dramaId 由工具经 toolsContext（options.context）读取
+ * Agent 注册表 — hermes gateway 编排的薄封装（编排大脑外移）
+ *
+ * instructions 按请求解析（workspace/prompts/<agent_type>.md 文件 + 技能全文 + 语言块），
+ * 作为 system 消息发给 hermes gateway；工具循环在 hermes 侧经 MCP 执行 ai-drama 领域工具
+ * （episodeId/dramaId 由 MCP 服务端绑定，本模块不再经 toolsContext 注入）。
+ * 模型由 hermes drama profile 决定——本侧不选模型，只发消息收最终文本。
  */
-import { ToolLoopAgent, stepCountIs } from 'ai'
-import { getTextModel } from '../services/ai-text.js'
-import { scriptTools } from './tools/script-tools.js'
-import { extractTools } from './tools/extract-tools.js'
-import { storyboardTools } from './tools/storyboard-tools.js'
-import { imagePromptTools } from './tools/image-prompt-tools.js'
+import { runHermesAgent, type HermesChatMessage } from '../services/hermes-agent.js'
 import { loadAgentSkills } from './skills.js'
-import { loadAgentPromptFile, loadBasePromptFile } from './prompts.js'
+import { loadAgentPromptFile } from './prompts.js'
 import { buildLanguageDirective } from './language.js'
 import {
   buildAgentRequestContext,
   getContentLanguageFromRC,
   type AgentRequestContext,
   type AgentRequestContextValues,
-  type AgentToolSet,
 } from './context.js'
 
 // Default prompts (used when workspace/prompts/<type>.md 文件缺失时兜底)
@@ -154,21 +151,6 @@ video_prompt 规则（硬约束）：
 
 export const validAgentTypes = Object.keys(DEFAULT_PROMPTS)
 
-
-const AGENT_TOOLS: Record<string, AgentToolSet> = {
-  script_rewriter: scriptTools,
-  extractor: extractTools,
-  storyboard_breaker: storyboardTools,
-  prompt_generator: {
-    ...imagePromptTools,
-    read_storyboard_context: storyboardTools.read_storyboard_context,
-    update_storyboard: storyboardTools.update_storyboard,
-  },
-}
-
-/** 未显式传 maxSteps 时的工具循环步数上限（与原非流式 chat 路由的 20 一致） */
-const DEFAULT_MAX_STEPS = 20
-
 /** instructions 按请求解析：prompt 文件（或默认）+ 技能全文拼接 + 目标语言指令块
  *  prompt/skill 文本随内容语言切换语言变体（<type>.<lang>.md / SKILL.<lang>.md），缺失回退中文版 */
 async function buildInstructions(type: string, requestContext: AgentRequestContext): Promise<string> {
@@ -183,53 +165,40 @@ async function buildInstructions(type: string, requestContext: AgentRequestConte
     .join('\n\n')
 }
 
-/** model 按请求解析：基础版 prompt 文件 frontmatter + 请求上下文的 modelOverride/textConfigId 覆盖
- *  （model 只认基础版 prompts/<type>.md，语言变体不参与 model 解析） */
-async function buildModel(type: string, requestContext: AgentRequestContext) {
-  const promptFile = await loadBasePromptFile(type)
-  return getTextModel({
-    fallbackModel: promptFile?.model || undefined,
-    model: requestContext.modelOverride,
-    configId: requestContext.textConfigId,
-  })
+/** hermes 编排结果：工具循环在 hermes 侧执行，工具轨迹不回流，text 即最终回复。
+ *  空数组字段保持原 agent 结果形状，消费方（routes/agent 等）无需判空。 */
+export interface AgentRunResult {
+  text: string
+  toolCalls: []
+  toolResults: []
+  steps: []
 }
 
-/** toolsContext：ai 工具循环把同名条目经 tool 的 contextSchema 校验后注入 execute 的 options.context */
-function buildToolsContext(type: string, requestContext: AgentRequestContext) {
-  return Object.fromEntries(Object.keys(AGENT_TOOLS[type]).map(name => [name, requestContext]))
+export interface DramaAgent {
+  /** 发消息收最终文本；instructions 已在构建时解析（作为 system 消息参与会话派生） */
+  generate(options: { messages: HermesChatMessage[]; signal?: AbortSignal }): Promise<AgentRunResult>
 }
 
-/** 按请求构建 ToolLoopAgent：instructions/model 逐请求解析（等价于原动态解析语义） */
-async function createAgent(
-  type: string,
-  values: AgentRequestContextValues,
-  opts?: { maxSteps?: number },
-): Promise<ToolLoopAgent> {
+/** 按请求构建 hermes 编排薄封装：instructions 逐请求解析（等价于原动态解析语义） */
+async function createAgent(type: string, values: AgentRequestContextValues): Promise<DramaAgent> {
   const requestContext = buildAgentRequestContext(values)
-  const [instructions, model] = await Promise.all([
-    buildInstructions(type, requestContext),
-    buildModel(type, requestContext),
-  ])
-  return new ToolLoopAgent({
-    id: type,
-    instructions,
-    model,
-    tools: AGENT_TOOLS[type],
-    toolsContext: buildToolsContext(type, requestContext),
-    // 与原 generate({ maxSteps }) 语义等价的停止条件
-    stopWhen: stepCountIs(opts?.maxSteps ?? DEFAULT_MAX_STEPS),
-  })
+  const instructions = await buildInstructions(type, requestContext)
+  return {
+    async generate({ messages, signal }) {
+      const result = await runHermesAgent({ instructions, messages, signal })
+      return { text: result.text, toolCalls: [], toolResults: [], steps: [] }
+    },
+  }
 }
 
-/** Agent 注册表：type → 按请求构建 ToolLoopAgent 的工厂 */
-export const agentRegistry: Record<string, (values: AgentRequestContextValues, opts?: { maxSteps?: number }) => Promise<ToolLoopAgent>> =
-  Object.fromEntries(validAgentTypes.map(type => [type, (values, opts) => createAgent(type, values, opts)]))
+/** Agent 注册表：type → 按请求构建 hermes 编排封装的工厂 */
+export const agentRegistry: Record<string, (values: AgentRequestContextValues) => Promise<DramaAgent>> =
+  Object.fromEntries(validAgentTypes.map(type => [type, values => createAgent(type, values)]))
 
 /** 取指定类型的 Agent；类型不存在返回 undefined（消费方自行报错） */
 export function getAgent(
   type: string,
   values: AgentRequestContextValues,
-  opts?: { maxSteps?: number },
-): Promise<ToolLoopAgent> | undefined {
-  return agentRegistry[type]?.(values, opts)
+): Promise<DramaAgent> | undefined {
+  return agentRegistry[type]?.(values)
 }

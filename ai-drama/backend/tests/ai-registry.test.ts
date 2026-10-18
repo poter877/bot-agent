@@ -182,69 +182,6 @@ test('company rows no longer require a model; tool rows still validate theirs', 
   assert.equal((await request('/', 'POST', { service_type: 'lipsync', provider: 'sync', base_url: 'https://api.sync.so', model: [] })).status, 400)
 })
 
-test('shared text factory applies the selected model, credentials and temperature to real SDK requests', async () => {
-  const { getTextModel } = await import('../src/services/ai-text.js')
-  const { resetCompanyModelCatalogCache } = await import('../src/services/company-model-catalog.js')
-  resetCompanyModelCatalogCache()
-  const row = resolveServiceRow('text')!
-  // 公司行 model 置空（迁移后的常态）：无显式模型时回落公司目录 defaultModel
-  db.update(schema.aiServiceConfigs).set({
-    model: '[]', settings: '{"temperature":0.6}',
-  }).where(eq(schema.aiServiceConfigs.id, row.id)).run()
-  const original = globalThis.fetch
-  let calls = 0, catalogCalls = 0
-  globalThis.fetch = async (url, init) => {
-    if (String(url) === 'https://company.invalid/api/llm/models') {
-      catalogCalls++
-      assert.equal((init?.headers as Record<string, string>).Authorization, 'Bearer company-token')
-      return Response.json({ models: [{ id: 'catalog-default' }], defaultModel: 'catalog-default' })
-    }
-    calls++
-    // 直连原生 /api/llm/stream（AI SDK Core 事件流），不再是 chat/completions
-    assert.equal(String(url), 'https://company.invalid/api/llm/stream')
-    const body = JSON.parse(init!.body as string)
-    assert.equal(body.model, calls === 1 ? 'catalog-default' : 'explicit-model')
-    assert.equal(body.temperature, 0.6)
-    assert.equal(body.maxOutputTokens, 16384)
-    assert.deepEqual(body.messages, [{ role: 'user', content: 'hi' }])
-    // 旧 thinking-off 补丁的字段在 .strict() wire 上会 400，必须绝迹
-    assert.ok(!('enable_thinking' in body) && !('thinking' in body) && !('reasoning_effort' in body))
-    assert.equal(new Headers(init?.headers).get('authorization'), 'Bearer company-token')
-    const sse = [
-      'event: ai-sdk',
-      'data: {"type":"start"}',
-      '',
-      'event: ai-sdk',
-      'data: {"type":"text-start","id":"t1"}',
-      '',
-      'event: ai-sdk',
-      'data: {"type":"text-delta","id":"t1","text":"ok"}',
-      '',
-      'event: ai-sdk',
-      'data: {"type":"text-end","id":"t1"}',
-      '',
-      'event: ai-sdk',
-      'data: {"type":"finish","finishReason":"stop","totalUsage":{"inputTokens":1,"outputTokens":1}}',
-      '',
-      'event: end',
-      'data: {"request_id":"t","status":"complete"}',
-      '',
-    ].join('\n')
-    return new Response(sse, { status: 200, headers: { 'content-type': 'text/event-stream; charset=utf-8' } })
-  }
-  try {
-    for (const options of [{}, { configId: row.id, model: 'explicit-model' }]) {
-      const model = await getTextModel(options)
-      const result = await model.doGenerate({ prompt: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] })
-      assert.deepEqual(result.content, [{ type: 'text', text: 'ok' }])
-      assert.deepEqual(result.finishReason, { unified: 'stop', raw: undefined })
-    }
-    assert.equal(calls, 2)
-    // TTL 缓存：两次解析只打一跳目录
-    assert.equal(catalogCalls, 1)
-  } finally { globalThis.fetch = original; resetCompanyModelCatalogCache() }
-})
-
 test('service options round-trip with temperature while credential fields remain forbidden',async()=>{
  const row=resolveServiceRow('text')!
  const options={workflow_json:{'1':{class_type:'SaveImage',inputs:{}}},prompt_node:'2'}

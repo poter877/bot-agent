@@ -1,6 +1,6 @@
 /**
  * 剧本改写 Agent 工具
- * 模块级单例 — episodeId 经 ToolLoopAgent 的 toolsContext 按请求注入（options.context）
+ * 模块级单例 — episodeId 经工具循环的 toolsContext 按请求注入（options.context）
  */
 import { tool } from 'ai'
 import { z } from 'zod'
