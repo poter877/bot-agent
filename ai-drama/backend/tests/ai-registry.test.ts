@@ -160,22 +160,44 @@ test('shared text factory applies the selected model, credentials and temperatur
   let calls = 0
   globalThis.fetch = async (url, init) => {
     calls++
-    assert.equal(String(url), 'https://company.invalid/api/llm/chat/completions')
+    // 直连原生 /api/llm/stream（AI SDK Core 事件流），不再是 chat/completions
+    assert.equal(String(url), 'https://company.invalid/api/llm/stream')
     const body = JSON.parse(init!.body as string)
     assert.equal(body.model, calls === 1 ? 'catalog-model' : 'explicit-model')
     assert.equal(body.temperature, 0.6)
-    assert.equal(body.enable_thinking, false)
-    assert.equal(body.max_tokens, 16384)
+    assert.equal(body.maxOutputTokens, 16384)
+    assert.deepEqual(body.messages, [{ role: 'user', content: 'hi' }])
+    // 旧 thinking-off 补丁的字段在 .strict() wire 上会 400，必须绝迹
+    assert.ok(!('enable_thinking' in body) && !('thinking' in body) && !('reasoning_effort' in body))
     assert.equal(new Headers(init?.headers).get('authorization'), 'Bearer company-token')
-    return Response.json({ id: 'test', created: 1, model: body.model,
-      choices: [{ index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
-      usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } })
+    const sse = [
+      'event: ai-sdk',
+      'data: {"type":"start"}',
+      '',
+      'event: ai-sdk',
+      'data: {"type":"text-start","id":"t1"}',
+      '',
+      'event: ai-sdk',
+      'data: {"type":"text-delta","id":"t1","text":"ok"}',
+      '',
+      'event: ai-sdk',
+      'data: {"type":"text-end","id":"t1"}',
+      '',
+      'event: ai-sdk',
+      'data: {"type":"finish","finishReason":"stop","totalUsage":{"inputTokens":1,"outputTokens":1}}',
+      '',
+      'event: end',
+      'data: {"request_id":"t","status":"complete"}',
+      '',
+    ].join('\n')
+    return new Response(sse, { status: 200, headers: { 'content-type': 'text/event-stream; charset=utf-8' } })
   }
   try {
     for (const options of [{}, { configId: row.id, model: 'explicit-model' }]) {
       const model = await getTextModel(options)
       const result = await model.doGenerate({ prompt: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] })
       assert.deepEqual(result.content, [{ type: 'text', text: 'ok' }])
+      assert.deepEqual(result.finishReason, { unified: 'stop', raw: undefined })
     }
     assert.equal(calls, 2)
   } finally { globalThis.fetch = original }

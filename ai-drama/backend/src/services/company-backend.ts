@@ -11,7 +11,7 @@
 export const companyBackendUrl = () => (process.env.COMPANY_BACKEND_URL || '').trim().replace(/\/+$/, '')
 export const companyServiceToken = () => process.env.COMPANY_SERVICE_TOKEN || ''
 
-/** 文本走 OpenAI 兼容路由（createOpenAI 自动拼 /chat/completions），媒体走根路径。 */
+/** 文本走原生 /api/llm/stream（AI SDK Core 事件流，language model provider 拼 /stream），媒体走根路径。 */
 export function companyBaseUrl(type: string) {
   return type === 'text' ? `${companyBackendUrl()}/api/llm` : companyBackendUrl()
 }
