@@ -7,24 +7,24 @@
  * bot-backend `llmStreamRequestSchema`（src/modules/llm/request.ts）定义的
  * wire 格式——严格校验、未知字段直接 400，所以这里的字段名必须逐字对齐。
  *
- * 为什么是 LanguageModelV3 而不是 V4：ai@7 同时接受 v2/v3/v4，但本文件唯一
- * 的消费路径是 mastra `Agent`（agents/index.ts 等全部经 getTextModel 建模），
- * mastra 1.17 的白名单是 `supportedLanguageModelSpecifications = ["v2","v3"]`，
- * v4 模型会在 resolveModelConfig 处被拒。被替换的 createOpenAI().chat() 产出
- * 的也是 v3，这里保持同一 spec，行为等价替换。
+ * specificationVersion 用 V4：ai@7 原生接受 v2/v3/v4 并按模型声明的 spec
+ * 构建对应的 prompt/流（v4 在其运行时直通）。类型取自 @ai-sdk/provider@4
+ * ——与 ai@7 内嵌的 provider 4.0.27 同版本。V4 相对 V3 的实质差异只有
+ * file part 的 data 变成 tagged union（data/url/text/reference），本文件
+ * 按该形状映射；wire 协议本身不变。
  */
 import { APICallError } from '@ai-sdk/provider'
 import type {
-  LanguageModelV3,
-  LanguageModelV3CallOptions,
-  LanguageModelV3FilePart,
-  LanguageModelV3FinishReason,
-  LanguageModelV3FunctionTool,
-  LanguageModelV3GenerateResult,
-  LanguageModelV3StreamPart,
-  LanguageModelV3ToolCall,
-  LanguageModelV3ToolResultOutput,
-  LanguageModelV3Usage,
+  LanguageModelV4,
+  LanguageModelV4CallOptions,
+  LanguageModelV4FilePart,
+  LanguageModelV4FinishReason,
+  LanguageModelV4FunctionTool,
+  LanguageModelV4GenerateResult,
+  LanguageModelV4StreamPart,
+  LanguageModelV4ToolCall,
+  LanguageModelV4ToolResultOutput,
+  LanguageModelV4Usage,
 } from '@ai-sdk/provider'
 
 export interface CompanyLanguageModelOptions {
@@ -88,77 +88,45 @@ interface WireTotalUsage {
 }
 
 // ---------------------------------------------------------------------------
-// V3 prompt → wire 请求体
+// V4 prompt → wire 请求体
 // ---------------------------------------------------------------------------
 
-function wireFilePart(part: LanguageModelV3FilePart): WireFilePart {
-  const { data } = part
-  let wireData: WireFileData | WireUrlData
-  if (typeof data === 'string') {
-    // V3 约定字符串即 base64（不带 data: 前缀），服务端 media.ts 校验一致
-    wireData = { type: 'data', data }
-  } else if (data instanceof URL) {
-    // JSON 里只能放字符串；服务端 zod 把字符串 refine 成 URL 实例
-    wireData = { type: 'url', url: data.toString() }
-  } else {
-    wireData = { type: 'data', data: Buffer.from(data).toString('base64') }
-  }
-  return { type: 'file', mediaType: part.mediaType, data: wireData, ...(part.filename ? { filename: part.filename } : {}) }
-}
-
-// wire 的 file 部件必须有 mediaType，而 URL 变体（file-url/image-url）不带；
-// 从扩展名尽力嗅探，嗅探不出退到安全的顶级类型。
-const MEDIA_EXT_TYPES: Record<string, string> = {
-  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif',
-  mp4: 'video/mp4', webm: 'video/webm', pdf: 'application/pdf', mp3: 'audio/mpeg', wav: 'audio/wav',
-}
-
-function sniffMediaType(url: string, fallback: string): string {
-  const ext = url.split(/[?#]/)[0].split('.').pop()?.toLowerCase()
-  return (ext !== undefined && MEDIA_EXT_TYPES[ext]) || fallback
-}
-
-type V3ContentItem = Extract<LanguageModelV3ToolResultOutput, { type: 'content' }>['value'][number]
-
-interface LooseContentItem {
-  type: string
-  text?: string
-  data?: unknown
-  mediaType?: string
-  filename?: string
-  url?: string
-}
-
-function wireContentItem(item: V3ContentItem): WireTextPart | WireFilePart | null {
-  // ai@7 运行时（嵌套 provider 4.0.27）还会发 3.0.8 类型里不存在的 {type:'file',
-  // data: tagged} 变体，按同构形状归一处理，所以这里走宽松形状
-  const loose = item as unknown as LooseContentItem
-  if (loose.type === 'file' && loose.mediaType) {
-    const data = loose.data
-    if (typeof data === 'string') return { type: 'file', mediaType: loose.mediaType, data: { type: 'data', data } }
-    const tagged = data as { url?: unknown } | null | undefined
-    if (tagged && typeof tagged === 'object' && tagged.url instanceof URL) {
-      return { type: 'file', mediaType: loose.mediaType, data: { type: 'url', url: tagged.url.toString() } }
-    }
-    return null
-  }
-  switch (loose.type) {
+/** V4 file part 的 data 是 tagged union；wire 只认 base64 data 与 url 两种载体 */
+function wireFileData(data: LanguageModelV4FilePart['data']): WireFileData | WireUrlData {
+  switch (data.type) {
+    case 'data':
+      // V4 约定字符串即 base64（不带 data: 前缀），服务端 media.ts 校验一致
+      return { type: 'data', data: typeof data.data === 'string' ? data.data : Buffer.from(data.data).toString('base64') }
+    case 'url':
+      // JSON 里只能放字符串；服务端 zod 把字符串 refine 成 URL 实例
+      return { type: 'url', url: data.url.toString() }
     case 'text':
-      return { type: 'text', text: loose.text! }
-    case 'file-data':
-    case 'image-data':
-      return { type: 'file', mediaType: loose.mediaType!, data: { type: 'data', data: loose.data as string } }
-    case 'file-url':
-      return { type: 'file', mediaType: sniffMediaType(loose.url!, 'application/octet-stream'), data: { type: 'url', url: loose.url! } }
-    case 'image-url':
-      return { type: 'file', mediaType: sniffMediaType(loose.url!, 'image'), data: { type: 'url', url: loose.url! } }
+      // 内联文本没有 wire 载体，按 base64 文件内容下发
+      return { type: 'data', data: Buffer.from(data.text, 'utf-8').toString('base64') }
+    case 'reference':
+      throw new Error(`file part 携带 provider reference（${JSON.stringify(data.reference)}），公司后端 wire 协议无法承载`)
+  }
+}
+
+function wireFilePart(part: LanguageModelV4FilePart): WireFilePart {
+  return { type: 'file', mediaType: part.mediaType, data: wireFileData(part.data), ...(part.filename ? { filename: part.filename } : {}) }
+}
+
+type V4ContentItem = Extract<LanguageModelV4ToolResultOutput, { type: 'content' }>['value'][number]
+
+function wireContentItem(item: V4ContentItem): WireTextPart | WireFilePart | null {
+  switch (item.type) {
+    case 'text':
+      return { type: 'text', text: item.text }
+    case 'file':
+      return { type: 'file', mediaType: item.mediaType, data: wireFileData(item.data), ...(item.filename ? { filename: item.filename } : {}) }
     default:
-      // file-id/image-file-id（厂商文件引用）、custom：wire 无载体，丢部件好过断工具循环
+      // custom：wire 无载体，丢部件好过断工具循环
       return null
   }
 }
 
-function wireToolResultOutput(output: LanguageModelV3ToolResultOutput): WireToolResultOutput {
+function wireToolResultOutput(output: LanguageModelV4ToolResultOutput): WireToolResultOutput {
   switch (output.type) {
     case 'text':
     case 'json':
@@ -187,7 +155,7 @@ function collapseSingleText<T extends { type: string; text?: string }>(parts: T[
   return parts.length === 1 && parts[0].type === 'text' ? parts[0].text! : parts
 }
 
-function buildWireBody(config: CompanyLanguageModelOptions, callOptions: LanguageModelV3CallOptions): Record<string, unknown> {
+function buildWireBody(config: CompanyLanguageModelOptions, callOptions: LanguageModelV4CallOptions): Record<string, unknown> {
   const systemParts: string[] = []
   const messages: WireMessage[] = []
   for (const message of callOptions.prompt) {
@@ -199,10 +167,8 @@ function buildWireBody(config: CompanyLanguageModelOptions, callOptions: Languag
       case 'user':
         messages.push({
           role: 'user',
-          content: typeof message.content === 'string'
-            ? message.content
-            : collapseSingleText(message.content.map((part): WireTextPart | WireFilePart =>
-              part.type === 'text' ? { type: 'text', text: part.text } : wireFilePart(part))),
+          content: collapseSingleText(message.content.map((part): WireTextPart | WireFilePart =>
+            part.type === 'text' ? { type: 'text', text: part.text } : wireFilePart(part))),
         })
         break
       case 'assistant': {
@@ -273,20 +239,20 @@ function buildWireBody(config: CompanyLanguageModelOptions, callOptions: Languag
 }
 
 // ---------------------------------------------------------------------------
-// Core part（wire SSE）→ V3 provider stream part
+// Core part（wire SSE）→ V4 provider stream part
 // ---------------------------------------------------------------------------
 
 const FINISH_REASONS = new Set(['stop', 'length', 'content-filter', 'tool-calls', 'error', 'other'])
 
-function wireFinishReason(unified: unknown, raw: unknown): LanguageModelV3FinishReason {
+function wireFinishReason(unified: unknown, raw: unknown): LanguageModelV4FinishReason {
   return {
     // wire 是裸字符串，未知厂商值不能往下游传脏枚举
-    unified: typeof unified === 'string' && FINISH_REASONS.has(unified) ? unified as LanguageModelV3FinishReason['unified'] : 'other',
+    unified: typeof unified === 'string' && FINISH_REASONS.has(unified) ? unified as LanguageModelV4FinishReason['unified'] : 'other',
     raw: typeof raw === 'string' ? raw : undefined,
   }
 }
 
-function wireUsage(totalUsage: WireTotalUsage | undefined): LanguageModelV3Usage {
+function wireUsage(totalUsage: WireTotalUsage | undefined): LanguageModelV4Usage {
   const input = totalUsage?.inputTokenDetails ?? {}
   const output = totalUsage?.outputTokenDetails ?? {}
   return {
@@ -310,7 +276,7 @@ function wireToolCallInput(input: unknown): string {
 }
 
 /** 不认识的 Core part 一律返回 null（start-step/finish-step/source/file/unsupported/…），由调用方跳过。 */
-function mapCorePart(part: Record<string, unknown> & { type?: string }): LanguageModelV3StreamPart | null {
+function mapCorePart(part: Record<string, unknown> & { type?: string }): LanguageModelV4StreamPart | null {
   switch (part?.type) {
     case 'start':
       return { type: 'stream-start', warnings: [] }
@@ -405,11 +371,11 @@ async function pumpSse(
 // provider
 // ---------------------------------------------------------------------------
 
-export function createCompanyLanguageModel(options: CompanyLanguageModelOptions): LanguageModelV3 {
+export function createCompanyLanguageModel(options: CompanyLanguageModelOptions): LanguageModelV4 {
   const fetchImpl = options.fetchImpl ?? fetch
   const url = `${options.baseUrl.replace(/\/+$/, '')}/stream`
 
-  async function doStream(callOptions: LanguageModelV3CallOptions): Promise<{ stream: ReadableStream<LanguageModelV3StreamPart> }> {
+  async function doStream(callOptions: LanguageModelV4CallOptions): Promise<{ stream: ReadableStream<LanguageModelV4StreamPart> }> {
     const body = JSON.stringify(buildWireBody(options, callOptions))
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -439,11 +405,11 @@ export function createCompanyLanguageModel(options: CompanyLanguageModelOptions)
     if (!response.body) throw new Error('公司后端流式响应缺少 body')
 
     let closed = false
-    const stream = new ReadableStream<LanguageModelV3StreamPart>({
+    const stream = new ReadableStream<LanguageModelV4StreamPart>({
       start(controller) {
         // provider 协议要求 stream-start 打头，先于任何 wire 帧
-        controller.enqueue({ type: 'stream-start', warnings: [] } satisfies LanguageModelV3StreamPart)
-        const closeWith = (part?: LanguageModelV3StreamPart) => {
+        controller.enqueue({ type: 'stream-start', warnings: [] } satisfies LanguageModelV4StreamPart)
+        const closeWith = (part?: LanguageModelV4StreamPart) => {
           if (closed) return
           closed = true
           try {
@@ -462,7 +428,7 @@ export function createCompanyLanguageModel(options: CompanyLanguageModelOptions)
               } catch {}
               if (payload.status === 'failed') {
                 // WHY: failed 决不能当 complete 收尾——这里必须产出 error part，
-                // 让 ai/mastra 把这次调用当成失败，而不是一次空的成功。
+                // 让 ai 把这次调用当成失败，而不是一次空的成功。
                 closeWith({ type: 'error', error: new Error(payload.error?.message ?? '公司后端模型流失败') })
               } else {
                 // complete：completion 语义已由 finish part 携带，干净关流即可
@@ -494,18 +460,18 @@ export function createCompanyLanguageModel(options: CompanyLanguageModelOptions)
   }
 
   return {
-    specificationVersion: 'v3',
+    specificationVersion: 'v4',
     provider: 'company-backend',
     modelId: options.model,
     supportedUrls: {},
     doStream,
-    async doGenerate(callOptions): Promise<LanguageModelV3GenerateResult> {
+    async doGenerate(callOptions): Promise<LanguageModelV4GenerateResult> {
       const { stream } = await doStream(callOptions)
       const reader = stream.getReader()
       // 文本按块 id 聚合（保序），tool-call 按到达顺序追加
       const textBlocks = new Map<string, string>()
-      const toolCalls: LanguageModelV3ToolCall[] = []
-      let finish: Extract<LanguageModelV3StreamPart, { type: 'finish' }> | undefined
+      const toolCalls: LanguageModelV4ToolCall[] = []
+      let finish: Extract<LanguageModelV4StreamPart, { type: 'finish' }> | undefined
       while (true) {
         const { done, value } = await reader.read()
         if (done) break

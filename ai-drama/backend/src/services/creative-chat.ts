@@ -1,6 +1,6 @@
 import { getCreativeRecipe } from './creative-catalog.js'
 import { randomUUID } from 'node:crypto'
-import { Agent } from '@mastra/core/agent'
+import { ToolLoopAgent, stepCountIs } from 'ai'
 import { and, desc, eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { db, getInsertId, schema } from '../db/index.js'
@@ -73,7 +73,7 @@ export function parseCreativeChatReply(raw: string, project: CreativeProject) {
 
 async function generateReply(project: CreativeProject, messages: CreativeMessage[], message: string): Promise<string> {
   const model = await getTextModel()
-  const agent = new Agent({ id: 'video-factory-creative-conversation', name: '创意视频制作助手', model,
+  const agent = new ToolLoopAgent({ id: 'video-factory-creative-conversation', model, stopWhen: stepCountIs(1),
     instructions: `你是视频工厂的创意视频制作助手。帮助用户讨论创意，并按用户的明确要求修改当前项目。用用户使用的语言回复。
 只输出 JSON：{ "content": "回复正文", "actions": [], "changes": {} }。问答或建议时省略 changes，不把建议擅自写入方案。
 actions 可取 plan（创作要求/生成方案）、review（画面编排/确认方案）、generate（素材制作）、audio（声音字幕）、render（导出）。这些是导航建议，不代表动作已经执行。
@@ -93,8 +93,9 @@ changes 只支持以下可选字段：fields（该类型的专属创作要求，
   const serialized = JSON.stringify(context)
   if (serialized.length > 120000) throw new CreativeError('项目内容较长，请在画面编排中直接修改目标镜头', 422)
   const history = messages.filter(row => row.status === 'completed').slice(-12).map(({ role, content }) => ({ role, content: content.slice(0, 4000) }))
-  const result = await agent.generate(JSON.stringify({ project: context, history, request: message }), {
-    maxSteps: 1, abortSignal: AbortSignal.timeout(180000),
+  const result = await agent.generate({
+    prompt: JSON.stringify({ project: context, history, request: message }),
+    abortSignal: AbortSignal.timeout(180000),
   })
   return result.text
 }

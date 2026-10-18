@@ -8,7 +8,7 @@
  *   <系统提示词正文>
  * 文件即唯一事实来源；文件缺失时由调用方回退到代码默认值。
  */
-import { skillsManagerWorkspace } from './skills.js'
+import { workspaceFs } from './skills.js'
 
 export interface AgentPromptFile {
   name: string
@@ -16,7 +16,7 @@ export interface AgentPromptFile {
   instructions: string
 }
 
-const fsm = () => skillsManagerWorkspace.filesystem!
+const fsm = () => workspaceFs
 /** prompt 文件路径；lang 为 en/ja/ko 时返回语言变体（<type>.<lang>.md），zh/空为基础版 */
 export const promptFilePath = (agentType: string, lang?: string | null) =>
   `prompts/${agentType}${lang && lang !== 'zh' ? `.${lang}` : ''}.md`

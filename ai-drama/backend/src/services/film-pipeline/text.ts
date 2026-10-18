@@ -1,9 +1,9 @@
-/** film-pipeline 文本阶段生成：Mastra Agent + STYLE.md/两份指南注入。
+/** film-pipeline 文本阶段生成：ToolLoopAgent + STYLE.md/两份指南注入。
  *
  * 与 creative-pipeline/text.ts 同一调用形态，但指令上下文完全来自影片体系：
  * 风格不变量（STYLE.md 全文）+ DIRECTOR/TECHNIQUE 相关章节 + 已确认的前序产物。
  */
-import { Agent } from '@mastra/core/agent'
+import { ToolLoopAgent, stepCountIs } from 'ai'
 import { getTextModel } from '../ai-text.js'
 import { filmStyleMarkdown, getFilmStyle, filmGuides, type FilmStyle } from '../film-styles.js'
 import { filmArtifactSchema, FilmError, type FilmArtifact } from './contracts.js'
@@ -86,10 +86,10 @@ export async function generateFilmStageArtifact(input: FilmStageInput): Promise<
   ].join('\n')
 
   const model = await getTextModel()
-  const agent = new Agent({
+  const agent = new ToolLoopAgent({
     id: `film-${style.slug}-${stage.id}`,
-    name: stage.title,
     model,
+    stopWhen: stepCountIs(1),
     instructions: [
       `你是影片风格的${stage.title}制作人员，正在用纯代码（Canvas/WebGL/three.js + 采样音频 + TTS）制作一支短片。只完成当前阶段，使用${input.language}写作（代码与标识符用英文）。`,
       `=== 风格不变量（必须逐条遵守）===\n${styleMd}`,
@@ -102,7 +102,7 @@ export async function generateFilmStageArtifact(input: FilmStageInput): Promise<
     ].join('\n'),
   })
 
-  const result = await agent.generate(payload, { maxSteps: 1, abortSignal: AbortSignal.timeout(300000) })
+  const result = await agent.generate({ prompt: payload, abortSignal: AbortSignal.timeout(300000) })
   const raw = result.text
     .trim()
     .replace(/^```(?:json)?\s*/i, '')

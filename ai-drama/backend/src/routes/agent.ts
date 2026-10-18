@@ -2,17 +2,15 @@
  * Agent 聊天路由 — 非流式版本
  */
 import { Hono } from 'hono'
-import { validAgentTypes } from '../agents/index.js'
-import { buildAgentRequestContext } from '../agents/context.js'
-import { mastra } from '../mastra/index.js'
+import { getAgent, validAgentTypes } from '../agents/index.js'
 import { success, badRequest } from '../utils/response.js'
 import { logTaskError, logTaskPayload, logTaskProgress, logTaskStart, logTaskSuccess } from '../utils/task-logger.js'
 
 const app = new Hono()
 
-// Mastra v1.17 的 ToolCallChunk / ToolResultChunk 结构：
-// { type: 'tool-call', payload: { toolCallId, toolName, args } }
-// { type: 'tool-result', payload: { toolCallId, toolName, result, isError } }
+// ai@7 工具循环产物形状：
+// tool-call: { type: 'tool-call', toolCallId, toolName, input }
+// tool-result: { type: 'tool-result', toolCallId, toolName, input, output }
 function normalizeToolName(entry: any) {
   return entry?.payload?.toolName
     || entry?.toolName
@@ -50,26 +48,23 @@ app.post('/:type/chat', async (c) => {
     return badRequest(c, '需要 drama_id 与 episode_id')
   }
 
-  const agent = mastra.getAgent(agentType)
-  if (!agent) {
-    logTaskError('Agent', agentType, { reason: 'agent not found' })
-    return badRequest(c, 'Agent 不存在')
-  }
-
-  const requestContext = buildAgentRequestContext({
+  const agent = await getAgent(agentType, {
     episodeId: episode_id,
     dramaId: drama_id,
     modelOverride: body.model || undefined,
     textConfigId: body.config_id || undefined,
   })
+  if (!agent) {
+    logTaskError('Agent', agentType, { reason: 'agent not found' })
+    return badRequest(c, 'Agent 不存在')
+  }
 
   const startTime = performance.now()
 
   try {
-    const result = await agent.generate(
-      [{ role: 'user', content: message }],
-      { maxSteps: 20, requestContext },
-    )
+    const result = await agent.generate({
+      messages: [{ role: 'user', content: message }],
+    })
 
     const elapsed = ((performance.now() - startTime) / 1000).toFixed(1)
     logTaskSuccess('Agent', agentType, { elapsedSeconds: elapsed })

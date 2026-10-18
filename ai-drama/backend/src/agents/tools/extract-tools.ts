@@ -7,14 +7,13 @@
  * 2. 读取项目中已存在的角色/场景（用于去重）
  * 3. 提取角色/场景并智能去重后直接保存
  */
-import { createTool } from '@mastra/core/tools'
-import type { ToolExecutionContext } from '@mastra/core/tools'
+import { tool } from 'ai'
 import { z } from 'zod'
 import { db, getInsertId, schema } from '../../db/index.js'
 import { eq, and } from 'drizzle-orm'
 import { now } from '../../utils/response.js'
 import { logTaskProgress, logTaskSuccess } from '../../utils/task-logger.js'
-import { getDramaId, getEpisodeId } from '../context.js'
+import { agentContextSchema, getDramaId, getEpisodeId, type AgentToolContext, type AgentToolSet } from '../context.js'
 
 // ─── 关联辅助 ────────────────────────────────────────────────
 async function linkCharToEpisode(episodeId: number, characterId: number) {
@@ -64,21 +63,21 @@ function normalizeLocation(loc: string): string {
   return (loc || '').replace(/[\s　]+/g, '').toLowerCase().trim()
 }
 
-type ToolContext = ToolExecutionContext | undefined
+type ToolContext = AgentToolContext | undefined
 
 function requireIds(context: ToolContext): { episodeId: number; dramaId: number } | { error: string } {
-  const episodeId = getEpisodeId(context?.requestContext)
-  const dramaId = getDramaId(context?.requestContext)
+  const episodeId = getEpisodeId(context)
+  const dramaId = getDramaId(context)
   if (!episodeId || !dramaId) return { error: 'Missing episodeId/dramaId in request context' }
   return { episodeId, dramaId }
 }
 
 // 1. 读取剧本内容
-const readScriptForExtraction = createTool({
-  id: 'read_script_for_extraction',
+const readScriptForExtraction = tool({
   description: 'Read the formatted screenplay for character/scene extraction.',
   inputSchema: z.object({}),
-  execute: async (_input, context) => {
+  contextSchema: agentContextSchema,
+  execute: async (_input, { context }) => {
     const ids = requireIds(context)
     if ('error' in ids) return ids
     const { episodeId, dramaId } = ids
@@ -93,11 +92,11 @@ const readScriptForExtraction = createTool({
 })
 
 // 2. 读取项目中已存在的角色（用于去重判断）
-const readExistingCharacters = createTool({
-  id: 'read_existing_characters',
+const readExistingCharacters = tool({
   description: 'Read all characters already existing in this drama project (for deduplication).',
   inputSchema: z.object({}),
-  execute: async (_input, context) => {
+  contextSchema: agentContextSchema,
+  execute: async (_input, { context }) => {
     const ids = requireIds(context)
     if ('error' in ids) return ids
     const { episodeId, dramaId } = ids
@@ -131,11 +130,11 @@ const readExistingCharacters = createTool({
 })
 
 // 3. 读取项目中已存在的场景（用于去重判断）
-const readExistingScenes = createTool({
-  id: 'read_existing_scenes',
+const readExistingScenes = tool({
   description: 'Read all scenes already existing in this drama project (for deduplication).',
   inputSchema: z.object({}),
-  execute: async (_input, context) => {
+  contextSchema: agentContextSchema,
+  execute: async (_input, { context }) => {
     const ids = requireIds(context)
     if ('error' in ids) return ids
     const { episodeId, dramaId } = ids
@@ -169,8 +168,7 @@ const readExistingScenes = createTool({
 })
 
 // 4. 智能保存角色（按名字去重，与现有数据合并）
-const saveDedupCharacters = createTool({
-  id: 'save_dedup_characters',
+const saveDedupCharacters = tool({
   description: 'Save extracted characters with deduplication. Existing characters (same name) are merged/updated; new ones are created. All are linked to the current episode.',
   inputSchema: z.object({
     characters: z.array(z.object({
@@ -181,7 +179,8 @@ const saveDedupCharacters = createTool({
       styling: z.string().optional(),
     })),
   }),
-  execute: async ({ characters }, context) => {
+  contextSchema: agentContextSchema,
+  execute: async ({ characters }, { context }) => {
     const ids = requireIds(context)
     if ('error' in ids) return ids
     const { episodeId, dramaId } = ids
@@ -243,8 +242,7 @@ const saveDedupCharacters = createTool({
 })
 
 // 5. 智能保存场景（按地点+时间段去重，与现有数据合并）
-const saveDedupScenes = createTool({
-  id: 'save_dedup_scenes',
+const saveDedupScenes = tool({
   description: 'Save extracted scenes with deduplication. Existing scenes (same location+time) are reused; new ones are created. All are linked to the current episode.',
   inputSchema: z.object({
     scenes: z.array(z.object({
@@ -255,7 +253,8 @@ const saveDedupScenes = createTool({
       lighting: z.string().optional(),
     })),
   }),
-  execute: async ({ scenes }, context) => {
+  contextSchema: agentContextSchema,
+  execute: async ({ scenes }, { context }) => {
     const ids = requireIds(context)
     if ('error' in ids) return ids
     const { episodeId, dramaId } = ids
@@ -311,11 +310,11 @@ const saveDedupScenes = createTool({
 })
 
 // 6. 读取项目中已存在的道具（用于去重判断）
-const readExistingProps = createTool({
-  id: 'read_existing_props',
+const readExistingProps = tool({
   description: 'Read all props already existing in this drama project (for deduplication).',
   inputSchema: z.object({}),
-  execute: async (_input, context) => {
+  contextSchema: agentContextSchema,
+  execute: async (_input, { context }) => {
     const ids = requireIds(context)
     if ('error' in ids) return ids
     const { episodeId, dramaId } = ids
@@ -348,8 +347,7 @@ const readExistingProps = createTool({
 })
 
 // 7. 智能保存道具（按名字去重，与现有数据合并）
-const saveDedupProps = createTool({
-  id: 'save_dedup_props',
+const saveDedupProps = tool({
   description: 'Save extracted props with deduplication. Existing props (same name) are merged/updated; new ones are created. All are linked to the current episode.',
   inputSchema: z.object({
     props: z.array(z.object({
@@ -358,7 +356,8 @@ const saveDedupProps = createTool({
       description: z.string().optional(),
     })),
   }),
-  execute: async ({ props }, context) => {
+  contextSchema: agentContextSchema,
+  execute: async ({ props }, { context }) => {
     const ids = requireIds(context)
     if ('error' in ids) return ids
     const { episodeId, dramaId } = ids
@@ -415,12 +414,13 @@ const saveDedupProps = createTool({
   },
 })
 
-export const extractTools = {
-  readScriptForExtraction,
-  readExistingCharacters,
-  readExistingScenes,
-  readExistingProps,
-  saveDedupCharacters,
-  saveDedupScenes,
-  saveDedupProps,
+/** 键 = 模型可见的工具名（ai 以注册表键为工具名） */
+export const extractTools: AgentToolSet = {
+  read_script_for_extraction: readScriptForExtraction,
+  read_existing_characters: readExistingCharacters,
+  read_existing_scenes: readExistingScenes,
+  read_existing_props: readExistingProps,
+  save_dedup_characters: saveDedupCharacters,
+  save_dedup_scenes: saveDedupScenes,
+  save_dedup_props: saveDedupProps,
 }

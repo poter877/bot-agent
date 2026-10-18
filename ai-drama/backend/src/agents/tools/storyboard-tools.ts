@@ -2,14 +2,13 @@
  * 分镜拆解 Agent 工具
  * 模块级单例 — episodeId + dramaId 通过 RequestContext 按请求注入
  */
-import { createTool } from '@mastra/core/tools'
-import type { ToolExecutionContext } from '@mastra/core/tools'
+import { tool } from 'ai'
 import { z } from 'zod'
 import { db, getInsertId, schema } from '../../db/index.js'
 import { eq } from 'drizzle-orm'
 import { now } from '../../utils/response.js'
 import { logTaskProgress, logTaskSuccess } from '../../utils/task-logger.js'
-import { getDramaId, getEpisodeId } from '../context.js'
+import { agentContextSchema, getDramaId, getEpisodeId, type AgentToolContext, type AgentToolSet } from '../context.js'
 
 async function syncStoryboardCharacters(storyboardId: number, characterIds: number[]) {
   await db.delete(schema.storyboardCharacters)
@@ -95,20 +94,20 @@ async function validateStoryboardBindings(episodeId: number, dramaId: number, sc
   }
 }
 
-type ToolContext = ToolExecutionContext | undefined
+type ToolContext = AgentToolContext | undefined
 
 function requireIds(context: ToolContext): { episodeId: number; dramaId: number } | { error: string } {
-  const episodeId = getEpisodeId(context?.requestContext)
-  const dramaId = getDramaId(context?.requestContext)
+  const episodeId = getEpisodeId(context)
+  const dramaId = getDramaId(context)
   if (!episodeId || !dramaId) return { error: 'Missing episodeId/dramaId in request context' }
   return { episodeId, dramaId }
 }
 
-const readStoryboardContext = createTool({
-  id: 'read_storyboard_context',
+const readStoryboardContext = tool({
   description: 'Read the screenplay, characters, scenes, and props for storyboard breakdown.',
   inputSchema: z.object({}),
-  execute: async (_input, context) => {
+  contextSchema: agentContextSchema,
+  execute: async (_input, { context }) => {
     const ids = requireIds(context)
     if ('error' in ids) return ids
     const { episodeId, dramaId } = ids
@@ -245,14 +244,14 @@ const storyboardFields = z.object({
   prop_ids: z.array(z.number()).optional(),
 })
 
-const saveStoryboards = createTool({
-  id: 'save_storyboards',
+const saveStoryboards = tool({
   description: 'Save storyboards for this episode. Call in batches of at most 8 storyboards: the first batch must set replace_existing: true (clears all old storyboards for the episode, then writes), every following batch omits replace_existing (appends). Rows are upserted by shot_number, so overlapping batches and retries never create duplicates.',
   inputSchema: z.object({
     replace_existing: z.boolean().optional(),
     storyboards: z.array(storyboardFields),
   }),
-  execute: async ({ storyboards, replace_existing }, context) => {
+  contextSchema: agentContextSchema,
+  execute: async ({ storyboards, replace_existing }, { context }) => {
     const ids = requireIds(context)
     if ('error' in ids) return ids
     const { episodeId, dramaId } = ids
@@ -341,8 +340,7 @@ const saveStoryboards = createTool({
   },
 })
 
-const updateStoryboard = createTool({
-  id: 'update_storyboard',
+const updateStoryboard = tool({
   description: 'Update a specific storyboard shot.',
   inputSchema: z.object({
     storyboard_id: z.number(),
@@ -364,7 +362,8 @@ const updateStoryboard = createTool({
     prop_ids: z.array(z.number()).optional(),
     duration: z.number().optional(),
   }),
-  execute: async ({ storyboard_id, ...fields }, context) => {
+  contextSchema: agentContextSchema,
+  execute: async ({ storyboard_id, ...fields }, { context }) => {
     const ids = requireIds(context)
     if ('error' in ids) return ids
     const { episodeId, dramaId } = ids
@@ -436,4 +435,9 @@ const updateStoryboard = createTool({
   },
 })
 
-export const storyboardTools = { readStoryboardContext, saveStoryboards, updateStoryboard }
+/** 键 = 模型可见的工具名（ai 以注册表键为工具名） */
+export const storyboardTools: AgentToolSet = {
+  read_storyboard_context: readStoryboardContext,
+  save_storyboards: saveStoryboards,
+  update_storyboard: updateStoryboard,
+}

@@ -1,20 +1,24 @@
 /**
- * Mastra Agent 注册表
- * 启动时注册静态 Agent；instructions/model 用 DynamicArgument 按请求解析
- * （workspace/prompts/<agent_type>.md 文件 + RequestContext 中的 model/config_id 覆盖），
- * episodeId/dramaId 由工具从 RequestContext 读取
+ * Agent 注册表 — ai ToolLoopAgent 按请求构建
+ * instructions/model 按请求解析（workspace/prompts/<agent_type>.md 文件 + 请求上下文中的
+ * model/config_id 覆盖），episodeId/dramaId 由工具经 toolsContext（options.context）读取
  */
-import { Agent } from '@mastra/core/agent'
-import type { RequestContext } from '@mastra/core/request-context'
+import { ToolLoopAgent, stepCountIs } from 'ai'
 import { getTextModel } from '../services/ai-text.js'
 import { scriptTools } from './tools/script-tools.js'
 import { extractTools } from './tools/extract-tools.js'
 import { storyboardTools } from './tools/storyboard-tools.js'
 import { imagePromptTools } from './tools/image-prompt-tools.js'
-import { loadAgentSkills, skillWorkspaces } from './skills.js'
+import { loadAgentSkills } from './skills.js'
 import { loadAgentPromptFile, loadBasePromptFile } from './prompts.js'
 import { buildLanguageDirective } from './language.js'
-import { getContentLanguageFromRC } from './context.js'
+import {
+  buildAgentRequestContext,
+  getContentLanguageFromRC,
+  type AgentRequestContext,
+  type AgentRequestContextValues,
+  type AgentToolSet,
+} from './context.js'
 
 // Default prompts (used when workspace/prompts/<type>.md 文件缺失时兜底)
 export const DEFAULT_PROMPTS: Record<string, { name: string; instructions: string }> = {
@@ -151,56 +155,81 @@ video_prompt 规则（硬约束）：
 export const validAgentTypes = Object.keys(DEFAULT_PROMPTS)
 
 
-const AGENT_TOOLS: Record<string, Record<string, any>> = {
+const AGENT_TOOLS: Record<string, AgentToolSet> = {
   script_rewriter: scriptTools,
   extractor: extractTools,
   storyboard_breaker: storyboardTools,
   prompt_generator: {
     ...imagePromptTools,
-    readStoryboardContext: storyboardTools.readStoryboardContext,
-    updateStoryboard: storyboardTools.updateStoryboard,
+    read_storyboard_context: storyboardTools.read_storyboard_context,
+    update_storyboard: storyboardTools.update_storyboard,
   },
 }
 
+/** 未显式传 maxSteps 时的工具循环步数上限（与原非流式 chat 路由的 20 一致） */
+const DEFAULT_MAX_STEPS = 20
+
 /** instructions 按请求解析：prompt 文件（或默认）+ 技能全文拼接 + 目标语言指令块
  *  prompt/skill 文本随内容语言切换语言变体（<type>.<lang>.md / SKILL.<lang>.md），缺失回退中文版 */
-function buildInstructions(type: string) {
-  return async ({ requestContext }: { requestContext?: RequestContext }) => {
-    const defaults = DEFAULT_PROMPTS[type]
-    const lang = getContentLanguageFromRC(requestContext)
-    const promptFile = await loadAgentPromptFile(type, lang)
-    const baseInstructions = promptFile?.instructions || defaults.instructions
-    const skillInstructions = await loadAgentSkills(type, lang)
-    const languageDirective = buildLanguageDirective(lang)
-    return [baseInstructions, skillInstructions, languageDirective]
-      .filter(Boolean)
-      .join('\n\n')
-  }
+async function buildInstructions(type: string, requestContext: AgentRequestContext): Promise<string> {
+  const defaults = DEFAULT_PROMPTS[type]
+  const lang = getContentLanguageFromRC(requestContext)
+  const promptFile = await loadAgentPromptFile(type, lang)
+  const baseInstructions = promptFile?.instructions || defaults.instructions
+  const skillInstructions = await loadAgentSkills(type, lang)
+  const languageDirective = buildLanguageDirective(lang)
+  return [baseInstructions, skillInstructions, languageDirective]
+    .filter(Boolean)
+    .join('\n\n')
 }
 
-/** model 按请求解析：基础版 prompt 文件 frontmatter + RequestContext 的 modelOverride/textConfigId 覆盖
+/** model 按请求解析：基础版 prompt 文件 frontmatter + 请求上下文的 modelOverride/textConfigId 覆盖
  *  （model 只认基础版 prompts/<type>.md，语言变体不参与 model 解析） */
-function buildModel(type: string) {
-  return async ({ requestContext }: { requestContext?: RequestContext }) => {
-    const promptFile = await loadBasePromptFile(type)
-    const modelOverride = requestContext?.get('modelOverride' as never) as string | undefined
-    const textConfigId = requestContext?.get('textConfigId' as never) as number | undefined
-    return getTextModel({ fallbackModel: promptFile?.model || undefined, model: modelOverride, configId: textConfigId })
-  }
+async function buildModel(type: string, requestContext: AgentRequestContext) {
+  const promptFile = await loadBasePromptFile(type)
+  return getTextModel({
+    fallbackModel: promptFile?.model || undefined,
+    model: requestContext.modelOverride,
+    configId: requestContext.textConfigId,
+  })
 }
 
-/** 启动时注册的静态 Agent 表（供 Mastra 实例挂载） */
-export const agentRegistry: Record<string, Agent> = Object.fromEntries(
-  validAgentTypes.map(type => [
-    type,
-    new Agent({
-      id: type,
-      name: DEFAULT_PROMPTS[type].name,
-      instructions: buildInstructions(type),
-      model: buildModel(type),
-      tools: AGENT_TOOLS[type],
-      workspace: skillWorkspaces[type],
-      skillsFormat: 'markdown',
-    }),
-  ]),
-)
+/** toolsContext：ai 工具循环把同名条目经 tool 的 contextSchema 校验后注入 execute 的 options.context */
+function buildToolsContext(type: string, requestContext: AgentRequestContext) {
+  return Object.fromEntries(Object.keys(AGENT_TOOLS[type]).map(name => [name, requestContext]))
+}
+
+/** 按请求构建 ToolLoopAgent：instructions/model 逐请求解析（等价于原动态解析语义） */
+async function createAgent(
+  type: string,
+  values: AgentRequestContextValues,
+  opts?: { maxSteps?: number },
+): Promise<ToolLoopAgent> {
+  const requestContext = buildAgentRequestContext(values)
+  const [instructions, model] = await Promise.all([
+    buildInstructions(type, requestContext),
+    buildModel(type, requestContext),
+  ])
+  return new ToolLoopAgent({
+    id: type,
+    instructions,
+    model,
+    tools: AGENT_TOOLS[type],
+    toolsContext: buildToolsContext(type, requestContext),
+    // 与原 generate({ maxSteps }) 语义等价的停止条件
+    stopWhen: stepCountIs(opts?.maxSteps ?? DEFAULT_MAX_STEPS),
+  })
+}
+
+/** Agent 注册表：type → 按请求构建 ToolLoopAgent 的工厂 */
+export const agentRegistry: Record<string, (values: AgentRequestContextValues, opts?: { maxSteps?: number }) => Promise<ToolLoopAgent>> =
+  Object.fromEntries(validAgentTypes.map(type => [type, (values, opts) => createAgent(type, values, opts)]))
+
+/** 取指定类型的 Agent；类型不存在返回 undefined（消费方自行报错） */
+export function getAgent(
+  type: string,
+  values: AgentRequestContextValues,
+  opts?: { maxSteps?: number },
+): Promise<ToolLoopAgent> | undefined {
+  return agentRegistry[type]?.(values, opts)
+}

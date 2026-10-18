@@ -2,12 +2,12 @@
  * company-llm-model — 直连 bot-backend /api/llm/stream 的自定义 AI SDK provider。
  *
  * mock fetch 返回构造好的 SSE Response，锁定四个契约面：
- * 请求体形状（对齐 llmStreamRequestSchema）、Core→V3 part 映射、
+ * 请求体形状（对齐 llmStreamRequestSchema）、Core→V4 part 映射、
  * 终止帧语义（failed ≠ complete）、非 200 的错误路径。
  */
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import type { LanguageModelV3CallOptions } from '@ai-sdk/provider'
+import type { LanguageModelV4CallOptions } from '@ai-sdk/provider'
 import { createCompanyLanguageModel } from '../src/services/company-llm-model.js'
 
 const BASE_URL = 'https://company.invalid/api/llm'
@@ -51,7 +51,7 @@ async function collect(stream: ReadableStream<any>): Promise<any[]> {
   return parts
 }
 
-function basicPrompt(): LanguageModelV3CallOptions['prompt'] {
+function basicPrompt(): LanguageModelV4CallOptions['prompt'] {
   return [{ role: 'user', content: [{ type: 'text', text: 'hello' }] }]
 }
 

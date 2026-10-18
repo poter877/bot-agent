@@ -5,12 +5,12 @@
  */
 import { Hono } from 'hono'
 import { success, badRequest } from '../utils/response.js'
-import { skillsManagerWorkspace } from '../agents/skills.js'
+import { workspaceFs } from '../agents/skills.js'
 import { validAgentTypes, DEFAULT_PROMPTS } from '../agents/index.js'
 import { loadAgentPromptFile, serializePromptFile, promptFilePath } from '../agents/prompts.js'
 
 const app = new Hono()
-const fsm = () => skillsManagerWorkspace.filesystem!
+const fsm = () => workspaceFs
 
 const checkType = (type: string) => validAgentTypes.includes(type)
 const LANGS = ['zh', 'en', 'ja', 'ko']

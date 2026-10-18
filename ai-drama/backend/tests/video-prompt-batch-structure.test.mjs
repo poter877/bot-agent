@@ -14,8 +14,9 @@ test('video prompt batch service runs per-shot async agent loop', () => {
   assert.match(svc, /storyboardIds\.includes\(sb\.id\)/)
   // 运行中不重复启动
   assert.match(svc, /status === 'running'\) return \{ started: false, total: -1 \}/)
-  // 逐个分镜调用 prompt_generator，以落库结果判定成败
-  assert.match(svc, /mastra\.getAgent\('prompt_generator'\)/)
+  // 逐个分镜调用 prompt_generator（ai ToolLoopAgent，maxSteps:8），以落库结果判定成败
+  assert.match(svc, /await getAgent\('prompt_generator'/)
+  assert.match(svc, /maxSteps: 8/)
   assert.match(svc, /read_storyboard_context/)
   assert.match(svc, /update_storyboard/)
   assert.match(svc, /fresh\?\.videoPrompt/)

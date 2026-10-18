@@ -1,20 +1,20 @@
 /**
  * 剧本改写 Agent 工具
- * 模块级单例 — episodeId 通过 RequestContext 按请求注入
+ * 模块级单例 — episodeId 经 ToolLoopAgent 的 toolsContext 按请求注入（options.context）
  */
-import { createTool } from '@mastra/core/tools'
+import { tool } from 'ai'
 import { z } from 'zod'
 import { db, schema } from '../../db/index.js'
 import { eq } from 'drizzle-orm'
 import { now } from '../../utils/response.js'
-import { getEpisodeId } from '../context.js'
+import { agentContextSchema, getEpisodeId, type AgentToolSet } from '../context.js'
 
-const readEpisodeScript = createTool({
-  id: 'read_episode_script',
+const readEpisodeScript = tool({
   description: 'Read the script content of the current episode.',
   inputSchema: z.object({}),
-  execute: async (_input, context) => {
-    const episodeId = getEpisodeId(context?.requestContext)
+  contextSchema: agentContextSchema,
+  execute: async (_input, { context }) => {
+    const episodeId = getEpisodeId(context)
     if (!episodeId) return { error: 'Missing episodeId in request context' }
     const [ep] = await db.select().from(schema.episodes)
       .where(eq(schema.episodes.id, episodeId))
@@ -25,14 +25,14 @@ const readEpisodeScript = createTool({
   },
 })
 
-const rewriteToScreenplay = createTool({
-  id: 'rewrite_to_screenplay',
+const rewriteToScreenplay = tool({
   description: 'Read the original content for AI rewriting. Returns the source text with formatting instructions.',
   inputSchema: z.object({
     instructions: z.string().optional().describe('Additional rewrite instructions'),
   }),
-  execute: async ({ instructions }, context) => {
-    const episodeId = getEpisodeId(context?.requestContext)
+  contextSchema: agentContextSchema,
+  execute: async ({ instructions }, { context }) => {
+    const episodeId = getEpisodeId(context)
     if (!episodeId) return { error: 'Missing episodeId in request context' }
     const [ep] = await db.select().from(schema.episodes)
       .where(eq(schema.episodes.id, episodeId))
@@ -58,14 +58,14 @@ ${source}`,
   },
 })
 
-const saveScript = createTool({
-  id: 'save_script',
+const saveScript = tool({
   description: 'Save the rewritten screenplay content to the current episode.',
   inputSchema: z.object({
     content: z.string().describe('The formatted screenplay content to save'),
   }),
-  execute: async ({ content }, context) => {
-    const episodeId = getEpisodeId(context?.requestContext)
+  contextSchema: agentContextSchema,
+  execute: async ({ content }, { context }) => {
+    const episodeId = getEpisodeId(context)
     if (!episodeId) return { error: 'Missing episodeId in request context' }
     await db.update(schema.episodes)
       .set({ scriptContent: content, updatedAt: now() })
@@ -75,4 +75,5 @@ const saveScript = createTool({
   },
 })
 
-export const scriptTools = { readEpisodeScript, rewriteToScreenplay, saveScript }
+/** 键 = 模型可见的工具名（ai 以注册表键为工具名） */
+export const scriptTools: AgentToolSet = { read_episode_script: readEpisodeScript, rewrite_to_screenplay: rewriteToScreenplay, save_script: saveScript }
