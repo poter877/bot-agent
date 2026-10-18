@@ -9,7 +9,7 @@ import { z } from 'zod'
 
 const mediaCatalogEntrySchema = z.object({
   id: z.string().min(1).max(200),
-  provider: z.enum(['fal', 'openai', 'google', 'xai']),
+  provider: z.enum(['fal', 'openai', 'google', 'xai', 'volcengine', 'minimax', 'aliyun']),
   model: z.string().min(1).max(200),
   enabled: z.boolean().default(true),
   /** Max images per call the server allows for this entry (image only). */

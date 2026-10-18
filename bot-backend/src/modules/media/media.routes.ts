@@ -3,11 +3,12 @@ import { experimental_generateVideo, generateImage, type GeneratedFile } from 'a
 import type { RedisClientType } from 'redis'
 import type { AppConfig } from '../../config/env.js'
 import type { AppEnv } from '../../shared/context.js'
-import { requireAuthContext } from '../../shared/context.js'
+import { isServicePrincipal, requireAuthContext } from '../../shared/context.js'
 import { HttpApiError, assertSameOrigin } from '../../shared/http.js'
 import type { Logger } from '../../shared/logger.js'
 import type { MediaCatalogEntry, MediaKind } from './catalog.js'
 import { MediaCatalogError, parseMediaCatalog, resolveMediaCatalogEntry } from './catalog.js'
+import { generatePollingVideo, generateVolcengineImage, type PollingProviderDeps } from './polling-providers.js'
 
 /**
  * POST /api/media/image|video — media generation over the AI SDK, served from
@@ -26,8 +27,10 @@ export interface MediaRoutesDeps {
   imageCatalog?: MediaCatalogEntry[]
   videoCatalog?: MediaCatalogEntry[]
   /** Test seams: default to the env-keyed AI SDK fal/openai/google/xai providers. */
-  imageGenerator?: (request: ImageRequest, entry: MediaCatalogEntry) => Promise<{ mediaType: string; base64: string }[]>
-  videoGenerator?: (request: VideoRequest, entry: MediaCatalogEntry) => Promise<{ mediaType: string; base64: string }[]>
+  imageGenerator?: (request: ImageRequest, entry: MediaCatalogEntry) => Promise<{ media_type: string; base64: string }[]>
+  videoGenerator?: (request: VideoRequest, entry: MediaCatalogEntry) => Promise<{ media_type: string; base64: string }[]>
+  /** Test seam over the polling providers' vendor HTTP (global fetch by default). */
+  pollingDeps?: PollingProviderDeps
 }
 
 type ProviderKeys = Readonly<Record<string, string | undefined>>
@@ -38,6 +41,9 @@ function providerKeysOf(config: AppConfig): ProviderKeys {
     openai: config.OPENAI_API_KEY,
     google: config.GOOGLE_GENERATIVE_AI_API_KEY,
     xai: config.XAI_API_KEY,
+    volcengine: config.VOLCENGINE_API_KEY,
+    minimax: config.MINIMAX_API_KEY,
+    aliyun: config.DASHSCOPE_API_KEY,
   }
 }
 
@@ -53,15 +59,39 @@ interface ImageRequest {
 interface VideoRequest {
   model: string
   prompt: string
-  aspectRatio?: `${number}:${number}` | 'adaptive'
-  resolution?: `${number}x${number}`
+  aspectRatio?: string
+  resolution?: string
   duration?: number
   fps?: number
   seed?: number
+  // 多模态参考素材（ai-drama 的参考生视频契约）：URL 数组，非 JSON 字符串列。
+  generateAudio?: boolean
+  imageUrl?: string
+  firstFrameUrl?: string
+  lastFrameUrl?: string
+  referenceImages?: string[]
+  referenceVideos?: string[]
+  referenceAudios?: string[]
+  referenceFileUrl?: string
+  referenceLinkUrl?: string
+  promptExtend?: boolean
+  watermark?: boolean
 }
 
-function mediaFiles(files: ReadonlyArray<GeneratedFile>): Array<{ mediaType: string; base64: string }> {
-  return files.map((file) => ({ mediaType: file.mediaType, base64: Buffer.from(file.uint8Array).toString('base64') }))
+const POLLING_VIDEO_PROVIDERS = new Set(['volcengine', 'minimax', 'aliyun'])
+
+const asString = (value: unknown): string | undefined =>
+  typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
+
+const asUrlArray = (value: unknown): string[] | undefined =>
+  Array.isArray(value) && value.every((item) => typeof item === 'string')
+    ? (value as string[]).map((item) => item.trim()).filter((item) => item !== '')
+    : undefined
+
+/** The wire envelope is snake_case ({media_type, base64}) — every consumer
+ * (Python tools, ai-drama adapters) reads media_type; keep it the only shape. */
+function mediaFiles(files: ReadonlyArray<GeneratedFile>): Array<{ base64: string; media_type: string }> {
+  return files.map((file) => ({ media_type: file.mediaType, base64: Buffer.from(file.uint8Array).toString('base64') }))
 }
 
 const asSize = (value: unknown): `${number}x${number}` | undefined =>
@@ -86,7 +116,8 @@ export function createMediaRoutes(deps: MediaRoutesDeps): Hono<AppEnv> {
   routes.post('/image', async (c) => {
     const auth = requireAuthContext(c)
     const requestId = c.get('requestId')
-    assertSameOrigin(c, new URL(config.BETTER_AUTH_URL).origin)
+    // 服务主体是服务器到服务器调用，浏览器同源约束不适用。
+    if (!isServicePrincipal(auth)) assertSameOrigin(c, new URL(config.BETTER_AUTH_URL).origin)
 
     const body = await c.req.json().catch(() => null)
     if (body === null) {
@@ -119,13 +150,21 @@ export function createMediaRoutes(deps: MediaRoutesDeps): Hono<AppEnv> {
     const n = entry.maxImages !== undefined ? Math.min(request.n, entry.maxImages) : request.n
 
     try {
-      const images = deps.imageGenerator
-        ? await deps.imageGenerator(request, entry)
-        : await defaultImageGenerator(config, request, entry, n, c.req.raw.signal)
+      let images: Array<{ media_type: string; base64: string }>
+      if (deps.imageGenerator) {
+        images = await deps.imageGenerator(request, entry)
+      } else if (entry.provider === 'volcengine') {
+        const key = keys.volcengine
+        if (key === undefined) throw new HttpApiError(503, 'provider_key_missing', 'The media backend is not configured.')
+        images = await generateVolcengineImage(key, entry, request, config.MEDIA_REQUEST_TIMEOUT_MS, c.req.raw.signal, deps.pollingDeps)
+      } else {
+        images = await defaultImageGenerator(config, request, entry, n, c.req.raw.signal)
+      }
       logger.info({ requestId, userId: auth.userId, model: entry.id, images: images.length }, 'media image generated')
       await recordMediaUsage(redis, auth.userId, entry.id, images.length)
       return c.json({ ok: true, images })
     } catch (error) {
+      if (error instanceof HttpApiError) throw error
       logger.warn({ requestId, model: entry.id, err: error }, 'media image generation failed')
       throw new HttpApiError(502, 'internal_error', 'Media generation failed.')
     }
@@ -134,7 +173,7 @@ export function createMediaRoutes(deps: MediaRoutesDeps): Hono<AppEnv> {
   routes.post('/video', async (c) => {
     const auth = requireAuthContext(c)
     const requestId = c.get('requestId')
-    assertSameOrigin(c, new URL(config.BETTER_AUTH_URL).origin)
+    if (!isServicePrincipal(auth)) assertSameOrigin(c, new URL(config.BETTER_AUTH_URL).origin)
 
     const body = await c.req.json().catch(() => null)
     if (body === null) {
@@ -144,15 +183,26 @@ export function createMediaRoutes(deps: MediaRoutesDeps): Hono<AppEnv> {
     const request: VideoRequest = {
       model: String(raw['model'] ?? ''),
       prompt: String(raw['prompt'] ?? ''),
-      ...(asImageAspectRatio(raw['aspectRatio']) !== undefined ? { aspectRatio: asImageAspectRatio(raw['aspectRatio']) } : {}),
-      ...(asSize(raw['resolution']) !== undefined ? { resolution: asSize(raw['resolution']) } : {}),
+      ...(asString(raw['aspectRatio']) !== undefined ? { aspectRatio: asString(raw['aspectRatio']) } : {}),
+      ...(asString(raw['resolution']) !== undefined ? { resolution: asString(raw['resolution']) } : {}),
       ...(typeof raw['duration'] === 'number' ? { duration: raw['duration'] } : {}),
       ...(typeof raw['fps'] === 'number' ? { fps: Math.floor(raw['fps']) } : {}),
       ...(typeof raw['seed'] === 'number' ? { seed: Math.floor(raw['seed']) } : {}),
+      ...(typeof raw['generateAudio'] === 'boolean' ? { generateAudio: raw['generateAudio'] } : {}),
+      ...(asString(raw['imageUrl']) !== undefined ? { imageUrl: asString(raw['imageUrl']) } : {}),
+      ...(asString(raw['firstFrameUrl']) !== undefined ? { firstFrameUrl: asString(raw['firstFrameUrl']) } : {}),
+      ...(asString(raw['lastFrameUrl']) !== undefined ? { lastFrameUrl: asString(raw['lastFrameUrl']) } : {}),
+      ...(asUrlArray(raw['referenceImages']) !== undefined ? { referenceImages: asUrlArray(raw['referenceImages']) } : {}),
+      ...(asUrlArray(raw['referenceVideos']) !== undefined ? { referenceVideos: asUrlArray(raw['referenceVideos']) } : {}),
+      ...(asUrlArray(raw['referenceAudios']) !== undefined ? { referenceAudios: asUrlArray(raw['referenceAudios']) } : {}),
+      ...(asString(raw['referenceFileUrl']) !== undefined ? { referenceFileUrl: asString(raw['referenceFileUrl']) } : {}),
+      ...(asString(raw['referenceLinkUrl']) !== undefined ? { referenceLinkUrl: asString(raw['referenceLinkUrl']) } : {}),
+      ...(typeof raw['promptExtend'] === 'boolean' ? { promptExtend: raw['promptExtend'] } : {}),
+      ...(typeof raw['watermark'] === 'boolean' ? { watermark: raw['watermark'] } : {}),
     }
     if (request.model.trim() === '') throw new HttpApiError(400, 'validation_failed', 'model is required')
-    if (request.prompt.trim() === '' || request.prompt.length > 4_000) {
-      throw new HttpApiError(400, 'validation_failed', 'prompt is required (max 4000 chars)')
+    if (request.prompt.trim() === '' || request.prompt.length > 20_000) {
+      throw new HttpApiError(400, 'validation_failed', 'prompt is required (max 20000 chars)')
     }
 
     let entry: MediaCatalogEntry
@@ -165,19 +215,27 @@ export function createMediaRoutes(deps: MediaRoutesDeps): Hono<AppEnv> {
       throw error
     }
 
-    if (entry.provider !== 'fal') {
-      // v1: only the fal queue serves video generation synchronously.
-      throw new HttpApiError(503, 'provider_key_missing', 'Video generation is not available for this provider.')
-    }
-
     try {
-      const videos = deps.videoGenerator
-        ? await deps.videoGenerator(request, entry)
-        : await defaultVideoGenerator(config, request, entry, c.req.raw.signal)
+      let videos: Array<{ media_type: string; base64: string }>
+      if (deps.videoGenerator) {
+        videos = await deps.videoGenerator(request, entry)
+      } else if (entry.provider === 'fal') {
+        videos = await defaultVideoGenerator(config, request, entry, c.req.raw.signal)
+      } else if (POLLING_VIDEO_PROVIDERS.has(entry.provider)) {
+        const key = keys[entry.provider]
+        if (key === undefined) throw new HttpApiError(503, 'provider_key_missing', 'The media backend is not configured.')
+        videos = await generatePollingVideo(
+          entry.provider as 'volcengine' | 'minimax' | 'aliyun',
+          key, entry, request, config.MEDIA_REQUEST_TIMEOUT_MS, c.req.raw.signal, deps.pollingDeps,
+        )
+      } else {
+        throw new HttpApiError(503, 'provider_key_missing', 'Video generation is not available for this provider.')
+      }
       logger.info({ requestId, userId: auth.userId, model: entry.id, videos: videos.length }, 'media video generated')
       await recordMediaUsage(redis, auth.userId, entry.id, 1)
       return c.json({ ok: true, videos })
     } catch (error) {
+      if (error instanceof HttpApiError) throw error
       logger.warn({ requestId, model: entry.id, err: error }, 'media video generation failed')
       throw new HttpApiError(502, 'internal_error', 'Media generation failed.')
     }
@@ -188,7 +246,7 @@ export function createMediaRoutes(deps: MediaRoutesDeps): Hono<AppEnv> {
 
 async function defaultImageGenerator(
   config: AppConfig, request: ImageRequest, entry: MediaCatalogEntry, n: number, signal: AbortSignal,
-): Promise<Array<{ mediaType: string; base64: string }>> {
+): Promise<Array<{ media_type: string; base64: string }>> {
   const { generateImage } = await import('ai')
   const { createFal } = await import('@ai-sdk/fal')
   const { createOpenAI } = await import('@ai-sdk/openai')
@@ -216,16 +274,18 @@ async function defaultImageGenerator(
 
 async function defaultVideoGenerator(
   config: AppConfig, request: VideoRequest, entry: MediaCatalogEntry, signal: AbortSignal,
-): Promise<Array<{ mediaType: string; base64: string }>> {
+): Promise<Array<{ media_type: string; base64: string }>> {
   const { experimental_generateVideo } = await import('ai')
   const { createFal } = await import('@ai-sdk/fal')
   const keys = providerKeysOf(config)
   const model = createFal({ apiKey: keys.fal ?? '' }).videoModel(entry.model as never)
+  const aspectRatio = asAspectRatio(request.aspectRatio)
+  const resolution = asSize(request.resolution)
   const result = await experimental_generateVideo({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     model: model as any, prompt: request.prompt,
-    ...(request.aspectRatio !== undefined ? { aspectRatio: request.aspectRatio } : {}),
-    ...(request.resolution !== undefined ? { resolution: request.resolution } : {}),
+    ...(aspectRatio !== undefined ? { aspectRatio } : {}),
+    ...(resolution !== undefined ? { resolution } : {}),
     ...(request.duration !== undefined ? { duration: request.duration } : {}),
     ...(request.fps !== undefined ? { fps: request.fps } : {}),
     ...(request.seed !== undefined ? { seed: request.seed } : {}),

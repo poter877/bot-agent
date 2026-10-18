@@ -5,6 +5,7 @@ import type { RedisConnections } from './redis/client.js'
 import type { Config } from './config/env.js'
 import type { Logger } from './shared/logger.js'
 import type { AppEnv } from './shared/context.js'
+import { serviceAuth } from './shared/context.js'
 import { HttpApiError } from './shared/http.js'
 import { serverRequestId } from './middleware/requestId.js'
 import { accessLogMiddleware } from './middleware/accessLog.js'
@@ -19,7 +20,10 @@ import { createAuth, type Auth } from './modules/auth/auth.js'
 import { createUsersRoutes } from './modules/users/users.routes.js'
 import { createHealthRoutes } from './modules/health/health.routes.js'
 import { createLlmRoutes } from './modules/llm/llm.routes.js'
+import { createChatCompletionsRoutes } from './modules/llm/chat-completions.js'
 import { createMediaRoutes } from './modules/media/media.routes.js'
+import { createAudioRoutes } from './modules/media/audio.routes.js'
+import { createFalQueueProxyRoutes } from './modules/media/fal-proxy.js'
 import type { MediaCatalogEntry } from './modules/media/catalog.js'
 import { CatalogStore, parseModelCatalog } from './modules/llm/catalog.js'
 import { createAdminRoutes } from './modules/admin/admin.routes.js'
@@ -37,6 +41,8 @@ export interface AppDeps {
   llm?: { modelResolver?: Parameters<typeof createLlmRoutes>[0]['modelResolver']; catalog?: Parameters<typeof createLlmRoutes>[0]['catalog'] }
   /** Test seams for the media routes. */
   media?: Pick<Parameters<typeof createMediaRoutes>[0], 'imageGenerator' | 'videoGenerator' | 'imageCatalog' | 'videoCatalog'>
+  /** Test seams for the audio routes. */
+  audio?: Pick<Parameters<typeof createAudioRoutes>[0], 'speechGenerator' | 'transcriber'>
   cloudComputer?: { worker: CloudWorker }
 }
 
@@ -200,7 +206,18 @@ export async function createApp(deps: AppDeps): Promise<App> {
 
   // Model streams ride the same Better Auth session (doc《流式服务端重构》§4.1:
   // 凭证传递方式沿用账号后端的实现约定) with their own per-user request budget.
-  app.use('/api/llm/*', authenticate(auth))
+  // Internal service principals (ai-drama 的 mastra agents) present the service
+  // token instead — the chat-completions route checks for the marker itself.
+  app.use('/api/llm/*', async (c, next) => {
+    const token = config.INTERNAL_SERVICE_TOKEN ?? config.MEDIA_SERVICE_TOKEN
+    const authz = c.req.header('authorization')
+    if (token && authz === `Bearer ${token}`) {
+      c.set('auth', serviceAuth(config.MEDIA_SERVICE_USER_ID, 'llm'))
+      await next()
+      return
+    }
+    await authenticate(auth)(c, next)
+  })
   app.use(
     '/api/llm/*',
     rateLimitMiddleware({
@@ -211,45 +228,64 @@ export async function createApp(deps: AppDeps): Promise<App> {
       subject: byAuthUserId,
     }),
   )
+  app.route('/api/llm', createChatCompletionsRoutes({ config, db, redis: redis.commands, logger, catalogStore, ...deps.llm }))
   app.route('/api/llm', createLlmRoutes({ config, db, redis: redis.commands, logger, catalogStore, ...deps.llm }))
 
-  // Media generation (image/video): same Better Auth session, own per-user
+  // Media generation (image/video/audio): same Better Auth session, own per-user
   // request budget, small JSON bodies, generation errors answer as 502.
-  app.use('/api/media/*', bodyPolicyMiddleware(config.MEDIA_BODY_LIMIT_BYTES))
+  // The fal queue proxy carries submit payloads with inline data URIs and the
+  // transcription route takes multipart audio — both get the stream-sized
+  // body budget (and, for transcription, the multipart allowance) instead of
+  // the small JSON-only media one.
+  const mediaBodyPolicy = bodyPolicyMiddleware(config.MEDIA_BODY_LIMIT_BYTES)
+  const mediaUploadBodyPolicy = bodyPolicyMiddleware(config.LLM_STREAM_BODY_LIMIT_BYTES, ['application/json', 'multipart/form-data'])
+  app.use('/api/media/*', (c, next) =>
+    c.req.path.startsWith('/api/media/fal-queue/') || c.req.path.startsWith('/api/media/transcription')
+      ? mediaUploadBodyPolicy(c, next)
+      : mediaBodyPolicy(c, next),
+  )
   app.use(
     '/api/media/*',
-    rateLimitMiddleware({
+    (c, next) => (c.req.path.startsWith('/api/media/fal-queue/') ? next() : rateLimitMiddleware({
       redis: redis.commands,
       scope: 'entry-ip',
       limit: config.RATE_LIMIT_ENTRY_MAX,
       windowSeconds: config.RATE_LIMIT_ENTRY_WINDOW_SECONDS,
       subject: (c) => c.get('realIp'),
-    }),
+    })(c, next)),
   )
   // Media accepts two principals: a Better Auth user session, or an internal
   // service token (ai-drama 等内部服务) attributed to MEDIA_SERVICE_USER_ID —
   // 同一套目录、配额与用量账本。
   app.use('/api/media/*', async (c, next) => {
-    const token = config.MEDIA_SERVICE_TOKEN
+    const token = config.INTERNAL_SERVICE_TOKEN ?? config.MEDIA_SERVICE_TOKEN
     const authz = c.req.header('authorization')
     if (token && authz === `Bearer ${token}`) {
-      c.set('auth', { userId: config.MEDIA_SERVICE_USER_ID, sessionId: 'media-service' })
+      c.set('auth', serviceAuth(config.MEDIA_SERVICE_USER_ID, 'media'))
       await next()
       return
     }
     await authenticate(auth)(c, next)
   })
+  // 队列代理只服务内部主体（提交 + 轮询频率远高于媒体路由的按小时预算），
+  // 不走媒体限流；滥用边界是令牌本身。
   app.use(
     '/api/media/*',
-    rateLimitMiddleware({
+    (c, next) => (c.req.path.startsWith('/api/media/fal-queue/') ? next() : rateLimitMiddleware({
       redis: redis.commands,
       scope: 'media',
       limit: config.RATE_LIMIT_MEDIA_MAX,
       windowSeconds: config.RATE_LIMIT_MEDIA_WINDOW_SECONDS,
       subject: byAuthUserId,
-    }),
+    })(c, next)),
   )
+  // The queue proxy mounts only when this deployment holds a fal key; without
+  // one there is nothing to proxy and the route must not exist.
+  if (config.FAL_KEY) {
+    app.route('/api/media/fal-queue', createFalQueueProxyRoutes({ config, logger }))
+  }
   app.route('/api/media', createMediaRoutes({ config, redis: redis.commands, logger, ...deps.media }))
+  app.route('/api/media', createAudioRoutes({ config, redis: redis.commands, logger, ...deps.audio }))
 
   // 运营管理后台: same-origin form posts (urlencoded — NOT the JSON body
   // policy), session role check per request, entry-ip flood guard only.

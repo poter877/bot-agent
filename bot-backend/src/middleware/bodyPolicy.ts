@@ -9,9 +9,13 @@ const COMPRESSED_ENCODINGS = new Set(['gzip', 'deflate', 'br', 'zstd', 'compress
 /**
  * Body policy for the JSON API: reject unsupported media types and compressed
  * bodies before parsing, then hard-cap the raw stream size. Malformed JSON is
- * mapped to 400 invalid_json in the error handler.
+ * mapped to 400 invalid_json in the error handler. Routes that take other
+ * encodings (multipart audio upload) widen `allowedContentTypes`.
  */
-export function bodyPolicyMiddleware(maxSizeBytes: number): MiddlewareHandler<AppEnv> {
+export function bodyPolicyMiddleware(
+  maxSizeBytes: number,
+  allowedContentTypes: readonly string[] = ['application/json'],
+): MiddlewareHandler<AppEnv> {
   const limit = bodyLimit({
     maxSize: maxSizeBytes,
     onError: () => {
@@ -25,8 +29,8 @@ export function bodyPolicyMiddleware(maxSizeBytes: number): MiddlewareHandler<Ap
       return
     }
     const contentType = c.req.header('content-type')
-    if (contentType === undefined || !contentType.toLowerCase().includes('application/json')) {
-      throw new HttpApiError(415, 'unsupported_media_type', 'This API accepts application/json only.')
+    if (contentType === undefined || !allowedContentTypes.some((allowed) => contentType.toLowerCase().includes(allowed))) {
+      throw new HttpApiError(415, 'unsupported_media_type', 'This API does not accept this content type.')
     }
     const contentEncoding = c.req.header('content-encoding')
     if (contentEncoding !== undefined && contentEncoding.trim().toLowerCase() !== 'identity') {

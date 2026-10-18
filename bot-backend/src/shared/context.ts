@@ -12,6 +12,19 @@ export interface AuthContext {
   sessionId: string
 }
 
+/**
+ * Internal server-to-server principals (ai-drama 等) share the session slot
+ * with a namespaced marker: no Better Auth session exists for them, and
+ * browser-only admissions (same-origin checks) must not apply.
+ */
+export function serviceAuth(userId: string, area: string): AuthContext {
+  return { userId, sessionId: `service:${area}` }
+}
+
+export function isServicePrincipal(auth: AuthContext): boolean {
+  return auth.sessionId.startsWith('service:')
+}
+
 export type AppBindings = {
   Variables: {
     requestId: string

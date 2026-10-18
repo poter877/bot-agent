@@ -39,7 +39,8 @@ export async function createTestApp(
   overrides: Record<string, string> = {},
   llm?: Parameters<typeof createApp>[0]['llm'],
   cloudComputer?: Parameters<typeof createApp>[0]['cloudComputer'],
-  media?: Pick<Parameters<typeof createMediaRoutes>[0], 'imageGenerator' | 'videoGenerator' | 'imageCatalog' | 'videoCatalog'>,
+  media?: Pick<Parameters<typeof createMediaRoutes>[0], 'imageGenerator' | 'videoGenerator' | 'imageCatalog' | 'videoCatalog' | 'pollingDeps'>,
+  audio?: Pick<Parameters<typeof createApp>[0]['audio'], 'speechGenerator' | 'transcriber'>,
 ): Promise<TestApp> {
   const infra = testInfra()
   const config = loadConfig({
@@ -57,7 +58,7 @@ export async function createTestApp(
   })
   const redis = await createRedisConnections(config.REDIS_URL)
   const logger = createLogger(config)
-  const { hono, cloudComputers } = await createApp({ config, database, redis, logger, llm, cloudComputer, media })
+  const { hono, cloudComputers } = await createApp({ config, database, redis, logger, llm, cloudComputer, media, audio })
   return {
     config,
     database,
