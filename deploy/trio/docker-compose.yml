@@ -101,6 +101,8 @@ services:
     environment:
       HERMES_HOME: /data/drama-home
       API_SERVER_KEY: ${API_SERVER_KEY:?}
+      # 容器内默认绑 127.0.0.1，端口映射会连不通；对外服务必须绑全网卡。
+      API_SERVER_HOST: 0.0.0.0
       HERMES_BOT_BACKEND_URL: http://bot-backend:3000
     command: ["hermes", "gateway"]
     volumes:

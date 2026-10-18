@@ -67,21 +67,24 @@ if [ -z "${DRAMA_ACCOUNT_EMAIL:-}" ] || [ -z "${DRAMA_ACCOUNT_PASSWORD:-}" ]; th
   exit 0
 fi
 
-# 登录 bot-backend，把 Better Auth 会话写成 drama home 的 Netscape cookie jar
-# （gateway 的公司模型客户端读 <HERMES_HOME>/account-auth-cookies.txt）。
-jar=$(mktemp)
-headers=$(mktemp)
-curl -fsS -D "$headers" -c "$jar" -X POST "$BOT_BASE/api/auth/sign-in/email" \
-  -H 'Content-Type: application/json' \
-  -d "{\"email\":\"$DRAMA_ACCOUNT_EMAIL\",\"password\":\"$DRAMA_ACCOUNT_PASSWORD\"}" \
-  || fail "account sign-in failed (register the account first)"
-docker compose exec -T hermes-gateway sh -c 'mkdir -p "$HERMES_HOME"' >/dev/null
-# 宿主机侧 cookie 全程走 mktemp；下面两处 /tmp 都在 hermes-gateway 容器内——宿主机无法为
-# docker cp 展开容器里的 $HERMES_HOME，只能先暂存到容器 /tmp，再在容器内落位到 drama home。
-docker compose cp "$jar" hermes-gateway:/tmp/cookies.txt >/dev/null  # no-tmp: ok — 容器内路径
-# MozillaCookieJar 头：curl 写出的 jar 缺 #HttpOnly_ 前缀也能读，但补上头最稳。
-docker compose exec -T hermes-gateway sh -c \
-  '{ echo "# Netscape HTTP Cookie File"; cat /tmp/cookies.txt; } > "$HERMES_HOME/account-auth-cookies.txt"'  # no-tmp: ok — 容器内路径
+# 登录必须在容器网络内、对 gateway 实际访问的源（bot-backend:3000）进行，且 jar
+# 要用 python 的 MozillaCookieJar 写：curl 格式对无点主机的域处理与 python 不一致
+# （python 会把无点主机规范化为 <host>.local），hermes 侧会静默不带 cookie 而 401。
+docker compose exec -T hermes-gateway /opt/hermes/.venv/bin/python - "$DRAMA_ACCOUNT_EMAIL" "$DRAMA_ACCOUNT_PASSWORD" <<'PYEOF2' || fail "account sign-in failed (register the account first)"
+import http.cookiejar, json, os, sys, urllib.request
+email, password = sys.argv[1], sys.argv[2]
+path = os.path.join(os.environ["HERMES_HOME"], "account-auth-cookies.txt")
+jar = http.cookiejar.MozillaCookieJar(path)
+opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+req = urllib.request.Request(
+    "http://bot-backend:3000/api/auth/sign-in/email",
+    data=json.dumps({"email": email, "password": password}).encode(),
+    headers={"Content-Type": "application/json"}, method="POST")
+with opener.open(req, timeout=10):
+    pass
+jar.save(path, ignore_discard=True)
+os.chmod(path, 0o644)  # exec 是 root，gateway 进程非 root：必须世界可读
+PYEOF2
 echo "OK  drama account session installed"
 
 reply=$(curl -fsS -X POST "$GATEWAY_BASE/v1/chat/completions" \
