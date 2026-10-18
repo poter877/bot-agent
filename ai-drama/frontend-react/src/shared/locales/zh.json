@@ -3,6 +3,12 @@
     "title": "视频工厂",
     "updateAvailable": "发现新版本 v{version}，可在「设置 → 关于更新」中升级"
   },
+  "auth": {
+    "tokenTitle": "访问令牌",
+    "tokenHint": "该服务的 API 已开启令牌鉴权。请输入部署时配置的 AI_DRAMA_API_TOKEN（保存在本浏览器，之后请求自动携带）。",
+    "tokenPlaceholder": "粘贴访问令牌",
+    "tokenSave": "保存并继续"
+  },
   "common": {
     "confirm": "确认",
     "cancel": "取消",

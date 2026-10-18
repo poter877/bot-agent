@@ -43,6 +43,13 @@
       "when": 1792335870652,
       "tag": "0005_wonderful_sentry",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792340140342,
+      "tag": "0006_demonic_scalphunter",
+      "breakpoints": true
     }
   ]
 }

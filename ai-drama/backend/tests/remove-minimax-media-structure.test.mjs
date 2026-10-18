@@ -1,6 +1,10 @@
 import { existsSync, readFileSync } from 'node:fs'
+import fs from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { eq } from 'drizzle-orm'
 
 const root = new URL('../..', import.meta.url)
 const read = (path) => readFileSync(new URL(path, root), 'utf8')
@@ -22,20 +26,44 @@ test('MiniMax image and video provider surfaces are removed', () => {
   assert.equal(exists('backend/src/services/adapters/minimax-video.ts'), false)
 })
 
-test('MySQL startup removes all saved MiniMax configurations including audio', { skip: 'WIP: MySQL→SQLite 迁移删除了 src/db/mysql-schema.ts，本断言待按 sqlite-schema 重写' }, () => {
-  const mysqlSchema = read('backend/src/db/mysql-schema.ts')
-  const detachImage = 'UPDATE `episodes` e JOIN `ai_service_configs` c ON e.`image_config_id` = c.`id` SET e.`image_config_id` = NULL WHERE c.`provider` = ?'
-  const detachVideo = 'UPDATE `episodes` e JOIN `ai_service_configs` c ON e.`video_config_id` = c.`id` SET e.`video_config_id` = NULL WHERE c.`provider` = ?'
-  const deleteConfigs = 'DELETE FROM `ai_service_configs` WHERE `provider` = ?'
+test('startup migration neutralizes saved MiniMax configurations (legacy direct-vendor rows retarget to company)', async () => {
+  // MySQL 时代的启动 DELETE 清理（mysqlDataCleanupStatements）已随 mysql-schema.ts 删除。
+  // 现行承接：ai-registry 的 migrateServiceConfigs 把活跃的厂商直连历史行
+  // （minimax ∈ legacyDirectVendors）原位归一为 company 后端行——行 id 保留，
+  // 集的 image_config_id/video_config_id 引用天然不悬空，minimax 不再是任何合法 provider。
+  const registry = read('backend/src/services/ai-registry.ts')
+  assert.match(registry, /const legacyDirectVendors = \[[^\]]*'minimax'[^\]]*\]/)
+  assert.match(registry, /legacyDirectVendors\.includes\(r\.provider \|\| ''\)/)
 
-  assert.match(mysqlSchema, /mysqlDataCleanupStatements/)
-  assert.match(mysqlSchema, /DELETE FROM `ai_service_configs` WHERE `provider` = \?/)
-  assert.match(mysqlSchema, /DELETE FROM `ai_service_providers` WHERE `provider` = \?/)
-  assert.ok(mysqlSchema.includes(detachImage))
-  assert.ok(mysqlSchema.includes(detachVideo))
-  assert.ok(mysqlSchema.indexOf(detachImage) < mysqlSchema.indexOf(deleteConfigs))
-  assert.ok(mysqlSchema.indexOf(detachVideo) < mysqlSchema.indexOf(deleteConfigs))
-  assert.equal((mysqlSchema.match(/params:\s*\['minimax'\]/g) || []).length, 4)
-  assert.doesNotMatch(mysqlSchema, /params:\s*\['minimax', 'image', 'video'\]/)
-  assert.match(mysqlSchema, /pool\.query\(cleanup\.sql, cleanup\.params\)/)
+  // 行为验证：库中残留的 minimax 配置行经启动迁移后 provider 归一为 company
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'minimax-cleanup-'))
+  process.env.SQLITE_PATH = path.join(directory, 'test.sqlite')
+  process.env.MYSQL_AUTO_IMPORT = 'false'
+  process.env.COMPANY_BACKEND_URL = 'https://company.invalid'
+  process.env.COMPANY_SERVICE_TOKEN = 'company-token'
+  try {
+    const { db, schema, getInsertId } = await import('../src/db/index.js')
+    const { migrateServiceConfigs } = await import('../src/services/ai-registry.js')
+    const ts = new Date().toISOString()
+    const configId = getInsertId(db.insert(schema.aiServiceConfigs).values({
+      serviceType: 'video', provider: 'minimax', name: '旧 MiniMax 直连', baseUrl: 'https://api.minimax.chat',
+      apiKey: 'legacy-secret', model: JSON.stringify(['abab6.5s-chat']), priority: 1, isActive: true,
+      createdAt: ts, updatedAt: ts,
+    }).run())
+    const dramaId = getInsertId(db.insert(schema.dramas).values({ title: '残留配置剧', createdAt: ts, updatedAt: ts }).run())
+    const episodeId = getInsertId(db.insert(schema.episodes).values({
+      dramaId, episodeNumber: 1, title: '第1集', videoConfigId: configId, createdAt: ts, updatedAt: ts,
+    }).run())
+
+    migrateServiceConfigs()
+
+    const row = db.select().from(schema.aiServiceConfigs).where(eq(schema.aiServiceConfigs.id, configId)).get()
+    assert.equal(row.provider, 'company')
+    assert.equal(row.apiKey, 'company-token')
+    // 行原位更新（不删不换 id）→ 集引用仍然有效；MySQL 时代靠"先 detach 再 delete"达成的效果由 id 保留承接
+    const episode = db.select().from(schema.episodes).where(eq(schema.episodes.id, episodeId)).get()
+    assert.equal(episode.videoConfigId, configId)
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true })
+  }
 })

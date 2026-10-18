@@ -202,6 +202,8 @@ ComfyUI 的九个模型入口需要已部署的服务、对应模型/节点及 A
 | `FRONTEND_DIST` | `frontend-react/dist` | 前端静态产物目录 |
 | `FFMPEG_BIN` / `FFPROBE_BIN` | npm 内置二进制 | 自定义 ffmpeg/ffprobe 可执行文件路径 |
 | `PUBLIC_BASE_URL` | — | Seedance 引用本地参考资源时所需的公网地址（服务器部署用） |
+| `AI_DRAMA_API_TOKEN` | （未配置） | HTTP API 共享令牌（`Authorization: Bearer`）。未配置时仅放行回环来源；服务器/容器部署必须配置（见「部署」） |
+| `AI_DRAMA_MCP_TOKEN` | （未配置） | hermes 调用本服务 `/mcp` 工具端点所用的令牌（与 API 令牌相互独立） |
 
 > **说明**：AI 服务的 API Key、Base URL 和模型参数全部在 Web 界面的「设置」页配置并入库，不在配置文件/环境变量中维护。
 
@@ -380,6 +382,8 @@ curl -L -o ${TMPDIR:-/tmp}/HuobaoDrama.dmg https://installer.chatfire.site/huoba
 ```
 
 无需构建 —— 下载 dmg/exe 直接安装即可，已安装客户端会通过内置更新器自动升级。（如需从源码自行打包，见下方命令。）
+> **桌面版是什么**：Web UI 与后端的打包外壳——`desktop/` 不含任何业务代码。构建时用 esbuild 打包 `backend/src/index.ts`、内嵌 `frontend-react` 构建产物，只额外提供桌面能力（窗口管理、存储位置迁移、自动更新、单实例锁、内置 FFmpeg）。壳内后端监听随机回环端口，桌面版无需配置 API 令牌。
+
 
 双击安装、开箱即用的桌面版（macOS + Windows）：数据库（SQLite）、生成的媒体文件、Agent 技能全部存放在用户数据目录，卸载应用不影响数据。
 
@@ -441,8 +445,11 @@ npm run dev:desktop
 npm run build:frontend
 
 # 2. 启动后端，自动提供 frontend-react/dist 静态页面
-npm --prefix backend start
+#    服务器若非回环可达，先配置 API 令牌（见下方说明）
+AI_DRAMA_API_TOKEN=<随机密钥> npm --prefix backend start
 ```
+
+**API 鉴权**：未配置 `AI_DRAMA_API_TOKEN` 时 API 仅响应回环请求（`127.0.0.1`/`::1`），本地开发与桌面版零配置不受影响。服务器/容器部署下浏览器请求来自非回环地址——请生成令牌（`openssl rand -hex 24`）配置 `AI_DRAMA_API_TOKEN`，浏览器首次访问时按弹窗提示输入一次（存在浏览器本地，之后自动携带 `Authorization: Bearer`）。`/api/v1/health` 保持开放供巡检探活，`/mcp` 走独立的 `AI_DRAMA_MCP_TOKEN` 校验。
 
 需要上传到服务器的文件：
 
@@ -490,6 +497,8 @@ server {
 
 ```bash
 cp .env.example .env
+# 容器端口映射下浏览器请求来自非回环地址——.env 里必须设置 AI_DRAMA_API_TOKEN，
+# 否则所有 /api/v1 请求都会 401。
 docker compose up -d --build
 # 访问 http://localhost:5679
 ```

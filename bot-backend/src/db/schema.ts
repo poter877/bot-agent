@@ -178,6 +178,9 @@ export const llmRequestLog = pgTable(
     index('llm_request_log_created_at_idx').on(table.createdAt),
     index('llm_request_log_user_idx').on(table.userId),
     index('llm_request_log_status_idx').on(table.status),
+    // Correlation tracing: the request page drills from an ai-drama task /
+    // hermes turn correlation id into its gateway requests.
+    index('llm_request_log_correlation_id_idx').on(table.correlationId),
   ],
 )
 

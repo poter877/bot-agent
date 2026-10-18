@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
 import { useTranslation } from 'react-i18next'
 import { useTheme } from '@/shared/config/theme'
+import { ApiTokenGate } from '@/features/auth/ApiTokenGate'
 import { DesktopBootstrap } from '@/features/desktop-operations/DesktopBootstrap'
 import { MigrationOverlay } from '@/features/desktop-operations/MigrationOverlay'
 import { LanguageSwitchHost } from '@/features/preferences/LanguageSwitchHost'
@@ -43,6 +44,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
     <QueryClientProvider client={queryClient}>
       {children}
       <Toaster position="top-right" duration={3000} theme={resolvedTheme} />
+      <ApiTokenGate />
       <MigrationOverlay />
       <LanguageSwitchHost />
       <DesktopBootstrap />

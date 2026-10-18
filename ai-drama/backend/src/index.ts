@@ -33,6 +33,7 @@ import storage from './routes/storage.js'
 import serverUpdate from './routes/serverUpdate.js'
 import mcp from './mcp/route.js'
 import { requestLogger, errorHandler } from './middleware/logger.js'
+import { apiAuth } from './middleware/api-auth.js'
 import { db, schema } from './db/index.js'
 import { eq } from 'drizzle-orm'
 import { now } from './utils/response.js'
@@ -59,7 +60,9 @@ app.get('/api/v1/health', (c) => c.json({
 }))
 
 // API routes
+// /api/v1 共享令牌鉴权（Bearer AI_DRAMA_API_TOKEN；未配置时仅放行回环来源）
 const api = new Hono()
+api.use('*', apiAuth)
 api.route('/dramas', dramas)
 api.route('/creative', creative)
 api.route('/film', film)

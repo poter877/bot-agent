@@ -126,6 +126,8 @@ data/       — 生成アセットと SQLite データベース
 | `FRONTEND_DIST` | `frontend-react/dist` | フロントエンド静的ビルドディレクトリ |
 | `FFMPEG_BIN` / `FFPROBE_BIN` | npm 内蔵バイナリ | カスタム ffmpeg/ffprobe の実行ファイルパス |
 | `PUBLIC_BASE_URL` | — | Seedance がローカル参照リソースを使う際に必要な公開 URL（サーバーデプロイ用） |
+| `AI_DRAMA_API_TOKEN` | （未設定） | HTTP API 共有トークン（`Authorization: Bearer`）。未設定はループバックのみ許可。サーバー/コンテナ運用では必須（「デプロイ」参照） |
+| `AI_DRAMA_MCP_TOKEN` | （未設定） | hermes が `/mcp` ツールエンドポイントを呼ぶ際のトークン（API トークンとは独立） |
 
 > **説明**：AI サービスの API Key、Base URL、モデルパラメータはすべて Web UI の「設定」ページで設定してデータベースに保存します。設定ファイルや環境変数では管理しません。
 
@@ -302,6 +304,8 @@ curl -L -o ${TMPDIR:-/tmp}/HuobaoDrama.dmg https://installer.chatfire.site/huoba
 ```
 
 ビルド不要 —— dmg/exe をダウンロードしてそのままインストールできます。インストール済みクライアントは内蔵アップデーターで自動更新されます。（ソースから自分でパッケージングする場合は以下のコマンドを参照。）
+> **デスクトップ版の正体**：Web UI とバックエンドのパッケージングシェルです。`desktop/` にビジネスロジックは一切なく、ビルド時に `backend/src/index.ts` を esbuild でバンドルし `frontend-react` のビルド成果物を同梱し、デスクトップ機能（ウィンドウ管理、保存先移行、自動更新、多重起動防止、FFmpeg 同梱）だけを追加します。シェル内バックエンドはランダムなループバックポートで待機するため、API トークン設定は不要です。
+
 
 ダブルクリックでインストール、すぐに使えるデスクトップ版（macOS + Windows）。データベース（SQLite）、生成メディア、Agent スキルはすべてユーザーデータディレクトリに保存され、アプリをアンインストールしてもデータに影響しません。
 
@@ -413,6 +417,8 @@ server {
 
 ```bash
 cp .env.example .env
+# コンテナのポートマッピングではブラウザー要求が非ループバック扱いになるため、
+# .env の AI_DRAMA_API_TOKEN を必ず設定してください（未設定だと /api/v1 がすべて 401）。
 docker compose up -d --build
 # http://localhost:5679 を開く
 ```

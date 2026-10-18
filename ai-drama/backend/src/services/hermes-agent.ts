@@ -4,9 +4,11 @@
  * 契约（gateway api_server）：`POST {HERMES_AGENT_URL}/v1/chat/completions`，
  * `Authorization: Bearer <HERMES_AGENT_KEY>`，body 为 OpenAI chat completions 形。
  * 客户端 system 消息被 gateway 采纳（叠加在核心提示之上）；会话由 (system, 首条 user)
- * 内容派生——不同 agent 指令天然隔离会话。工具循环在 hermes 侧经 MCP 跑 ai-drama
- * 领域工具，本客户端只发消息收最终文本（不传 tools）；模型由 hermes drama profile
- * 决定，本侧不再选文本模型。未配置 env 时直接报错，不回落本地编排（公司模式先例）。
+ * 内容派生——不同 agent 指令天然隔离会话，且 system 尾部统一拼任务标识行
+ * （[task: <correlationId>]，见 tagInstructions），同指令不同任务不再串会话。工具循环
+ * 在 hermes 侧经 MCP 跑 ai-drama 领域工具，本客户端只发消息收最终文本（不传 tools）；
+ * 模型由 hermes drama profile 决定，本侧不再选文本模型。未配置 env 时直接报错，
+ * 不回落本地编排（公司模式先例）。
  */
 import { randomUUID } from 'node:crypto'
 import { logTaskProgress } from '../utils/task-logger.js'
@@ -24,7 +26,8 @@ export interface HermesChatMessage {
 }
 
 export interface RunHermesAgentOptions {
-  /** agent 指令（作为 system 消息下发，参与会话派生——每个 agent 天然独立会话） */
+  /** agent 指令（作为 system 消息下发，参与会话派生——每个 agent 天然独立会话；
+   *  尾部自动拼 [task: <correlationId>] 标识行参与派生，同指令不同任务也会隔离） */
   instructions: string
   /** 会话消息（不含 system；instructions 会作为首条 system 消息拼入） */
   messages: HermesChatMessage[]
@@ -113,7 +116,7 @@ async function runHermesAgentOnce(options: RunHermesAgentOptions): Promise<RunHe
   requireHermesConfig()
   logTaskProgress('HermesAgent', 'request', { messages: messages.length, stream: false, correlationId: correlation })
   const response = await callGateway(
-    { messages: [{ role: 'system', content: instructions }, ...messages] },
+    { messages: [{ role: 'system', content: tagInstructions(instructions, correlation) }, ...messages] },
     signal,
     timeoutMs,
     correlation,
@@ -141,7 +144,7 @@ export async function streamHermesAgent(options: RunHermesAgentOptions): Promise
   requireHermesConfig()
   logTaskProgress('HermesAgent', 'request', { messages: messages.length, stream: true, correlationId: correlation })
   const response = await callGateway(
-    { messages: [{ role: 'system', content: instructions }, ...messages], stream: true },
+    { messages: [{ role: 'system', content: tagInstructions(instructions, correlation) }, ...messages], stream: true },
     signal,
     timeoutMs,
     correlation,
@@ -189,4 +192,13 @@ function parseSseLine(line: string): string | null | undefined {
   } catch {
     return undefined
   }
+}
+
+/** system 指令尾部追加任务标识行。gateway 按（system, 首条 user）派生会话：不同任务
+ *  若指令相同且首条消息相似（如两个 film run 用同一主题）会命中同一会话，产生上下文/
+ *  记忆串扰；拼上任务 id 后 system 必然不同 → 会话必然隔离。同一任务的多轮调用
+ *  （correlationId 相同，如 creative-chat 连续对话、同 run 的阶段重试）system 保持
+ *  一致 → 仍归同一会话，连续性不受影响。统一在客户端收口，调用方零改动。 */
+function tagInstructions(instructions: string, correlation: string): string {
+  return `${instructions}\n[task: ${correlation}]`
 }

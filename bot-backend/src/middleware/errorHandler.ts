@@ -42,6 +42,11 @@ export function errorHandler(logger: Logger): ErrorHandler<AppEnv> {
 
     if (error instanceof HTTPException) {
       // Framework-thrown exceptions (e.g. body-limit or router-level guards).
+      // An exception that carries its own response (processingTimeout's 503)
+      // answers verbatim — rebuilding it would lose the request_timeout code.
+      if (error.res) {
+        return error.res
+      }
       const status = error.status
       if (status === 413) {
         return jsonResponse(errorBody(requestId, 'payload_too_large', 'Request body exceeds the allowed size.'), 413)

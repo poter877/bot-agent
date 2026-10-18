@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import { randomUUID } from 'node:crypto'
 import { RedisMemoryServer } from 'redis-memory-server'
 import { drizzle } from 'drizzle-orm/node-postgres'
 import { migrate } from 'drizzle-orm/node-postgres/migrator'
@@ -12,9 +13,19 @@ import { migrate } from 'drizzle-orm/node-postgres/migrator'
  * dir — the host system is never touched) plus a real in-memory Redis via
  * redis-memory-server. CI can skip both by providing
  * BOT_BACKEND_TEST_DATABASE_URL / BOT_BACKEND_TEST_REDIS_URL.
+ *
+ * The connection info is handed to the (forked) test processes through a
+ * per-run file whose path rides the environment (BOT_BACKEND_TEST_INFRA_FILE).
+ * A fixed filename used to serialize concurrent vitest runs onto one file —
+ * the second run's setup overwrote it and its teardown deleted it under the
+ * first — so each run owns a pid+uuid-suffixed file instead.
  */
 
-const INFO_FILE = path.join(process.cwd(), 'node_modules', '.bot-backend-test-infra.json')
+export const INFRA_FILE_ENV = 'BOT_BACKEND_TEST_INFRA_FILE'
+
+function infraFilePath(): string {
+  return path.join(process.cwd(), 'node_modules', `.bot-backend-test-infra-${process.pid}-${randomUUID().slice(0, 8)}.json`)
+}
 
 async function findFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -126,12 +137,16 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   const client = (migrator as unknown as { $client: { end: () => Promise<void> } }).$client
   await client.end()
 
-  writeFileSync(INFO_FILE, JSON.stringify({ databaseUrl, redisUrl }))
+  // The forked test processes inherit the main process environment, so the
+  // per-run file path travels without a shared fixed name.
+  const infoFile = infraFilePath()
+  process.env[INFRA_FILE_ENV] = infoFile
+  writeFileSync(infoFile, JSON.stringify({ databaseUrl, redisUrl }))
 
   return async () => {
     for (const teardown of teardowns.reverse()) {
       await teardown()
     }
-    rmSync(INFO_FILE, { force: true })
+    rmSync(infoFile, { force: true })
   }
 }

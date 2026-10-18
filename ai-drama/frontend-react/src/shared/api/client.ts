@@ -7,7 +7,9 @@
  * - 支持 AbortSignal 与按请求类型超时（常规 GET 30s / Agent 10min / 上传 2min），
  *   超时以 TimeoutError 抛出，与业务错误区分
  * - 日志只记录方法、去敏路径、耗时与状态码；不打印请求/响应正文（旧版会打印完整 body）
+ * - 统一带共享令牌 Authorization 头（shared/api/token.ts，401 时广播给 ApiTokenGate）
  */
+import { authHeaders, notifyUnauthorized } from '@/shared/api/token'
 
 export class ApiError extends Error {
   /** 后端业务码（envelope.code），如 400/404/500 */
@@ -90,13 +92,17 @@ async function request<T>(method: string, path: string, body?: unknown, opts: Re
   const init: RequestInit = {
     method,
     signal,
-    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+    headers: {
+      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+      ...authHeaders(),
+    },
     body: body === undefined ? undefined : JSON.stringify(body),
   }
 
   try {
     const resp = await fetch(`${BASE}${path}`, init)
     const ms = Math.round(performance.now() - start)
+    if (resp.status === 401) notifyUnauthorized()
     const envelope = await parseEnvelope(resp)
 
     if (!resp.ok || envelope.code >= 400) {
@@ -128,8 +134,9 @@ async function requestForm<T>(path: string, file: File, opts: RequestOptions = {
   const fd = new FormData()
   fd.append('file', file)
   try {
-    const resp = await fetch(`${BASE}${path}`, { method: 'POST', body: fd, signal })
+    const resp = await fetch(`${BASE}${path}`, { method: 'POST', body: fd, signal, headers: authHeaders() })
     const ms = Math.round(performance.now() - start)
+    if (resp.status === 401) notifyUnauthorized()
     const envelope = await parseEnvelope(resp)
     if (!resp.ok || envelope.code >= 400) {
       log('POST', path, String(resp.status), ms, true)

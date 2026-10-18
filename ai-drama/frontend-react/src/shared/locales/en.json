@@ -3,6 +3,12 @@
     "title": "Video Factory",
     "updateAvailable": "New version v{version} is available. Upgrade in Settings → About."
   },
+  "auth": {
+    "tokenTitle": "Access token",
+    "tokenHint": "This server requires a token for API access. Enter the AI_DRAMA_API_TOKEN configured at deployment (stored in this browser and sent automatically).",
+    "tokenPlaceholder": "Paste the access token",
+    "tokenSave": "Save and continue"
+  },
   "common": {
     "confirm": "Confirm",
     "cancel": "Cancel",

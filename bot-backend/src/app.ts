@@ -5,7 +5,6 @@ import type { RedisConnections } from './redis/client.js'
 import type { Config } from './config/env.js'
 import type { Logger } from './shared/logger.js'
 import type { AppEnv } from './shared/context.js'
-import { serviceAuth } from './shared/context.js'
 import { HttpApiError } from './shared/http.js'
 import { serverRequestId } from './middleware/requestId.js'
 import { correlationIdMiddleware } from './middleware/correlationId.js'
@@ -14,7 +13,8 @@ import { securityMiddleware } from './middleware/security.js'
 import { realIpMiddleware } from './middleware/realIp.js'
 import { mountAccount } from './modules/account/mount.js'
 import { mountToolsGateway } from './modules/tools/mount.js'
-import { processingTimeout } from './middleware/timeout.js'
+import { principalMiddleware } from './middleware/principal.js'
+import { processingTimeout, scopedProcessingTimeout } from './middleware/timeout.js'
 import { bodyPolicyMiddleware } from './middleware/bodyPolicy.js'
 import { byAuthUserId, accountBucketKey, rateLimitMiddleware, enforceBucket } from './middleware/rateLimit.js'
 import { authenticate } from './middleware/auth.js'
@@ -58,11 +58,15 @@ export interface App {
  * Explicit assembly. Authentication is delegated to Better Auth: its
  * /api/auth/* handler mounts PUBLIC (register/login must never sit behind a
  * login gate, doc §4), and every other /v1 route runs behind the getSession
- * check. The doc's common request boundary still applies to both trees:
+ * check. The API trees (/api/llm, /api/media, /api/tools) instead settle
+ * identity through one principal ladder (middleware/principal.ts: service
+ * token → bat_ user token → session). The doc's common request boundary
+ * still applies to every tree:
  *
- *   request id -> security headers -> CORS -> real IP -> processing budget
- *   -> body policy -> entry rate limit -> (per-account buckets on
- *   sign-in/sign-up) -> Better Auth handler -> authenticate (getSession,
+ *   request id -> security headers -> CORS -> real IP -> principal (API
+ *   trees) -> processing budget (scoped trees settle their own; the global
+ *   mount defers) -> body policy -> entry rate limit -> (per-account buckets
+ *   on sign-in/sign-up) -> Better Auth handler / authenticate (getSession,
  *   authoritative store) -> per-user rate limit -> protected routes
  *
  * The full 16-middleware production chain (§5) stays the blueprint for the
@@ -113,11 +117,19 @@ export async function createApp(deps: AppDeps): Promise<App> {
     )
   }
   app.use(realIpMiddleware(config.TRUSTED_PROXIES))
-  // Media generation (video especially) legitimately runs for minutes: give the
-  // media tree its own budget BEFORE the global mount, which would kill it at 10s.
-  app.use('/api/media/*', processingTimeout(config.MEDIA_REQUEST_TIMEOUT_MS))
-  // Managed tool gateway (search today): own short budget before the global mount.
-  mountToolsGateway(app, { config, auth, redis, logger })
+  // One identity ladder for the API trees (/api/llm, /api/media, /api/tools):
+  // service token → bat_ user token → Better Auth session. It only settles
+  // identity — trees enforce presence via requireAuthContext, every other
+  // tree (auth, portal, admin, /v1) keeps its own admission story. Mounted
+  // ahead of the trees so per-user limiters and routes see the principal.
+  app.use(principalMiddleware({ config, db: database.db, auth }))
+  // Media generation (video especially) legitimately runs for minutes: the
+  // tree settles its own budget so the global mount below defers to it
+  // instead of racing it with the shorter 10s timer.
+  app.use('/api/media/*', scopedProcessingTimeout(config.MEDIA_REQUEST_TIMEOUT_MS))
+  // Managed tool gateway (search today): own short budget, same settle-then-defer
+  // contract, mounted before the global budget.
+  mountToolsGateway(app, { config, redis, logger })
   app.use(processingTimeout(config.REQUEST_TIMEOUT_MS))
 
   for (const tree of ['/api/auth/*', '/v1/*']) {
@@ -221,19 +233,9 @@ export async function createApp(deps: AppDeps): Promise<App> {
   app.route('/v1/cloud-computer', createCloudComputerRoutes(cloudComputers, new URL(config.BETTER_AUTH_URL).origin))
 
   // Model streams ride the same Better Auth session (doc《流式服务端重构》§4.1:
-  // 凭证传递方式沿用账号后端的实现约定) with their own per-user request budget.
-  // Internal service principals (ai-drama 的 mastra agents) present the service
-  // token instead — the chat-completions route checks for the marker itself.
-  app.use('/api/llm/*', async (c, next) => {
-    const token = config.INTERNAL_SERVICE_TOKEN ?? config.MEDIA_SERVICE_TOKEN
-    const authz = c.req.header('authorization')
-    if (token && authz === `Bearer ${token}`) {
-      c.set('auth', serviceAuth(config.MEDIA_SERVICE_USER_ID, 'llm'))
-      await next()
-      return
-    }
-    await authenticate(auth)(c, next)
-  })
+  // 凭证传递方式沿用账号后端的实现约定) with their own per-user request budget;
+  // the principal middleware above settles sessions, bat_ tokens and internal
+  // service principals (ai-drama 的 mastra agents) alike.
   app.use(
     '/api/llm/*',
     rateLimitMiddleware({
@@ -272,21 +274,9 @@ export async function createApp(deps: AppDeps): Promise<App> {
       subject: (c) => c.get('realIp'),
     }),
   )
-  // Media accepts two principals: a Better Auth user session, or an internal
-  // service token (ai-drama 等内部服务) attributed to MEDIA_SERVICE_USER_ID —
-  // 同一套目录、配额与用量账本。
-  app.use('/api/media/*', async (c, next) => {
-    const token = config.INTERNAL_SERVICE_TOKEN ?? config.MEDIA_SERVICE_TOKEN
-    const authz = c.req.header('authorization')
-    if (token && authz === `Bearer ${token}`) {
-      c.set('auth', serviceAuth(config.MEDIA_SERVICE_USER_ID, 'media'))
-      await next()
-      return
-    }
-    await authenticate(auth)(c, next)
-  })
   // 队列端点由公司侧内化轮询（一次请求 = 一次生成），与媒体路由同享按小时
-  // 预算；服务令牌门在路由内收紧为仅内部主体。
+  // 预算；服务令牌门在路由内收紧为仅内部主体。身份（会话 / bat_ / 服务令牌）
+  // 由上方 principal 中间件统一判定。
   app.use(
     '/api/media/*',
     rateLimitMiddleware({

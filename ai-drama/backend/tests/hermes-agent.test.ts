@@ -47,6 +47,9 @@ const chatBody = (extra: Record<string, unknown> = {}) => ({
   ...extra,
 })
 
+/** 未传 correlationId 时 system = 指令 + 自动 uuid 的任务标识行 */
+const autoTaggedSystem = /^你是测试编排指令。\n\[task: [0-9a-f-]{36}\]$/u
+
 test('非流式：一次 POST 取 choices[0].message.content，请求形状对齐 gateway 契约', async () => {
   const mock = capture(() => Response.json({
     choices: [{ message: { role: 'assistant', content: '已保存分镜' } }],
@@ -61,9 +64,10 @@ test('非流式：一次 POST 取 choices[0].message.content，请求形状对�
     const [request] = mock.captured
     assert.equal(request.url, `${BASE_URL}/v1/chat/completions`)
     assert.equal(request.headers.get('authorization'), 'Bearer hermes-token')
-    // system 指令首条 + 用户消息随行；非流式不带 stream 字段
-    assert.deepEqual(request.body.messages, [
-      { role: 'system', content: '你是测试编排指令。' },
+    // system 指令首条（尾部自动拼 [task: uuid] 任务标识）+ 用户消息随行；非流式不带 stream 字段
+    assert.equal(request.body.messages.length, 2)
+    assert.match(request.body.messages[0]!.content, autoTaggedSystem)
+    assert.deepEqual(request.body.messages.slice(1), [
       { role: 'user', content: '请处理第七集' },
     ])
     assert.equal('stream' in request.body, false)
@@ -95,8 +99,9 @@ test('流式：SSE 文本增量按序聚合，data: [DONE] 终止', async () => 
 
     const [request] = mock.captured
     assert.equal(request.body.stream, true)
-    assert.deepEqual(request.body.messages, [
-      { role: 'system', content: '你是测试编排指令。' },
+    assert.equal(request.body.messages.length, 2)
+    assert.match(request.body.messages[0]!.content, autoTaggedSystem)
+    assert.deepEqual(request.body.messages.slice(1), [
       { role: 'user', content: '请处理第七集' },
     ])
     // streamHermesAgent 与 runHermesAgent({stream:true}) 同一形状
@@ -177,6 +182,50 @@ test('关联 id：correlationId 作为 X-Correlation-Id 头发出，缺省生成
   } finally { globalThis.fetch = original }
 })
 
+test('会话隔离：system 尾部拼 [task: <correlationId>] 标识行，缺省时用同一 uuid（非流式与流式）', async () => {
+  const sse = () => new Response(
+    'data: {"choices":[{"delta":{"content":"ok"}}]}\n\ndata: [DONE]\n\n',
+    { status: 200, headers: { 'content-type': 'text/event-stream' } },
+  )
+  // 依次应答：film-run-42 → 流式 film-run-43 → uuid 兜底（非流式）→ uuid 兜底（流式）→ 同任务两轮
+  const responses = [
+    () => Response.json({ choices: [{ message: { content: '完成' } }] }),
+    sse,
+    () => Response.json({ choices: [{ message: { content: '完成' } }] }),
+    sse,
+    () => Response.json({ choices: [{ message: { content: '完成' } }] }),
+    () => Response.json({ choices: [{ message: { content: '完成' } }] }),
+  ]
+  const captured: Captured[] = []
+  const original = globalThis.fetch
+  globalThis.fetch = (async (input: any, init?: any) => {
+    captured.push({ url: String(input), headers: new Headers(init?.headers), body: JSON.parse(init?.body) })
+    return responses[captured.length - 1]!()
+  }) as typeof fetch
+  try {
+    // 同指令不同任务：只有任务标识不同 → system 必然不同 → gateway 会话必然隔离
+    await runHermesAgent({ ...chatBody(), correlationId: 'film-run-42' })
+    for await (const _delta of await streamHermesAgent({ ...chatBody(), correlationId: 'film-run-43' })) break
+    await runHermesAgent(chatBody())
+    for await (const _delta of await streamHermesAgent(chatBody())) break
+
+    assert.equal(captured.length, 4)
+    const system = (i: number) => (captured[i]!.body.messages as { role: string; content: string }[])[0]!.content
+    assert.match(system(0), /\n\[task: film-run-42\]$/u)
+    assert.match(system(1), /\n\[task: film-run-43\]$/u)
+    // 缺省时任务标识 = 同一请求的 X-Correlation-Id（uuid），标识与关联头一致
+    for (const i of [2, 3]) {
+      const correlation = captured[i]!.headers.get('x-correlation-id')!
+      assert.match(correlation, /^[0-9a-f-]{36}$/u)
+      assert.match(system(i), new RegExp(`\\n\\[task: ${correlation}\\]$`, 'u'))
+    }
+    // 同任务多轮（同 correlationId）system 完全一致 → 仍归同一会话，连续性保留
+    await runHermesAgent({ ...chatBody(), correlationId: 'creative-project-7' })
+    await runHermesAgent({ ...chatBody(), correlationId: 'creative-project-7' })
+    assert.equal(system(4), system(5))
+  } finally { globalThis.fetch = original }
+})
+
 test('agents 注册表薄封装：instructions 装配为 system 消息经 gateway 执行，结果保持旧形状', async () => {
   // agents/context.ts → app-settings → db：导入前指向临时库，避免写用户数据
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'hermes-agent-registry-'))
@@ -201,6 +250,8 @@ test('agents 注册表薄封装：instructions 装配为 system 消息经 gatewa
       assert.ok(system.content.length > 100)
       assert.match(system.content, /## Output Language \(HIGHEST PRIORITY\)/)
       assert.match(system.content, /日本語/)
+      // 注册表上下文 id（episode 优先）落进任务标识行 → 同集同 agent 复用会话
+      assert.match(system.content, /\n\[task: episode-7\]$/u)
       assert.deepEqual(user, { role: 'user', content: '提取角色' })
     } finally { mock.restore() }
   } finally {

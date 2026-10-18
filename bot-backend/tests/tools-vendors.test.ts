@@ -64,8 +64,6 @@ describe('POST /api/tools/search — catalog walk and vendor hops', () => {
       undefined,
       undefined,
       undefined,
-      undefined,
-      true,
     )
   })
 
@@ -182,8 +180,6 @@ describe('POST /api/tools/search — fail-closed and vendor failures', () => {
       undefined,
       undefined,
       undefined,
-      undefined,
-      true,
     )
   })
 
@@ -216,8 +212,6 @@ describe('POST /api/tools/search — without vendor keys', () => {
       undefined,
       undefined,
       undefined,
-      undefined,
-      true,
     )
   })
 
@@ -248,8 +242,6 @@ describe('POST /api/tools/search — tools-scope per-user budget', () => {
       undefined,
       undefined,
       undefined,
-      undefined,
-      true,
     )
   })
 

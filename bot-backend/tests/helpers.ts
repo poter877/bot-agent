@@ -1,5 +1,4 @@
 import { readFileSync } from 'node:fs'
-import path from 'node:path'
 import { Hono } from 'hono'
 import { loadConfig, type Config } from '../src/config/env.js'
 import { closeDatabase, createDatabase, type Database } from '../src/db/client.js'
@@ -11,22 +10,26 @@ import { realIpMiddleware } from '../src/middleware/realIp.js'
 import { bodyPolicyMiddleware } from '../src/middleware/bodyPolicy.js'
 import { rateLimitMiddleware } from '../src/middleware/rateLimit.js'
 import { mountAccount } from '../src/modules/account/mount.js'
-import { mountToolsGateway } from '../src/modules/tools/mount.js'
 import type { MediaCatalogEntry } from '../src/modules/media/catalog.js'
 import type { createMediaRoutes } from '../src/modules/media/media.routes.js'
 import type { AudioRoutesDeps } from '../src/modules/media/audio.routes.js'
 import type { AppEnv } from '../src/shared/context.js'
 import type { CloudComputerService } from '../src/modules/cloud-computer/service.js'
-
-const INFO_FILE = path.join(process.cwd(), 'node_modules', '.bot-backend-test-infra.json')
+import { INFRA_FILE_ENV } from './global-setup.js'
 
 interface InfraInfo {
   databaseUrl: string
   redisUrl: string
 }
 
+/** Per-run infra file (see tests/global-setup.ts): the path arrives via the
+ * environment the vitest main process set during global setup. */
 export function testInfra(): InfraInfo {
-  return JSON.parse(readFileSync(INFO_FILE, 'utf8')) as InfraInfo
+  const infoFile = process.env[INFRA_FILE_ENV]
+  if (!infoFile) {
+    throw new Error(`${INFRA_FILE_ENV} is not set: tests must run through vitest so global-setup can hand off the infra file`)
+  }
+  return JSON.parse(readFileSync(infoFile, 'utf8')) as InfraInfo
 }
 
 export const TEST_AUTH_SECRET = 'unit-test-secret-0123456789abcdef0123456789abcdef'
@@ -48,9 +51,6 @@ export async function createTestApp(
   cloudComputer?: Parameters<typeof createApp>[0]['cloudComputer'],
   media?: Pick<Parameters<typeof createMediaRoutes>[0], 'imageGenerator' | 'videoGenerator' | 'imageCatalog' | 'videoCatalog' | 'pollingDeps'>,
   audio?: Pick<AudioRoutesDeps, 'speechGenerator' | 'transcriber'>,
-  /** Mount the managed tool gateway (/api/tools) — the app.ts snippet runs in
-   * the main session; tests exercise the same mountToolsGateway call. */
-  tools?: boolean,
 ): Promise<TestApp> {
   const infra = testInfra()
   const config = loadConfig({
@@ -69,14 +69,10 @@ export async function createTestApp(
   const redis = await createRedisConnections(config.REDIS_URL)
   const logger = createLogger(config)
   const real = await createApp({ config, database, redis, logger, llm, cloudComputer, media, audio })
-  if (tools) {
-    // Same helper the app.ts snippet calls: entry-ip guard → session/service
-    // auth → tools-scope per-user budget → routes, on the real app tree.
-    mountToolsGateway(real.hono, { config, auth: real.auth, redis, logger })
-  }
-  // src/app.ts 由主会话统一接线：这里用同一份 mountAccount（生产挂载片段）
-  // 包一层，仅补齐生产里由 /api/auth/* 树提供的 body/entry-ip 策略与 realIp
-  // （wrapper 内设备码路由先于真 app 命中，拿不到 app 内的全局中间件）。
+  // src/app.ts 由主会话统一接线（含 /api/tools 网关的挂载）：这里用同一份
+  // mountAccount（生产挂载片段）包一层，仅补齐生产里由 /api/auth/* 树提供的
+  // body/entry-ip 策略与 realIp（wrapper 内设备码路由先于真 app 命中，拿不到
+  // app 内的全局中间件）。
   const app = new Hono<AppEnv>()
   app.onError(errorHandler(logger))
   // route() 合并的是路由而非 sub-app 的 notFound：未命中路径由 wrapper 自己兜底。

@@ -47,6 +47,11 @@ export type AppBindings = {
     /** Sanitized X-Correlation-Id echo from an authenticated caller (ai-drama
      * task / hermes turn); undefined when the header was absent or invalid. */
     correlationId: string | undefined
+    /** True once a tree-scoped processing budget (middleware/timeout.ts) has
+     * armed its own timer: the global budget must defer instead of racing it
+     * with a shorter timer (Hono's timeout() settles nested mounts at the
+     * minimum duration). */
+    budgetSettled: boolean | undefined
     /** Undefined until the Better Auth session check has passed. */
     auth: AuthContext | undefined
   }

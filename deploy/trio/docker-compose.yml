@@ -87,6 +87,8 @@ services:
       HERMES_AGENT_URL: http://hermes-gateway:8642
       HERMES_AGENT_KEY: ${API_SERVER_KEY:?}
       AI_DRAMA_MCP_TOKEN: ${AI_DRAMA_MCP_TOKEN:?set a token for hermes<->ai-drama}
+      # 容器部署 fail-closed：浏览器访问 5679 需在弹窗输入此令牌。
+      AI_DRAMA_API_TOKEN: ${AI_DRAMA_API_TOKEN:?set the ai-drama UI token}
 
   hermes-gateway:
     profiles: ["hermes"]

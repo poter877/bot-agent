@@ -19,6 +19,11 @@ services:
     ports:
       - "5679:5679"
     environment:
+      # HTTP API 共享令牌：容器端口映射下浏览器请求来自非回环地址，
+      # 不配置则所有 /api/v1 请求 401（后端默认仅放行回环来源）。浏览器首次访问弹窗输入一次。
+      AI_DRAMA_API_TOKEN: ${AI_DRAMA_API_TOKEN:?set a token for browser/API access, e.g. `openssl rand -hex 24`}
+      # hermes gateway 调用本服务 /mcp 的令牌（与上面的 API 令牌分开命名，可同值）
+      AI_DRAMA_MCP_TOKEN: ${AI_DRAMA_MCP_TOKEN:-}
       # 使用自己的已发布 React 镜像时，配置 URL 并启用 auto-update profile
       HUOBAO_WATCHTOWER_URL: ${HUOBAO_WATCHTOWER_URL:-}
       HUOBAO_WATCHTOWER_TOKEN: ${WATCHTOWER_TOKEN:-please-change-me}

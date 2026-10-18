@@ -3,6 +3,12 @@
     "title": "動画工場",
     "updateAvailable": "新バージョン v{version} があります。「設定 → 更新について」でアップグレードできます"
   },
+  "auth": {
+    "tokenTitle": "アクセストークン",
+    "tokenHint": "このサーバーの API はトークン認証が必要です。デプロイ時に設定した AI_DRAMA_API_TOKEN を入力してください（このブラウザーに保存され、以後自動的に送信されます）。",
+    "tokenPlaceholder": "アクセストークンを貼り付け",
+    "tokenSave": "保存して続行"
+  },
   "common": {
     "confirm": "確認",
     "cancel": "キャンセル",

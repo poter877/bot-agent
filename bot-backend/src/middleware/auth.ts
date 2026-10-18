@@ -10,11 +10,31 @@ import type { Auth } from '../modules/auth/auth.js'
  * every request so a revoked or expired session cannot ride on a cached
  * cookie. A database failure is 503, never an implicit allow.
  *
- * When an earlier middleware has already settled the identity with an equally
- * verified credential (a `bat_` user API token — see authenticateUserToken),
- * the session check steps aside instead of rejecting the cookie-less request.
- * Only auth-writing middleware registered before this one can set the context;
+ * `settleSessionIdentity` is the shared core: it settles `auth` or throws and
+ * is reused by the principal ladder (middleware/principal.ts). Only
+ * auth-writing middleware registered before this one can set the context;
  * handlers still read identity exclusively from `c.get('auth')`.
+ */
+export async function settleSessionIdentity(c: { req: { raw: Request }; set(key: 'auth', value: AuthContext): void }, auth: Auth): Promise<void> {
+  let result: { session: { id: string; userId: string }; user: { id: string } } | null
+  try {
+    result = (await auth.api.getSession({
+      headers: c.req.raw.headers,
+      query: { disableCookieCache: true },
+    })) as { session: { id: string; userId: string }; user: { id: string } } | null
+  } catch {
+    throw new HttpApiError(503, 'dependency_unavailable', 'Service temporarily unavailable.')
+  }
+  if (result === null) {
+    throw new HttpApiError(401, 'unauthorized', 'Authentication required.')
+  }
+  c.set('auth', { userId: result.user.id, sessionId: result.session.id })
+}
+
+/**
+ * Enforcement mount for the session-only trees (/v1, /api/account, device
+ * approval): settles the identity when an earlier middleware has not already
+ * done so with an equally verified credential (the principal ladder).
  */
 export function authenticate(auth: Auth): MiddlewareHandler<AppEnv> {
   return async (c, next) => {
@@ -22,23 +42,7 @@ export function authenticate(auth: Auth): MiddlewareHandler<AppEnv> {
       await next()
       return
     }
-    let result: { session: { id: string; userId: string }; user: { id: string } } | null
-    try {
-      result = (await auth.api.getSession({
-        headers: c.req.raw.headers,
-        query: { disableCookieCache: true },
-      })) as { session: { id: string; userId: string }; user: { id: string } } | null
-    } catch {
-      throw new HttpApiError(503, 'dependency_unavailable', 'Service temporarily unavailable.')
-    }
-    if (result === null) {
-      throw new HttpApiError(401, 'unauthorized', 'Authentication required.')
-    }
-    const identity: AuthContext = {
-      userId: result.user.id,
-      sessionId: result.session.id,
-    }
-    c.set('auth', identity)
+    await settleSessionIdentity(c, auth)
     await next()
   }
 }

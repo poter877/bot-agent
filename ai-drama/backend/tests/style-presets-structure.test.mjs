@@ -1,5 +1,8 @@
 import { readFileSync } from 'node:fs'
-import { test } from 'node:test'
+import fs from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
+import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
 
 const root = new URL('..', import.meta.url)
@@ -13,11 +16,33 @@ test('drama creation no longer pre-creates episodes from total_episodes', () => 
   assert.doesNotMatch(dramas, /Create default episodes/)
 })
 
-test('drama creation records a fixed aspect ratio for video generation', { skip: 'WIP: dramas 路由在重构中改写（aspect_ratio 默认值写法已变），断言待重写' }, () => {
-  const dramas = read('src/routes/dramas.ts')
+// 行为测试经真实路由 + 临时 SQLite 库（env 先于动态导入设置）
+const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'aspect-ratio-'))
+process.env.SQLITE_PATH = path.join(directory, 'test.sqlite')
+process.env.MYSQL_AUTO_IMPORT = 'false'
+const dramasRoute = (await import('../src/routes/dramas.js')).default
+after(async () => { await fs.rm(directory, { recursive: true, force: true }) })
 
-  assert.match(dramas, /aspectRatio: body\.aspect_ratio \|\| '16:9'/)
-  assert.match(dramas, /if \(body\.aspect_ratio !== undefined\) updates\.aspectRatio = body\.aspect_ratio/)
+async function request(url, method = 'GET', body) {
+  const response = await dramasRoute.request(url, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined })
+  return { status: response.status, body: await response.json() }
+}
+
+test('drama creation records a fixed aspect ratio for video generation', async () => {
+  // 创建时固定：缺省 16:9（zod aspectRatioSchema 白名单 16:9/9:16/1:1，旧的手写默认值已收敛为 schema 校验）
+  const created = await request('/', 'POST', { title: '锁比例' })
+  assert.equal(created.status, 201)
+  assert.equal(created.body.data.aspect_ratio, '16:9')
+  // 白名单之外的取值在创建时被拒
+  const rejected = await request('/', 'POST', { title: '非法比例', aspect_ratio: '4:3' })
+  assert.equal(rejected.status, 400)
+  const vertical = await request('/', 'POST', { title: '竖屏', aspect_ratio: '9:16' })
+  assert.equal(vertical.body.data.aspect_ratio, '9:16')
+
+  // PUT 可修改
+  const id = vertical.body.data.id
+  assert.equal((await request(`/${id}`, 'PUT', { aspect_ratio: '1:1' })).status, 200)
+  assert.equal((await request(`/${id}`, 'GET')).body.data.aspect_ratio, '1:1')
 })
 
 test('style presets route is mounted and implements CRUD', () => {

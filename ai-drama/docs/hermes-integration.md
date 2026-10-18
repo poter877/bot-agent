@@ -15,7 +15,10 @@ ai-drama 前端 ──HTTP──→ ai-drama 后端（领域服务 + 任务队�
 - **工具循环在 hermes**：模型要调工具时，hermes 经 MCP（streamable HTTP）调
   ai-drama 的领域工具（读剧本、存分镜、提交生成任务……）。
 - **会话隔离**：gateway 按（system 指令, 首条 user 消息）派生会话——每个
-  agent 指令天然是独立会话。
+  agent 指令天然是独立会话；ai-drama 客户端（`backend/src/services/hermes-agent.ts`
+  的 `runHermesAgent`）还会在 system 尾部统一拼 `[task: <correlationId>]` 标识行：
+  同指令不同任务（如两个 film run 用同一主题）不再命中同一会话（上下文/记忆串扰），
+  同一任务的连续轮次（correlationId 相同，如 creative-chat 多轮对话）仍归同一会话。
 - **模型单一来源**：文本模型由 drama profile 的模型配置决定（公司模式，
   指向 bot-backend）；ai-drama 不再选择文本模型。
 
@@ -25,6 +28,7 @@ ai-drama 前端 ──HTTP──→ ai-drama 后端（领域服务 + 任务队�
 |---|---|---|
 | ai-drama | `HERMES_AGENT_URL` | hermes gateway 的 api_server 基址（如 `http://hermes:8642`，多 profile 复用时为 `http://hermes:8642/p/drama`） |
 | ai-drama | `HERMES_AGENT_KEY` | gateway 的 `API_SERVER_KEY` |
+| ai-drama | `AI_DRAMA_API_TOKEN` | ai-drama 自身 HTTP API 的共享令牌（浏览器/外部调用方用 `Authorization: Bearer`；未配置时仅放行回环来源，容器/公网部署必配。与 MCP 令牌分开命名，可同值部署） |
 | ai-drama | `AI_DRAMA_MCP_TOKEN` | hermes↔ai-drama 之间的 MCP 令牌（与 bot-backend 的服务令牌无关） |
 | hermes (drama profile) | `API_SERVER_KEY` | api_server 鉴权；与 ai-drama 的 `HERMES_AGENT_KEY` 同值 |
 
@@ -56,7 +60,8 @@ profile 自己的 HOME）。要收窄到仅 ai-drama 领域工具，用该 profi
 
 1. bot-backend（目录/密钥就绪，含 `INTERNAL_SERVICE_TOKEN`）。
 2. ai-drama 后端（`AI_DRAMA_MCP_TOKEN` + `HERMES_AGENT_URL/KEY` + `COMPANY_*`
-   用于媒体/语音/转写直连模型面）。
+   用于媒体/语音/转写直连模型面；容器/公网部署另配 `AI_DRAMA_API_TOKEN`
+   保护自身 HTTP API，未配置时仅回环可访问）。
 3. hermes drama profile（`API_SERVER_KEY`、config.yaml 的 `mcp_servers.ai_drama`、
    模型指向公司后端），起 gateway。
 4. 验证：ai-drama 前端发起一次编剧/规划请求 → 观察 hermes gateway 日志出现该会话

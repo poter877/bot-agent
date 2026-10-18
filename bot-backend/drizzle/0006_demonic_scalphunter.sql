@@ -1,0 +1,1 @@
+CREATE INDEX "llm_request_log_correlation_id_idx" ON "llm_request_log" USING btree ("correlation_id");

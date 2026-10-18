@@ -3,6 +3,12 @@
     "title": "비디오 팩토리",
     "updateAvailable": "새 버전 v{version}을 사용할 수 있습니다. 「설정 → 업데이트 정보」에서 업그레이드하세요"
   },
+  "auth": {
+    "tokenTitle": "액세스 토큰",
+    "tokenHint": "이 서버의 API에는 토큰 인증이 필요합니다. 배포 시 설정한 AI_DRAMA_API_TOKEN을 입력하세요(이 브라우저에 저장되며 이후 자동으로 전송됩니다).",
+    "tokenPlaceholder": "액세스 토큰 붙여넣기",
+    "tokenSave": "저장하고 계속"
+  },
   "common": {
     "confirm": "확인",
     "cancel": "취소",

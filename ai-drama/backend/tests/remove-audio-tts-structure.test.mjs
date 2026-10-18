@@ -35,12 +35,13 @@ test('backend removes audio service providers, TTS adapters, and voice routes', 
   assert.match(read('src/services/adapters/company-video.ts'), /generateAudio = Number\(record\.generateAudio\)/)
 })
 
-test('backend removes TTS endpoints and audio-specific schema fields', { skip: 'WIP: MySQL→SQLite 迁移删除了 src/db/mysql-schema.ts，本断言待按 sqlite-schema 重写' }, () => {
+test('backend removes TTS endpoints and audio-specific schema fields', () => {
   const episodes = read('src/routes/episodes.ts')
   const storyboards = read('src/routes/storyboards.ts')
   const characters = read('src/routes/characters.ts')
   const schema = read('src/db/schema.ts')
-  const mysqlSchema = read('src/db/mysql-schema.ts')
+  const sqliteSchema = read('src/db/sqlite-schema.ts')
+  const mysqlImport = read('src/db/mysql-import.ts')
 
   assert.doesNotMatch(episodes, /audio_config_id/)
   assert.doesNotMatch(episodes, /assign_voices/)
@@ -55,12 +56,14 @@ test('backend removes TTS endpoints and audio-specific schema fields', { skip: '
   assert.doesNotMatch(schema, /voiceProvider/)
   assert.doesNotMatch(schema, /ttsAudioUrl/)
   assert.doesNotMatch(schema, /aiVoices/)
-  assert.doesNotMatch(mysqlSchema, /audio_config_id/)
-  assert.doesNotMatch(mysqlSchema, /voice_style/)
-  assert.doesNotMatch(mysqlSchema, /voice_sample_url/)
-  assert.doesNotMatch(mysqlSchema, /voice_provider/)
-  assert.doesNotMatch(mysqlSchema, /tts_audio_url/)
-  // 无 ai_voices 表定义；仅保留启动时的孤儿表清理 DROP
-  assert.doesNotMatch(mysqlSchema, /CREATE TABLE IF NOT EXISTS ai_voices/)
-  assert.match(mysqlSchema, /DROP TABLE IF EXISTS `ai_voices`/)
+  // SQLite DDL：音频专用列不进入建表语句（MySQL 时代的 mysql-schema 断言由 sqlite-schema 承接）
+  assert.doesNotMatch(sqliteSchema, /audio_config_id/)
+  assert.doesNotMatch(sqliteSchema, /voice_style/)
+  assert.doesNotMatch(sqliteSchema, /voice_sample_url/)
+  assert.doesNotMatch(sqliteSchema, /voice_provider/)
+  assert.doesNotMatch(sqliteSchema, /tts_audio_url/)
+  // 无 ai_voices 表定义；MySQL 一次性导入的白名单也不含 ai_voices（旧表数据随 MySQL 留在原地，
+  // 等价于 MySQL 时代启动 DROP 的"孤儿表清理"语义）
+  assert.doesNotMatch(sqliteSchema, /ai_voices/)
+  assert.doesNotMatch(mysqlImport, /ai_voices/)
 })

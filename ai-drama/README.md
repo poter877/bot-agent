@@ -124,6 +124,8 @@ No config files — everything is set via environment variables (all have defaul
 | `FRONTEND_DIST` | `frontend-react/dist` | Frontend static build directory |
 | `FFMPEG_BIN` / `FFPROBE_BIN` | bundled npm binaries | Custom ffmpeg/ffprobe executable paths |
 | `PUBLIC_BASE_URL` | — | Public URL Seedance needs to reference local assets (server deployments) |
+| `AI_DRAMA_API_TOKEN` | _(unset)_ | Shared token for the HTTP API (`Authorization: Bearer`). Unset = loopback-only access; server/container deployments must set it (see Deployment) |
+| `AI_DRAMA_MCP_TOKEN` | _(unset)_ | Token hermes uses when calling this server's `/mcp` tools endpoint (independent of the API token) |
 
 > **Note**: AI service API keys, base URLs, and model parameters are all configured in the web UI "Settings" page and stored in the database — never in config files or environment variables.
 
@@ -301,6 +303,8 @@ curl -L -o ${TMPDIR:-/tmp}/HuobaoDrama.dmg https://installer.chatfire.site/huoba
 
 No build required — download the dmg/exe and install. Installed clients auto-update via the built-in updater. (To package from source instead, see the commands below.)
 
+> **What the desktop app is**: a packaging shell around the exact same Web UI and backend — `desktop/` contains no business logic. At build time it bundles `backend/src/index.ts` with esbuild, ships the `frontend-react` build output, and adds only desktop capabilities (window management, storage-location migration, auto-update, single-instance lock, bundled FFmpeg). The backend it forks listens on a random loopback port, so no API token is needed on the desktop.
+
 Double-click to install, works out of the box (macOS + Windows): the SQLite database, generated media, and Agent skills all live in the user-data directory — uninstalling the app does not affect your data.
 
 ```bash
@@ -361,8 +365,11 @@ npm run dev:desktop
 npm run build:frontend
 
 # 2. Start the backend (serves frontend-react/dist automatically)
-npm --prefix backend start
+#    On a server reachable beyond loopback, set the API token first (see below)
+AI_DRAMA_API_TOKEN=<random-secret> npm --prefix backend start
 ```
+
+**API authentication**: without `AI_DRAMA_API_TOKEN` the API only answers loopback requests (`127.0.0.1`/`::1`), so local dev and the desktop app need zero configuration. On any server/container deployment browsers arrive from a non-loopback address — generate a token (`openssl rand -hex 24`), set `AI_DRAMA_API_TOKEN`, and enter it once in the web UI when prompted (it is stored in the browser and sent as `Authorization: Bearer`). `/api/v1/health` stays open for uptime probes and `/mcp` keeps its own `AI_DRAMA_MCP_TOKEN` check.
 
 Files to upload to the server:
 
@@ -411,6 +418,8 @@ The default image `video-factory:local` is built from the current source. Compos
 
 ```bash
 cp .env.example .env
+# Container port mapping means browser requests reach the app from a non-loopback
+# address — set AI_DRAMA_API_TOKEN in .env or every API call will get 401.
 docker compose up -d --build
 # Open http://localhost:5679
 ```
