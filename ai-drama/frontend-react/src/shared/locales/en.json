@@ -23,6 +23,7 @@
     "add": "Add",
     "copy": "Copy",
     "download": "Download",
+    "catalogDefault": "Catalog default",
     "default": "Default",
     "more": "More",
     "loading": "Loading…",
@@ -492,7 +493,6 @@
       "resolution": "Resolution"
     },
     "model": {
-      "defaultWith": "Default · {model}",
       "notConfigured": "Not configured"
     },
     "sidebar": {

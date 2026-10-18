@@ -8,6 +8,7 @@ import {
   clampVideoCol,
   collectModelOptions,
   configModels,
+  effectiveModelKey,
   getShotReferenceImages,
   hasMultiConfigs,
   isNarratorCharacter,
@@ -146,6 +147,19 @@ describe('mergeModelOptions（公司目录优先）', () => {
     expect(options[0]!.label).toBeUndefined()
   })
 
+  it('目录 defaultModel 项标记 isCatalogDefault，供下拉预选与「目录默认」标注', () => {
+    const options = mergeModelOptions(
+      [cfg({ id: 5, provider: 'company', models: [] })],
+      {
+        models: [{ id: 'wan/x', displayName: '万相' }, { id: 'seedance', displayName: 'seedance' }],
+        defaultModel: 'seedance',
+      },
+    )
+    expect(options[0]!.model).toBe('seedance')
+    expect(options[0]!.isCatalogDefault).toBe(true)
+    expect(options[1]!.isCatalogDefault).toBeUndefined()
+  })
+
   it('目录与配置行按 key 去重，配置行里目录没有的模型追加在后', () => {
     const configs = [
       cfg({ id: 5, provider: 'company', models: ['seedance', 'legacy-pin'] }),
@@ -159,6 +173,34 @@ describe('mergeModelOptions（公司目录优先）', () => {
     const configs = [cfg({ id: 5, provider: 'company', models: ['seedance'] })]
     expect(mergeModelOptions(configs, undefined).map((o) => o.key)).toEqual(['5:seedance'])
     expect(mergeModelOptions([], { models: [{ id: 'seedance', displayName: 'seedance' }], defaultModel: 'seedance' })).toEqual([])
+  })
+
+  it('回退配置行选项时不标记目录默认（目录未提供默认）', () => {
+    const options = mergeModelOptions([cfg({ id: 5, provider: 'company', models: ['seedance'] })], undefined)
+    expect(options).toHaveLength(1)
+    expect(options[0]!.isCatalogDefault).toBeUndefined()
+  })
+})
+
+describe('effectiveModelKey（下拉预选默认项）', () => {
+  const options = mergeModelOptions(
+    [cfg({ id: 5, provider: 'company', models: [] })],
+    {
+      models: [{ id: 'wan/x', displayName: '万相' }, { id: 'seedance', displayName: 'seedance' }],
+      defaultModel: 'seedance',
+    },
+  )
+
+  it('显式选择优先：新键原样，旧 provider/model 复合键升级', () => {
+    expect(effectiveModelKey('5:wan/x', options)).toBe('5:wan/x')
+    expect(effectiveModelKey('company/wan/x', options)).toBe('5:wan/x')
+  })
+
+  it('未配置过或选择已失效时预选目录默认项（首项）', () => {
+    expect(effectiveModelKey('', options)).toBe('5:seedance')
+    expect(effectiveModelKey(undefined, options)).toBe('5:seedance')
+    expect(effectiveModelKey('5:gone', options)).toBe('5:seedance')
+    expect(effectiveModelKey('', [])).toBe('')
   })
 })
 

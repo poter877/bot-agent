@@ -20,7 +20,7 @@ from plugins.web.firecrawl.provider import check_firecrawl_api_key
 from tools.debug_helpers import DebugSession
 from tools.tool_backend_helpers import selection_exists
 from tools.url_safety import async_is_safe_url
-from tools.web_tools_company import company_gateway_search, company_mode, locally_keyed_provider
+from tools.web_tools_company import company_gateway_extract, company_gateway_search, company_mode, locally_keyed_provider
 from tools.web_tools_rescue import _rescue_eligible, _rescue_search
 from tools.web_tools_truncate import _effective_char_limit, _trim_results, _truncate_results, convert_base64_images_to_links
 from tools.web_tools_extract import (
@@ -387,14 +387,24 @@ async def web_extract_tool(urls: list[Any], format: str | None = None, char_limi
                     url, "Blocked: URL targets a private or internal network address"
                 )
 
+        # 共享一次预算计算：公司网关的 maxChars 与本地 truncate-and-store 用同一口径。
+        char_budget = _effective_char_limit(char_limit)
         results = []
         if safe_urls:
             backend = _get_extract_backend()
             _ensure_web_plugins_loaded()
             provider, error_json = _resolve_extract_provider(backend)
-            if error_json is not None:
+            if company_mode() and not locally_keyed_provider(provider):
+                # 公司模式解析链（对齐上方 web_search 的分支）：本地 keyed
+                # provider 优先（现状保留，含其真实错误）→ 公司网关
+                # /api/tools/extract。零凭证、keyless 环与解析失败一律网关——
+                # keyless 兜底按 search 先例硬切（公司模式不花厂商匿名额度）；
+                # 网关结果不进本地磁盘缓存：记账在公司侧。
+                results = await company_gateway_extract(safe_urls, format, char_budget)
+            elif error_json is not None:
                 return error_json
-            results = await _extract_safe_urls(provider, safe_urls, format)
+            else:
+                results = await _extract_safe_urls(provider, safe_urls, format)
         # Reconstruct input order across invalid, blocked, and provider entries (providers preserve
         # the order of the safe URL list they receive).
         if invalid_urls or ssrf_blocked:
@@ -405,7 +415,7 @@ async def web_extract_tool(urls: list[Any], format: str | None = None, char_limi
         debug_call_data["pages_extracted"] = len(results)
         debug_call_data["original_response_size"] = len(json.dumps({"results": results}))
         debug_call_data["processing_applied"].append("truncate_and_store")
-        _truncate_results(results, _effective_char_limit(char_limit), debug_call_data)
+        _truncate_results(results, char_budget, debug_call_data)
         trimmed = _trim_results(results)
         result_json = (
             json.dumps({"results": trimmed}, indent=2, ensure_ascii=False) if trimmed
@@ -482,7 +492,16 @@ def _web_search_check() -> bool:
     """``check_fn`` gate for web_search: any local web backend, or company mode.
 
     公司模式下工具网关用服务端密钥服务搜索，零本地凭证也该点亮 web_search
-    （web_extract 没有网关能力，维持 :func:`check_web_api_key` 的本地判定）。
+    （``_web_extract_check`` 是 web_extract 的同款判定）。
+    """
+    return check_web_api_key() or company_mode()
+
+
+def _web_extract_check() -> bool:
+    """``check_fn`` gate for web_extract: any local web backend, or company mode.
+
+    公司模式下 web_extract 走公司工具网关（``company_gateway_extract``），零本地
+    凭证也该点亮；本地判定沿用 :func:`check_web_api_key`。
     """
     return check_web_api_key() or company_mode()
 
@@ -546,6 +565,6 @@ registry.register(
         args.get("urls", [])[:5] if isinstance(args.get("urls"), list) else [], "markdown",
         char_limit=args.get("char_limit"),
     ),
-    check_fn=check_web_api_key, requires_env=_web_requires_env(), is_async=True, emoji="📄",
+    check_fn=_web_extract_check, requires_env=_web_requires_env(), is_async=True, emoji="📄",
     max_result_size_chars=100_000,
 )

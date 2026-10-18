@@ -6,7 +6,8 @@ from typing import Any
 
 from account_backend_session import (
     AccountBackendError, AccountSessionBinding, account_session_lock, bot_backend_base, capture_account_session,
-    company_backend_enabled, current_account_request_authority, require_account_session_binding,
+    company_backend_enabled, current_account_request_authority, load_account_bearer_token,
+    require_account_session_binding,
 )
 
 
@@ -60,7 +61,12 @@ def create_company_client(*, async_mode: bool = False, expected_binding: Account
             if authority is not None:
                 require_account_session_binding(authority)
         jar, binding = capture_account_session()
-        client = HonoStreamClient(binding.base_url, cookie_jar=jar)
+        # Same lock as the fingerprint snapshot, so client credentials and
+        # binding identity can never disagree. The device-flow Bearer token
+        # outranks the jar: when present it is the only credential sent.
+        token = load_account_bearer_token()
+        client = HonoStreamClient(binding.base_url, cookie_jar=None if token is not None else jar,
+                                  bearer_token=token)
         client._account_binding = binding
     if async_mode:
         from agent.hono_auxiliary_client import AsyncHonoStreamClient

@@ -23,8 +23,6 @@ const BRAVE_SEARCH_URL = 'https://api.search.brave.com/res/v1/web/search'
 
 /** Outbound vendor budget (task contract: 15s hard cap per provider call). */
 export const TOOLS_SEARCH_VENDOR_TIMEOUT_MS = 15_000
-/** Processing budget the mount registers for the /api/tools tree (vendor cap + margin). */
-export const TOOLS_REQUEST_BUDGET_MS = TOOLS_SEARCH_VENDOR_TIMEOUT_MS + 5_000
 
 export interface NormalizedSearchResult {
   title: string
@@ -99,8 +97,9 @@ async function runVendorSearch(
     : braveSearch(key, query, limit, timeoutSignal, correlationId)
 }
 
-/** Per user/day ledger, same shape as the media usage feed (recordMediaUsage). */
-async function recordToolsUsage(redis: RedisClientType, userId: string, providerId: string): Promise<void> {
+/** Per user/day ledger, same shape as the media usage feed (recordMediaUsage).
+ * Shared by every /api/tools capability (search today, extract alongside). */
+export async function recordToolsUsage(redis: RedisClientType, userId: string, providerId: string): Promise<void> {
   const day = new Date().toISOString().slice(0, 10).replaceAll('-', '')
   const key = `tools:usage:${userId}:${day}`
   try {

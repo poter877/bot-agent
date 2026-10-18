@@ -619,7 +619,8 @@ class HonoStreamClient:
 
     # Auxiliary/relay layers must not wrap this client: it speaks the full wire itself.
     HERMES_SKIP_TRANSPORT_WRAP = True
-    # Compatibility for auxiliary introspection; authentication uses cookies.
+    # Compatibility for auxiliary introspection; authentication uses the Bearer
+    # token or the account session cookies, never a vendor api_key.
     api_key = ""
 
     @property
@@ -631,6 +632,7 @@ class HonoStreamClient:
         base_url: str,
         cookie_jar: CookieJar | None = None,
         *,
+        bearer_token: str | None = None,
         timeout_seconds: float = _IDLE_TIMEOUT_SECONDS,
         max_request_seconds: float = _MAX_REQUEST_SECONDS,
         transport: httpx.BaseTransport | None = None,
@@ -641,8 +643,11 @@ class HonoStreamClient:
         cookies = httpx.Cookies()
         if cookie_jar is not None:
             cookies.update(cookie_jar)
+        # Device-flow Bearer token outranks cookies: when set it is the only
+        # credential this client carries (default header on every request).
         self._http = httpx.Client(
             cookies=cookies, transport=transport,
+            headers={"Authorization": f"Bearer {bearer_token}"} if bearer_token else None,
             timeout=httpx.Timeout(connect=_CONNECT_TIMEOUT_SECONDS, read=timeout_seconds, write=30.0, pool=_CONNECT_TIMEOUT_SECONDS),
             follow_redirects=False,
         )

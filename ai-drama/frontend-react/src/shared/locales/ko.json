@@ -23,6 +23,7 @@
     "add": "추가",
     "copy": "복사",
     "download": "다운로드",
+    "catalogDefault": "카탈로그 기본",
     "default": "기본",
     "more": "더보기",
     "loading": "로딩 중…",
@@ -492,7 +493,6 @@
       "resolution": "해상도"
     },
     "model": {
-      "defaultWith": "기본 · {model}",
       "notConfigured": "미설정"
     },
     "sidebar": {

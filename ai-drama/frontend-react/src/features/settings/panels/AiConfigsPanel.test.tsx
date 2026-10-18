@@ -77,9 +77,11 @@ it('sources company model chips from the kind-routed catalog proxy', async () =>
   const create = vi.spyOn(aiConfigApi, 'create').mockResolvedValue({})
   mountPanel()
   fireEvent.click(screen.getByRole('button', { name: '图片' }))
-  const chip = await screen.findByRole('button', { name: 'Seedream 目录项' })
+  const chip = await screen.findByRole('button', { name: /Seedream 目录项/ })
   expect(screen.getByText('wan-x')).toBeTruthy()
-  expect(screen.getByText(/目录默认：seedream-x/)).toBeTruthy()
+  // 目录默认项在 chip 旁标注（替代旧的整行文字说明）
+  expect(chip.textContent).toContain('目录默认')
+  expect(screen.getByText('wan-x').closest('button')!.textContent).not.toContain('目录默认')
   expect(companyModels).toHaveBeenCalledWith('image', expect.anything())
   fireEvent.click(chip)
   fireEvent.click(screen.getByRole('button', { name: '保存' }))

@@ -2,8 +2,14 @@
 
 The agent subprocess is the ONLY backend client (doc《后端服务》§6): both the
 tui_gateway accountAuth bridge and the Hono model stream client ride the same
-profile-scoped cookie jar, persisted under the profile home so a restart
+profile-scoped credential, persisted under the profile home so a restart
 restores the session. ``HERMES_BOT_BACKEND_URL`` selects the backend.
+
+Two credential forms share one identity ladder: the device-flow Bearer token
+(``account-auth-token.txt``, ``hermes account login``) outranks the Better Auth
+cookie jar — when the token file is present and non-empty every outbound call
+carries ``Authorization: Bearer`` and no cookie; otherwise the profile cookie
+jar rides as before.
 """
 
 from __future__ import annotations
@@ -24,6 +30,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 ACCOUNT_AUTH_COOKIE_FILE = "account-auth-cookies.txt"
+ACCOUNT_AUTH_TOKEN_FILE = "account-auth-token.txt"
 _ACCOUNT_LOCKS: dict[str, threading.RLock] = {}
 _ACCOUNT_LOCKS_LOCK = threading.Lock()
 _ACCOUNT_GENERATIONS: dict[str, tuple[int, threading.Event]] = {}
@@ -145,6 +152,45 @@ def account_auth_cookie_path() -> Path:
     return Path(hermes_constants.get_hermes_home()) / ACCOUNT_AUTH_COOKIE_FILE
 
 
+def account_auth_token_path() -> Path:
+    # Profile-scoped like the cookie jar: same home, same profile-aware resolution.
+    import hermes_constants
+
+    return Path(hermes_constants.get_hermes_home()) / ACCOUNT_AUTH_TOKEN_FILE
+
+
+def load_account_bearer_token() -> str | None:
+    """Non-empty device-flow token; None when the file is absent or blank.
+
+    Callers holding ``account_session_lock()`` get a consistent snapshot with
+    ``_session_fingerprint``; free callers read the latest written value."""
+    try:
+        token = account_auth_token_path().read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    return token or None
+
+
+def save_account_bearer_token(token: str) -> None:
+    """Replace the device-flow token atomically with owner-only permissions."""
+    with account_session_lock():
+        path = account_auth_token_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # mkstemp creates 0600 on POSIX and os.replace keeps that mode.
+        descriptor, temporary = tempfile.mkstemp(prefix=".account-token-", dir=path.parent)
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                handle.write(token.strip() + "\n")
+            os.replace(temporary, path)
+        finally:
+            Path(temporary).unlink(missing_ok=True)
+
+
+def clear_account_bearer_token() -> None:
+    with account_session_lock():
+        account_auth_token_path().unlink(missing_ok=True)
+
+
 def load_account_auth_jar() -> MozillaCookieJar:
     jar = MozillaCookieJar(str(account_auth_cookie_path()))
     if Path(jar.filename).exists():
@@ -179,9 +225,15 @@ def _save_account_auth_jar(jar: MozillaCookieJar) -> None:
 def _session_fingerprint(jar: MozillaCookieJar) -> str:
     profile = str(account_auth_cookie_path().resolve())
     generation, _ = _ACCOUNT_GENERATIONS.setdefault(profile, (0, threading.Event()))
-    cookies = sorted((cookie.domain, cookie.path, cookie.name, cookie.value)
-                     for cookie in jar)
-    return hashlib.sha256(json.dumps((profile, generation, cookies)).encode()).hexdigest()
+    # The Bearer token is the credential on the wire whenever present, so its
+    # content hash is the binding identity (a token change retires retained
+    # clients exactly like a cookie change does); cookies define it otherwise.
+    if (token := load_account_bearer_token()) is not None:
+        identity: tuple = ("bearer", hashlib.sha256(token.encode()).hexdigest())
+    else:
+        identity = ("cookie", sorted((cookie.domain, cookie.path, cookie.name, cookie.value)
+                                     for cookie in jar))
+    return hashlib.sha256(json.dumps((profile, generation, identity)).encode()).hexdigest()
 
 
 def account_session_fingerprint() -> str:
@@ -235,11 +287,20 @@ def request_account_backend(path: str, *, payload: dict | None = None, timeout: 
 
 def _request_account_backend(path: str, *, payload: dict | None, timeout: float):
     base = bot_backend_base()
-    jar = load_account_auth_jar()
-    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar), _NoBackendRedirects())
+    # Device-flow Bearer token outranks the cookie jar: when present it is the
+    # ONLY credential sent — no cookie rides along, no jar is persisted.
+    token = load_account_bearer_token()
+    if token is not None:
+        jar = None
+        opener = urllib.request.build_opener(_NoBackendRedirects())
+    else:
+        jar = load_account_auth_jar()
+        opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar), _NoBackendRedirects())
     parsed = urlsplit(base)
     headers = {"Content-Type": "application/json", "Accept": "application/json",
                "Origin": f"{parsed.scheme}://{parsed.netloc}"}
+    if token is not None:
+        headers["Authorization"] = f"Bearer {token}"
     if (correlation_id := current_request_correlation_id()) is not None:
         headers[CORRELATION_ID_HEADER] = correlation_id
     request = urllib.request.Request(
@@ -251,7 +312,8 @@ def _request_account_backend(path: str, *, payload: dict | None, timeout: float)
         with opener.open(request, timeout=timeout) as response:
             result = json.loads(response.read() or b"null")
     except urllib.error.HTTPError as error:
-        save_account_auth_jar(jar)
+        if jar is not None:
+            save_account_auth_jar(jar)
         notify_account_auth_failure(error.code)
         try:
             detail = json.loads(error.read(16_384)).get("message")
@@ -261,7 +323,8 @@ def _request_account_backend(path: str, *, payload: dict | None, timeout: float)
         raise AccountBackendError(message, error.code) from None
     except (urllib.error.URLError, TimeoutError, OSError, ValueError) as error:
         raise AccountBackendError("Account service is unavailable. Please retry.") from error
-    save_account_auth_jar(jar)
+    if jar is not None:
+        save_account_auth_jar(jar)
     return result
 
 

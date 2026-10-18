@@ -1,6 +1,7 @@
 /**
- * ModelSelect — AI 模型选择器：默认项=首选项、按模型名显示厂商图标、
- * 同名模型来自不同配置时显示配置名区分（configId:model 键）。
+ * ModelSelect — AI 模型选择器：按模型名显示厂商图标、同名模型来自不同配置时显示
+ * 配置名区分（configId:model 键）、目录默认项带「目录默认」标注。
+ * 默认预选由调用方传入 effective 值（显式选择优先，否则目录默认/首项）。
  */
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -17,6 +18,8 @@ export interface ModelOption {
   model: string
   /** 展示名（公司目录 displayName）；缺省用 model */
   label?: string
+  /** 公司目录默认项：选中态旁标注「目录默认」 */
+  isCatalogDefault?: boolean
   provider: string
   configId?: number
   configName?: string
@@ -37,6 +40,16 @@ function optionLabelOf(option: ModelOption, options: ModelOption[]): string {
   const base = option.label || option.model
   const duplicated = options.filter((o) => o.model === option.model).length > 1
   return duplicated && option.configName ? `${base} · ${option.configName}` : base
+}
+
+/** 目录默认项标注（选中态旁的小标签，菜单项与触发器共用） */
+function CatalogDefaultTag({ className }: { className?: string }) {
+  const { t } = useTranslation()
+  return (
+    <span className={cn('shrink-0 rounded-[4px] bg-brand-soft px-1 py-px text-[9px] font-semibold leading-[1.4] text-brand-content', className)}>
+      {t('common.catalogDefault')}
+    </span>
+  )
 }
 
 export function ModelSelect({ label, value, onChange, options, defaultLabel, hideDefault, disabled }: ModelSelectProps) {
@@ -79,6 +92,7 @@ export function ModelSelect({ label, value, onChange, options, defaultLabel, hid
               </span>
             )}
             <span className="overflow-hidden text-ellipsis whitespace-nowrap">{currentLabel}</span>
+            {currentOption?.isCatalogDefault && <CatalogDefaultTag />}
             <ChevronDown size={11} className={cn('shrink-0 text-content-subtle transition-transform duration-150 ease-app', open && 'rotate-180')} />
           </button>
         )}
@@ -97,7 +111,12 @@ export function ModelSelect({ label, value, onChange, options, defaultLabel, hid
             onClick={() => pick(o.key)}
             trailing={(() => {
               const icon = modelIconUrl(o.provider, o.model, resolvedTheme)
-              return icon ? <img src={icon} className="size-3 shrink-0 rounded-[2.5px] object-contain" alt="" /> : null
+              return (
+                <>
+                  {o.isCatalogDefault && <CatalogDefaultTag />}
+                  {icon && <img src={icon} className="size-3 shrink-0 rounded-[2.5px] object-contain" alt="" />}
+                </>
+              )
             })()}
           >
             <span className="max-w-80 overflow-hidden text-ellipsis whitespace-nowrap">{optionLabelOf(o, options)}</span>

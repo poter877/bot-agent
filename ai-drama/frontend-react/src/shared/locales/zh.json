@@ -23,6 +23,7 @@
     "add": "新增",
     "copy": "复制",
     "download": "下载",
+    "catalogDefault": "目录默认",
     "default": "默认",
     "more": "更多",
     "loading": "加载中…",
@@ -492,7 +493,6 @@
       "resolution": "分辨率"
     },
     "model": {
-      "defaultWith": "默认 · {model}",
       "notConfigured": "未配置"
     },
     "sidebar": {

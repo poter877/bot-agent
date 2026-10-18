@@ -100,6 +100,8 @@ export interface ModelOption {
   model: string
   /** 目录 displayName（与 id 不同时展示） */
   label?: string
+  /** 公司目录默认项（text 用目录 defaultModel，媒体 kind 取目录首项）：下拉预选并标注 */
+  isCatalogDefault?: boolean
   provider: string
   configId: number
   configName: string
@@ -142,6 +144,7 @@ export function mergeModelOptions(cfgs: AiConfig[], catalog: CompanyModelCatalog
     legacyKey: `${active.provider}/${entry.id}`,
     model: entry.id,
     ...(entry.displayName && entry.displayName !== entry.id ? { label: entry.displayName } : {}),
+    ...(catalog.defaultModel && entry.id === catalog.defaultModel ? { isCatalogDefault: true } : {}),
     provider: active.provider,
     configId: active.id,
     configName: active.name || active.provider,
@@ -184,6 +187,11 @@ export function pruneStaleModel(stored: string, options: ModelOption[]): string 
   if (options.some((o) => o.key === stored)) return stored
   const legacy = options.find((o) => o.legacyKey === stored || o.model === stored)
   return legacy ? legacy.key : ''
+}
+
+/** 下拉展示值：显式选择（含旧键升级）优先；未配置过模型时预选目录默认项（首项）。 */
+export function effectiveModelKey(pref: string | undefined, options: ModelOption[]): string {
+  return pruneStaleModel(pref || '', options) || options[0]?.key || ''
 }
 
 // ===== 分辨率档位 =====

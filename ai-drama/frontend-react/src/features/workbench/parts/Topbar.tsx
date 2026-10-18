@@ -6,7 +6,7 @@ import { LocaleSwitcher } from '@/shared/ui/LocaleSwitcher'
 import { useWorkbench } from '../WorkbenchProvider'
 import { useWorkbenchStore } from '../workbench-store'
 import { usePreferences } from '@/shared/config/preferences'
-import { RESOLUTION_TIERS } from '../workbench-lib'
+import { RESOLUTION_TIERS, effectiveModelKey } from '../workbench-lib'
 import { buttonVariants } from '@/shared/ui/button'
 import { cn } from '@/shared/lib/cn'
 
@@ -69,31 +69,32 @@ export function WorkbenchTopbar({ dramaTitle, onBack, onHelp }: TopbarProps) {
 
       <div className="flex shrink-0 items-center gap-1.5 max-860:flex-wrap max-860:justify-between">
         <div className="mr-3 flex items-center gap-3 border-r border-outline pr-3">
+          {/* 模型预选：显式选择（偏好持久化）优先，未配置过则预选目录默认项并标注「目录默认」 */}
           {wb.textModelOptions.length > 0 && (
             <ModelSelect
               label={t('common.serviceType.text')}
-              value={chatModel}
+              value={effectiveModelKey(chatModel, wb.textModelOptions)}
               onChange={(v) => setModelPref('chat', v)}
               options={wb.textModelOptions}
-              defaultLabel={t('episode.model.defaultWith', { model: wb.textModelOptions[0]!.model })}
+              hideDefault
             />
           )}
           {wb.imageModelOptions.length > 0 && (
             <ModelSelect
               label={t('common.serviceType.image')}
-              value={imageModel}
+              value={effectiveModelKey(imageModel, wb.imageModelOptions)}
               onChange={(v) => setModelPref('image', v)}
               options={wb.imageModelOptions}
-              defaultLabel={t('episode.model.defaultWith', { model: wb.imageModelOptions[0]!.model })}
+              hideDefault
             />
           )}
           {wb.videoModelOptions.length > 0 && (
             <ModelSelect
               label={t('common.serviceType.video')}
-              value={videoModel}
+              value={effectiveModelKey(videoModel, wb.videoModelOptions)}
               onChange={(v) => setModelPref('video', v)}
               options={wb.videoModelOptions}
-              defaultLabel={t('episode.model.defaultWith', { model: wb.videoModelOptions[0]!.model })}
+              hideDefault
             />
           )}
           <ModelSelect

@@ -651,15 +651,11 @@ export function AiConfigsPanel() {
                     onClick={() => setModels((prev) => (prev.includes(entry.id) ? prev.filter((x) => x !== entry.id) : [entry.id, ...prev.filter((x) => x !== entry.id)]))}
                   >
                     {entry.displayName}
+                    {entry.id === companyModelsQuery.data?.defaultModel && <em className={MODEL_EM}>{t('common.catalogDefault')}</em>}
                   </button>
                 ))}
                 {companyModelsQuery.data && !companyModelsQuery.data.models.length && (
                   <span className="text-[11px] text-content-subtle">公司目录暂无可用模型</span>
-                )}
-                {!!companyModelsQuery.data?.defaultModel && (
-                  <span className="text-[11px] text-content-subtle">
-                    目录默认：{companyModelsQuery.data.defaultModel}（制作时未指定模型则使用它）
-                  </span>
                 )}
               </div>
             )}

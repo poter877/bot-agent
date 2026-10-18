@@ -357,6 +357,7 @@ from hermes_cli.subcommands.slack import build_slack_parser
 from hermes_cli.subcommands.login import build_login_parser
 from hermes_cli.subcommands.logout import build_logout_parser
 from hermes_cli.subcommands.auth import build_auth_parser
+from hermes_cli.subcommands.account import build_account_parser
 from hermes_cli.subcommands.status import build_status_parser
 from hermes_cli.subcommands.pause import build_pause_parser
 from hermes_cli.subcommands.webhook import build_webhook_parser
@@ -1863,6 +1864,7 @@ cmd_setup = _forward_command("cmd_setup", "hermes_cli.setup", "run_setup_wizard"
 cmd_login = _forward_command("cmd_login", "hermes_cli.auth", "login_command", doc='Authenticate Hermes CLI with a provider.')
 cmd_logout = _forward_command("cmd_logout", "hermes_cli.auth", "logout_command", doc='Clear provider authentication.')
 cmd_auth = _forward_command("cmd_auth", "hermes_cli.auth_commands", "auth_command", doc='Manage pooled credentials.')
+cmd_account = _forward_command("cmd_account", "hermes_cli.account_commands", "account_command", doc='Company account sign-in/out (device code).')
 cmd_status = _forward_command("cmd_status", "hermes_cli.status", "show_status", doc='Show status of all components.')
 cmd_cron = _forward_command("cmd_cron", "hermes_cli.cron", "cron_command", forward_return=True, doc='Cron job management.')
 cmd_webhook = _forward_command("cmd_webhook", "hermes_cli.webhook", "webhook_command", doc='Webhook subscription management.')
@@ -1927,10 +1929,6 @@ _PROVIDER_MODEL_FLOWS = {
 }
 
 
-def _norm_base_url(url: str) -> str:
-    return str(url or "").strip().rstrip("/").lower()
-
-
 def _resolve_active_provider(config, model_cfg, effective_provider, custom_provider_map):
     """Provider slug currently in effect (the picker's default row), or None.
 
@@ -1944,11 +1942,11 @@ def _resolve_active_provider(config, model_cfg, effective_provider, custom_provi
 
     active = ""
     if effective_provider == "custom" and isinstance(model_cfg, dict):
-        current_base = _norm_base_url(model_cfg.get("base_url", ""))
+        current_base = str(model_cfg.get("base_url", "") or "").strip().rstrip("/").lower()
         if current_base:
             active = next(
                 (k for k, info in custom_provider_map.items()
-                 if _norm_base_url(info.get("base_url", "")) == current_base),
+                 if str(info.get("base_url", "") or "").strip().rstrip("/").lower() == current_base),
                 "",
             )
     if not active and effective_provider != "auto":
@@ -3384,6 +3382,7 @@ def _build_cli_parser():
     build_login_parser(subparsers, cmd_login=cmd_login)
     build_logout_parser(subparsers, cmd_logout=cmd_logout)
     build_auth_parser(subparsers, cmd_auth=cmd_auth)
+    build_account_parser(subparsers, cmd_account=cmd_account)
     build_status_parser(subparsers, cmd_status=cmd_status)
     build_pause_parser(subparsers)
     build_cron_parser(subparsers, cmd_cron=cmd_cron)

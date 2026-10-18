@@ -42,9 +42,11 @@ def account_scope(monkeypatch, tmp_path):
 
 def _client(handler):
     client = policy.create_company_client()
-    cookies = client._http.cookies
+    # Carry the factory-built credentials across the transport swap: cookies in
+    # session mode, the default Authorization header in device-token mode.
+    cookies, default_headers = client._http.cookies, dict(client._http.headers)
     client._http.close()
-    client._http = httpx.Client(cookies=cookies, transport=httpx.MockTransport(handler))
+    client._http = httpx.Client(cookies=cookies, headers=default_headers, transport=httpx.MockTransport(handler))
     return client
 
 
@@ -152,6 +154,35 @@ def test_revocation_without_cookie_deletion_retires_existing_clients(account_sco
         assert next(iter(account.load_account_auth_jar())).value == "account-a"
         with pytest.raises(account.AccountBackendError):
             policy.ensure_company_client(client)
+
+
+def test_device_token_is_the_model_clients_only_credential(account_scope):
+    _set_account("account-a")
+    account.save_account_bearer_token("bat_token-a")
+    requests = []
+    with _client(lambda request: requests.append(request) or _sse()) as client:
+        policy.ensure_company_client(client)
+        assert client._http.headers.get("Authorization") == "Bearer bat_token-a"
+        assert not dict(client._http.cookies)
+        stream = client.chat.completions.create(
+            model="company", messages=[{"role": "user", "content": "hi"}], stream=True)
+        assert next(stream).choices[0].delta.content == "ok"
+    request, = requests
+    assert request.headers.get("Authorization") == "Bearer bat_token-a"
+    assert "cookie" not in request.headers
+
+
+def test_device_token_change_retires_the_retained_model_client(account_scope):
+    _set_account("account-a")
+    account.save_account_bearer_token("bat_token-a")
+    requests = []
+    with _client(lambda request: requests.append(request) or _sse()) as client:
+        policy.ensure_company_client(client)
+        account.save_account_bearer_token("bat_token-b")
+        with pytest.raises(account.AccountBackendError):
+            next(client.chat.completions.create(
+                model="company", messages=[{"role": "user", "content": "hi"}], stream=True))
+    assert requests == []
 
 
 def test_logout_does_not_wait_for_pending_model_headers(account_scope):

@@ -104,6 +104,13 @@ const envSchema = z.object({
   TOOLS_SEARCH_CATALOG: z.string().default('[]'),
   TAVILY_API_KEY: z.string().optional(),
   BRAVE_API_KEY: z.string().optional(),
+  // Managed tool gateway — web extraction (second capability, same contract:
+  // server-held Firecrawl/Jina keys, clients stay keyless). No keyless
+  // fallback exists here either — scraping without a key is hermes-local
+  // behaviour (plugins/web/keyless_mcp.py), never the gateway's.
+  TOOLS_EXTRACT_CATALOG: z.string().default('[]'),
+  FIRECRAWL_API_KEY: z.string().optional(),
+  JINA_API_KEY: z.string().optional(),
   RATE_LIMIT_TOOLS_MAX: z.coerce.number().int().min(1).default(60),
   RATE_LIMIT_TOOLS_WINDOW_SECONDS: z.coerce.number().int().min(1).default(60),
 
