@@ -4,7 +4,7 @@ import type { RedisClientType } from 'redis'
 import type { AppConfig } from '../../config/env.js'
 import type { Db } from '../../db/client.js'
 import type { AppEnv } from '../../shared/context.js'
-import { requireAuthContext, type AuthContext } from '../../shared/context.js'
+import { isServicePrincipal, requireAuthContext, type AuthContext } from '../../shared/context.js'
 import { HttpApiError, assertSameOrigin } from '../../shared/http.js'
 import type { Logger } from '../../shared/logger.js'
 import type { CatalogEntry, CatalogStore } from './catalog.js'
@@ -221,7 +221,8 @@ export function createLlmRoutes(deps: LlmRoutesDeps): Hono<AppEnv> {
     const auth = requireAuthContext(c)
     const requestId = c.get('requestId')
     const startedAt = Date.now()
-    assertSameOrigin(c, new URL(config.BETTER_AUTH_URL).origin)
+    // 服务主体是服务器到服务器调用，浏览器同源约束不适用。
+    if (!isServicePrincipal(auth)) assertSameOrigin(c, new URL(config.BETTER_AUTH_URL).origin)
 
     // Attributed pre-flight failures land in the request journal, then rethrow.
     const reject = async (error: unknown): Promise<never> => {

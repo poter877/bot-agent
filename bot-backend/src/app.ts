@@ -20,7 +20,6 @@ import { createAuth, type Auth } from './modules/auth/auth.js'
 import { createUsersRoutes } from './modules/users/users.routes.js'
 import { createHealthRoutes } from './modules/health/health.routes.js'
 import { createLlmRoutes } from './modules/llm/llm.routes.js'
-import { createChatCompletionsRoutes } from './modules/llm/chat-completions.js'
 import { createMediaRoutes } from './modules/media/media.routes.js'
 import { createAudioRoutes } from './modules/media/audio.routes.js'
 import { createFalQueueProxyRoutes } from './modules/media/fal-proxy.js'
@@ -228,7 +227,6 @@ export async function createApp(deps: AppDeps): Promise<App> {
       subject: byAuthUserId,
     }),
   )
-  app.route('/api/llm', createChatCompletionsRoutes({ config, db, redis: redis.commands, logger, catalogStore, ...deps.llm }))
   app.route('/api/llm', createLlmRoutes({ config, db, redis: redis.commands, logger, catalogStore, ...deps.llm }))
 
   // Media generation (image/video/audio): same Better Auth session, own per-user
