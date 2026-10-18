@@ -257,23 +257,6 @@ export function useInputHandlers(ctx: InputHandlerContext): InputHandlerResult {
       return
     }
 
-    // The connection card has no local dismissal: the operation belongs to the running turn, so
-    // ending the turn is what settles it (as `interrupt`) and closes the card.
-    if (overlay.connection) {
-      const sid = getUiState().sid
-
-      if (!sid) {
-        return
-      }
-
-      return turnController.interruptTurn({
-        appendMessage: actions.appendMessage,
-        gw: gateway.gw,
-        sid,
-        sys: actions.sys
-      })
-    }
-
     if (hasSensitivePrompt(overlay)) {
       return dismissSensitivePrompt(overlay, gateway.rpc, actions.sys)
     }
@@ -300,10 +283,6 @@ export function useInputHandlers(ctx: InputHandlerContext): InputHandlerResult {
 
     if (overlay.pluginsHub) {
       return patchOverlayState({ pluginsHub: false })
-    }
-
-    if (overlay.connectors) {
-      return patchOverlayState({ connectors: false })
     }
 
     if (overlay.sessions) {
@@ -486,7 +465,6 @@ export function useInputHandlers(ctx: InputHandlerContext): InputHandlerResult {
         overlay.billing ||
         overlay.clarify ||
         overlay.confirm ||
-        overlay.connection ||
         overlay.subscription
 
       const fallThroughForScroll = promptOverlay && shouldFallThroughForScroll(key)

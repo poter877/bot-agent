@@ -60,13 +60,6 @@ export const frBoot = {
       signOutAndSignIn: 'Se déconnecter et se reconnecter',
       remoteFailureHint:
         "Vérifiez l'URL du gateway et la connexion dans les paramètres du gateway, ou passez au gateway local.",
-      cloudDownTitle: "L'agent Nous Cloud est indisponible",
-      cloudDownDescription:
-        "L'agent cloud géré par Nous auquel ce gateway se connecte renvoie une erreur serveur. Il ne peut pas être redémarré depuis ici — vérifiez son état, passez au gateway local ou contactez l'assistance.",
-      cloudDownHint:
-        "Les boutons ci-dessous ouvrent le portail Nous, pour consulter et contrôler l'instance, ainsi que notre Discord pour obtenir de l'aide.",
-      cloudDownCheckPortal: "Vérifier l'état sur le portail",
-      cloudDownDiscord: "Obtenir de l'aide sur Discord",
       hideRecentLogs: 'Masquer les journaux récents',
       showRecentLogs: 'Afficher les journaux récents',
       signedInTitle: 'Connecté',

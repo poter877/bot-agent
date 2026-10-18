@@ -21,7 +21,6 @@ import { t } from '../i18n/runtime.js'
 import { asRpcResult } from '../lib/rpc.js'
 import type { Msg, PanelSection, SessionInfo } from '../types.js'
 
-import { applyConnectionRequest, clearConnectionOperation } from './connectionOperationStore.js'
 import type { ComposerActions, GatewayRpc, StateSetter } from './interfaces.js'
 import { patchOverlayState } from './overlayStore.js'
 import { scheduleResumeScrollToBottom } from './sessionResumeView.js'
@@ -316,8 +315,6 @@ export function useSessionLifecycle(opts: UseSessionLifecycleOptions) {
     (id: string) => {
       patchOverlayState({ sessions: false })
       patchUiState({ status: t('session.status.switchingSession') })
-      // The card belongs to the session being left; the activated one answers with its own.
-      clearConnectionOperation()
 
       gw.request<SessionActivateResponse>('session.activate', { session_id: id })
         .then(raw => {
@@ -349,10 +346,6 @@ export function useSessionLifecycle(opts: UseSessionLifecycleOptions) {
             usage: usageFrom(info)
           })
           hydrateLiveSessionInflight(r.inflight)
-
-          if (r.pending_connection) {
-            applyConnectionRequest(r.pending_connection)
-          }
 
           cancelResumeScrollRef.current?.()
           cancelResumeScrollRef.current = scheduleResumeScrollToBottom(scrollRef)
@@ -412,12 +405,6 @@ export function useSessionLifecycle(opts: UseSessionLifecycleOptions) {
               usage: usageFrom(info)
             })
             hydrateLiveSessionInflight(r.inflight)
-
-            if (r.pending_connection) {
-              applyConnectionRequest(r.pending_connection)
-            } else {
-              clearConnectionOperation()
-            }
 
             cancelResumeScrollRef.current?.()
             cancelResumeScrollRef.current = scheduleResumeScrollToBottom(scrollRef)

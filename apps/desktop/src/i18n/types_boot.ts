@@ -52,11 +52,6 @@ export interface BootTranslations {
     remoteSignInHint: (signInLabel: string) => string
     signOutAndSignIn: string
     remoteFailureHint: string
-    cloudDownTitle: string
-    cloudDownDescription: string
-    cloudDownHint: string
-    cloudDownCheckPortal: string
-    cloudDownDiscord: string
     hideRecentLogs: string
     showRecentLogs: string
     signedInTitle: string

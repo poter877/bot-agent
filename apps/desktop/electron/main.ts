@@ -130,7 +130,6 @@ import { provisionCliLinks } from './cli-provision'
 import { closeStopFailureMessage, finishWindowsCloseStop, type RuntimeLock } from './close-stop-kill'
 import { shouldAttemptCloudBootCascade } from './cloud-boot-cascade'
 import { discoverWithTeamFallback } from './cloud-discovery'
-import { createCloudSessionRecovery } from './cloud-session-recovery'
 import { installCommandScreenshot } from './command-screenshot'
 import { composerImageTimestamp } from './composer-image-name'
 import { writeComposerPaste } from './composer-paste'
@@ -2243,7 +2242,6 @@ let nativeThemeListenerInstalled = false
 let bootProgressState = {
   error: null,
   fakeMode: BOOT_FAKE_MODE,
-  isCloudBackendDown: false,
   message: 'Waiting to start Hermes backend',
   phase: 'idle',
   progress: 0,
@@ -8047,40 +8045,16 @@ async function readGatewayFileDataUrl(connection: GatewayFileConnection, request
   return dataUrl
 }
 
-// Recover a Cloud cookie only after a confirmed cookie-auth ticket 401.
-// Each caller still mints its own single-use ticket after the shared recovery.
-const recoverCloudCookieSession = createCloudSessionRecovery({
-  hasNativeSession,
-  onRecovered: baseUrl => rememberLog(`[cloud] saved gateway session recovered for ${hostLabelFromBaseUrl(baseUrl)}`),
-  restoreCookieSession: async baseUrl => {
-    // The saved portal identity is the authority for cookie agent sessions.
-    // Roster polling must never reveal an interactive sign-in window.
-    if (!(await hasLivePortalSession())) {
-      return false
-    }
-
-    if (!(await hasPortalAccessToken()) && !(await renewPortalAccessSilently())) {
-      return false
-    }
-
-    await openOauthLoginWindow(baseUrl, { silent: true, background: true })
-
-    return true
-  }
-})
-
 // Native bearer first (including one forced 401 rotation), OAuth cookie second.
-// Transient ticket POST failures keep their bounded retry before Cloud recovery.
+// Transient ticket POST failures keep their bounded retry.
 async function mintGatewayWsTicket(baseUrl: string, headers: Record<string, string> = {}): Promise<string> {
-  return recoverCloudCookieSession(baseUrl, () =>
-    withTransientRetries(
-      (): Promise<string> =>
-        mintOauthGatewayWsTicket(baseUrl, { ensureNativeAccessToken, fetchJson, fetchJsonViaOauthSession }, headers),
-      {
-        isRetryable: (error: Error): boolean =>
-          !(error instanceof NativeAuthChangedError) && !isGatewayAuthRejection(error)
-      }
-    )
+  return withTransientRetries(
+    (): Promise<string> =>
+      mintOauthGatewayWsTicket(baseUrl, { ensureNativeAccessToken, fetchJson, fetchJsonViaOauthSession }, headers),
+    {
+      isRetryable: (error: Error): boolean =>
+        !(error instanceof NativeAuthChangedError) && !isGatewayAuthRejection(error)
+    }
   )
 }
 
@@ -13398,12 +13372,6 @@ async function runHermesStart({ supervisorRecovery = false }: { supervisorRecove
     const sshAuthFailed = isSshAuthFailedBootFailure(error)
     const sshClientFailed = isSshClientFailedBootFailure(error)
 
-    // Carry structured Cloud-down metadata through the boot-progress / IPC
-    // boundary when present, so the renderer overlay can key on it rather than
-    // re-classifying the message string. main owns classification; the renderer
-    // only consumes the structured result (#85335).
-    const isCloudBackendDown = Boolean(error && typeof error === 'object' && (error as any).isCloudBackendDown === true)
-
     const statusCode = Number(
       error && typeof error === 'object' && Number.isInteger((error as any).statusCode)
         ? (error as any).statusCode
@@ -13455,7 +13423,6 @@ async function runHermesStart({ supervisorRecovery = false }: { supervisorRecove
     updateBootProgress(
       {
         error: message,
-        isCloudBackendDown: isCloudBackendDown || undefined,
         message: `Desktop boot failed: ${message}`,
         phase: 'backend.error',
         // Renderer contract for the self-heal loop (#82679): a transient

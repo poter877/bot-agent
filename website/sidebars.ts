@@ -788,6 +788,7 @@ const sidebars: SidebarsConfig = {
       collapsed: true,
       items: [
         'developer-guide/contributing',
+        'developer-guide/company-topology',
         'developer-guide/worktree-ui-dev',
         {
           type: 'category',

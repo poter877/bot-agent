@@ -10,8 +10,6 @@ const buildOverlayState = (): OverlayState => ({
   billing: null,
   clarify: null,
   confirm: null,
-  connection: null,
-  connectors: false,
   ambient: [],
   widget: null,
   journey: false,
@@ -38,8 +36,6 @@ const BLOCKING_KEYS = [
   'billing',
   'clarify',
   'confirm',
-  'connection',
-  'connectors',
   'journey',
   'modelPicker',
   'pager',
@@ -74,7 +70,7 @@ export const $isBlocked = computed($overlayState, overlay => BLOCKING_KEYS.some(
  *   subtree) so it can anchor the full-screen absolute `Overlay`
  *   (`components/overlay.tsx`) against the whole terminal.
  * - The FloatingOverlays set — `modelPicker`, `pager`, `petPicker`,
- *   `sessions`, `skillsHub`, `pluginsHub`, `connectors` — but ONLY when the rule sits at
+ *   `sessions`, `skillsHub`, `pluginsHub` — but ONLY when the rule sits at
  *   the top.  That panel is `position="absolute" bottom="100%"` inside
  *   ComposerPane's relative Box (`appOverlays.tsx:387`), so it grows UPWARD
  *   over the `at="top"` rule and never reaches the `at="bottom"` one.
@@ -111,7 +107,6 @@ export const $isBlocked = computed($overlayState, overlay => BLOCKING_KEYS.some(
  */
 export const hasFloatingPanel = (overlay: OverlayState): boolean =>
   Boolean(
-    overlay.connectors ||
     overlay.modelPicker ||
     overlay.pager ||
     overlay.petPicker ||
@@ -134,11 +129,6 @@ export const SENSITIVE_PROMPTS = ['sudo', 'secret', 'vaultUnlock', 'vaultSaveLog
 export const hasSensitivePrompt = (overlay: Pick<OverlayState, (typeof SENSITIVE_PROMPTS)[number]>): boolean =>
   SENSITIVE_PROMPTS.some(key => Boolean(overlay[key]))
 
-/** The agent's questions and confirms, which take the keyboard from any open panel. */
-export const PROMPT_KEYS = ['approval', 'clarify', 'confirm', 'connection', ...SENSITIVE_PROMPTS] as const
-
-export const hasPromptOpen = (overlay: OverlayState): boolean => PROMPT_KEYS.some(key => Boolean(overlay[key]))
-
 export const getOverlayState = () => $overlayState.get()
 
 export const patchOverlayState = (next: Partial<OverlayState> | ((state: OverlayState) => OverlayState)) =>
@@ -154,9 +144,6 @@ export const resetOverlayState = () => $overlayState.set(buildOverlayState())
  * shouldn't vanish when a turn ends.  Called from turnController.idle() on
  * every turn completion / interrupt; the old "reset everything" behaviour
  * silently closed /agents the moment delegation finished.
- *
- * `connection` is preserved too: the card belongs to a backend operation that outlives the turn's
- * idle edge, and only the operation's own settlement may close it.
  */
 export const resetFlowOverlays = () =>
   $overlayState.set({
@@ -164,8 +151,6 @@ export const resetFlowOverlays = () =>
     agents: $overlayState.get().agents,
     agentsInitialHistoryIndex: $overlayState.get().agentsInitialHistoryIndex,
     ambient: $overlayState.get().ambient,
-    connection: $overlayState.get().connection,
-    connectors: $overlayState.get().connectors,
     widget: $overlayState.get().widget,
     journey: $overlayState.get().journey,
     modelPicker: $overlayState.get().modelPicker,

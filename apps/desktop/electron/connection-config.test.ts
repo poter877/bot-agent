@@ -15,7 +15,6 @@ import assert from 'node:assert/strict'
 import { test } from 'vitest'
 
 import { httpStatusError } from './api-transport'
-import { makeNousCloudBackendDownError } from './backend-health'
 import {
   apiRequestRegistryConnectionId,
   authModeFromStatus,
@@ -1525,56 +1524,14 @@ test('gatewayTicketFailure preserves a structured 503 statusCode as a transport 
 })
 
 test('gatewayTicketFailure only copies an integer statusCode, not a message prefix', () => {
-  // A legacy "503: ..." message carries no structured statusCode; the Cloud
-  // classifier (makeNousCloudBackendDownError) handles the prefix at the mint
-  // boundary. The wrapper must not invent an integer from the message.
+  // A legacy "503: ..." message carries no structured statusCode, and the
+  // wrapper must not invent an integer from the message.
   const source = new Error('503: Service Unavailable') as any
 
   const wrapped = gatewayTicketFailure(source, 'auth message', 'transport message')
 
   assert.equal((wrapped as any).statusCode, undefined)
   assert.equal((wrapped as any).needsOauthLogin, undefined)
-})
-
-// OAuth integration regression (#85373): the WS-ticket mint boundary runs
-// BEFORE waitForHermesReady. This mirrors main.ts buildRemoteConnection's
-// catch — classify a Nous Cloud server fault via the shared factory, else
-// fall through to gatewayTicketFailure. Proves the production composition:
-//   1. Cloud + OAuth ticket mint + 503  -> actionable Cloud-down error
-//   2. Cloud + OAuth ticket mint + 401  -> reauth (never Cloud-down)
-test('OAuth ticket-mint 503 surfaces the Cloud-down error (startup boundary)', () => {
-  const baseUrl = 'https://ares-3009.agents.nousresearch.com'
-  const ticketErr = new Error('upstream unavailable') as any
-  ticketErr.statusCode = 503
-
-  // The exact production sequence from main.ts.
-  const cloudError = makeNousCloudBackendDownError(baseUrl, ticketErr)
-
-  if (cloudError !== null) {
-    assert.equal((cloudError as any).isCloudBackendDown, true)
-    assert.equal((cloudError as any).statusCode, 503)
-
-    return
-  }
-
-  const wrapped = gatewayTicketFailure(ticketErr, 'auth', 'transport')
-
-  assert.fail(`expected Cloud-down classification, got wrapper: ${wrapped.message}`)
-})
-
-test('OAuth ticket-mint 401 stays on the reauth path (never Cloud-down)', () => {
-  const baseUrl = 'https://ares-3009.agents.nousresearch.com'
-  const ticketErr = new Error('Unauthorized') as any
-  ticketErr.statusCode = 401
-
-  const cloudError = makeNousCloudBackendDownError(baseUrl, ticketErr)
-  assert.equal(cloudError, null, 'a 401 must not become a Cloud-down error')
-
-  const wrapped = gatewayTicketFailure(ticketErr, 'auth message', 'transport message')
-
-  assert.equal(wrapped.message, 'auth message')
-  assert.equal((wrapped as any).needsOauthLogin, true)
-  assert.equal((wrapped as any).statusCode, 401)
 })
 
 test('FIX #95701: a confirmed 401/403 ticket rejection is tagged isReauthRequired so startHermes latches it', () => {

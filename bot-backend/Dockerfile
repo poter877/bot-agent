@@ -3,6 +3,9 @@
 # replace the tag with @sha256:<digest> from `docker images --digests`).
 FROM node:24-bookworm-slim AS build
 WORKDIR /app
+# Native dep(s) in the lockfile compile from source: the slim image ships no
+# toolchain (npm ci fails at `make: not found`).
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential python3 && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY tsconfig.json ./
@@ -13,6 +16,7 @@ RUN npx tsc -p tsconfig.json
 FROM node:24-bookworm-slim AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential python3 && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build /app/dist ./dist

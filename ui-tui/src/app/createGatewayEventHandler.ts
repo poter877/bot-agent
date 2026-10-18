@@ -28,7 +28,6 @@ import { bootSeededPin, invalidateBootBackground, writeBootTheme } from '../lib/
 import { defaultThemeForCurrentBackground, fromSkin, skinIsLight, type Theme, themeToneHex } from '../theme.js'
 import type { Msg, SessionInfo, SubagentProgress } from '../types.js'
 
-import { applyConnectionRequest, applyConnectionUpdate } from './connectionOperationStore.js'
 import { applyDelegationStatus, getDelegationState } from './delegationStore.js'
 import { applyGoalSnapshot } from './goalStatus.js'
 import type { GatewayEventHandlerContext, NoticeLevel } from './interfaces.js'
@@ -805,23 +804,6 @@ export function createGatewayEventHandler(ctx: GatewayEventHandlerContext): (ev:
     }
 
     switch (ev.type) {
-      case 'connection.request':
-        if (ev.payload) {
-          applyConnectionRequest(ev.payload)
-        }
-
-        return
-
-      case 'connection.update':
-        if (ev.payload) {
-          // The settling frame is the only record of how each app ended; the card is gone by then.
-          for (const line of applyConnectionUpdate(ev.payload)) {
-            sys(line)
-          }
-        }
-
-        return
-
       case 'gateway.ready':
         handleReady(ev.payload?.skin)
 

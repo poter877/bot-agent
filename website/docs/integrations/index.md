@@ -9,7 +9,7 @@ sidebar_position: 0
 Hermes Agent connects to external systems for AI inference, tool servers, IDE workflows, programmatic access, and more. These integrations extend what Hermes can do and where it can run.
 
 :::tip Start here
-If you only have time to set up one integration, set up [Nous Portal](./nous-portal.md) — a single OAuth login covers 300+ models plus the four Tool Gateway tools (web search, image generation, TTS, and browser automation).
+In managed deployments, model access is already handled: the company model gateway (bot-backend) provides the catalog, quotas, and metering under your account session — see [Company Topology](../developer-guide/company-topology.md). For self-hosted open-source setups, start with [AI Providers](./providers.md).
 :::
 
 ## AI Providers & Routing

@@ -6,7 +6,11 @@ description: "One subscription, 300+ frontier models, and the Tool Gateway — t
 
 # Nous Portal
 
-[Nous Portal](https://portal.nousresearch.com) is Nous Research's unified subscription gateway and **the recommended way to run Hermes Agent**. One OAuth login replaces the juggling act of separate accounts, API keys, and billing relationships across every model lab, search API, image generator, and browser provider you'd otherwise need to wire up by hand.
+:::note Where this applies
+This page describes the **upstream open-source** Nous Portal subscription path. In this repository's managed topology, the model face is the company model gateway (bot-backend) — model access, catalog, and metering ride your account session, and there is no vendor/portal fallback ([Company Topology](../developer-guide/company-topology.md)). Read the rest of this page only if you are running a self-hosted, non-company deployment against the public portal.
+:::
+
+[Nous Portal](https://portal.nousresearch.com) is Nous Research's unified subscription gateway for self-hosted Hermes Agent installations. One OAuth login replaces the juggling act of separate accounts, API keys, and billing relationships across every model lab, search API, image generator, and browser provider you'd otherwise need to wire up by hand.
 
 If you only have time to set up one thing, set up this. The fastest path:
 

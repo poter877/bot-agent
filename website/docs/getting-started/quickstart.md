@@ -87,20 +87,14 @@ The single most important setup step. Use `hermes model` to walk through the cho
 hermes model
 ```
 
-:::tip Easiest path: Nous Portal
-One subscription covers 300+ models plus the [Tool Gateway](../user-guide/features/tool-gateway.md) (web search, image generation, TTS, cloud browser). On a fresh install:
-
-```bash
-hermes setup --portal
-```
-
-That logs you in, sets Nous as your provider, and turns on the Tool Gateway in one command.
+:::tip Managed deployments: models come from the company gateway
+If your Hermes is company-managed (desktop runtime or `HERMES_BOT_BACKEND_URL` configured), the model picker already shows the company model catalog and authentication rides your account session — no vendor keys, no extra setup. How the pieces fit together: [Company Topology](../developer-guide/company-topology.md).
 :::
 
 :::info Setup modes
 On a fresh install, `hermes setup` offers three modes:
 
-- **Quick Setup (Nous Portal)** — OAuth login, no API keys to manage; sets up a model plus the Tool Gateway tools, billed to your [Nous Portal subscription](../integrations/nous-portal.md). The recommended fast path.
+- **Quick Setup** — the fast path. In company-managed deployments it binds the company model gateway (see [Company Topology](../developer-guide/company-topology.md)); in self-hosted open-source setups it walks an OAuth provider login instead of hand-managed API keys.
 - **Full Setup** — walk through every provider, tool, and option yourself (bring your own keys).
 - **Blank Slate** — everything starts **off** except the bare minimum needed to run an agent: **provider & model, the File Operations toolset, and the Terminal toolset**. No web, browser, code execution, vision, memory, delegation, cron, skills, plugins, or MCP servers — and compression, checkpoints, smart routing, and memory capture are all disabled. After the minimal baseline is applied, you choose one of two paths: **start with everything disabled** (finish now with the minimal agent), or **walk through all configurations** (opt in to tools, skills, plugins, MCP, and messaging). Pick this when you want a minimal, fully-controlled agent and intend to enable only exactly what you need.
 
@@ -111,7 +105,7 @@ Good defaults:
 
 | Provider | What it is | How to set up |
 |----------|-----------|---------------|
-| **Nous Portal** | Subscription-based, zero-config | OAuth login via `hermes model` |
+| **Company models** (managed deployments) | The company model gateway's server-side catalog — account-session auth, no vendor keys; in company mode this is the only route ([Company Topology](../developer-guide/company-topology.md)) | Already wired when `HERMES_BOT_BACKEND_URL` / the desktop runtime is configured; `hermes model` picks from the company catalog |
 | **OpenAI Codex** | ChatGPT or Codex subscription, uses Codex models | Device code auth via `hermes model` → **ChatGPT or Codex Subscription** |
 | **Anthropic** | Claude models directly — Max plan + extra usage credits (OAuth), or API key for pay-per-token | `hermes model` → OAuth login (requires Max + extra credits), or an Anthropic API key |
 | **OpenRouter** | Multi-provider routing across many models | Enter your API key |

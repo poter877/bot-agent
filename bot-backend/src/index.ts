@@ -1,4 +1,5 @@
 import { serve } from '@hono/node-server'
+import { migrate } from 'drizzle-orm/node-postgres/migrator'
 import { loadConfig } from './config/env.js'
 import { createLogger } from './shared/logger.js'
 import { closeDatabase, createDatabase } from './db/client.js'
@@ -21,6 +22,11 @@ const database = createDatabase({
   statementTimeoutMs: config.REQUEST_TIMEOUT_MS,
 })
 const redis = await createRedisConnections(config.REDIS_URL)
+
+// Self-migrating service: the image ships ./drizzle, migrations are
+// idempotent, and a fresh database must never serve with missing tables.
+await migrate(database.db, { migrationsFolder: 'drizzle' })
+logger.info('database schema migrated')
 
 const { hono, cloudComputers } = await createApp({ config, database, redis, logger })
 const stopCloudComputers = startCloudComputerReconciler(cloudComputers, logger)

@@ -38,41 +38,36 @@ describe('resolveRemoteOauthTicket', () => {
   })
 
   it('classifies only confirmed auth rejection as reauth and retains the pre-mint session copy', async () => {
-    for (const baseUrl of ['https://gateway.example.com', 'https://lab.agents.nousresearch.com']) {
-      for (const hadNativeSession of [false, true]) {
-        for (const statusCode of [401, 403, 500, 502, 503, 504, undefined]) {
-          let nativeSession = hadNativeSession
-          const cause = Object.assign(new Error('ticket request failed'), { statusCode })
+    for (const hadNativeSession of [false, true]) {
+      for (const statusCode of [401, 403, 500, 502, 503, 504, undefined]) {
+        let nativeSession = hadNativeSession
+        const cause = Object.assign(new Error('ticket request failed'), { statusCode })
 
-          const error = await resolveRemoteOauthTicket(
-            baseUrl,
-            {},
-            {
-              hasNativeSession: () => nativeSession,
-              mintGatewayWsTicket: async () => {
-                nativeSession = false
-                throw cause
-              }
+        const error = await resolveRemoteOauthTicket(
+          'https://gateway.example.com',
+          {},
+          {
+            hasNativeSession: () => nativeSession,
+            mintGatewayWsTicket: async () => {
+              nativeSession = false
+              throw cause
             }
-          ).catch((failure: Error & { isCloudBackendDown?: boolean; statusCode?: number }) => failure)
-
-          expect(error).toBeInstanceOf(Error)
-
-          if (!(error instanceof Error)) {
-            throw new Error('Expected ticket rejection')
           }
+        ).catch((failure: Error & { statusCode?: number }) => failure)
 
-          expect(error.cause).toBe(cause)
-          expect(error.statusCode).toBe(statusCode)
-          const authRejected = statusCode === 401 || statusCode === 403
-          expect(isReauthRequiredError(error)).toBe(authRejected)
-          expect(error.isCloudBackendDown === true).toBe(
-            baseUrl.includes('.agents.nousresearch.com') && [502, 503, 504].includes(statusCode ?? 0)
-          )
+        expect(error).toBeInstanceOf(Error)
 
-          if (authRejected) {
-            expect(error.message).toBe(oauthTicketFailureAuthMessage(hadNativeSession))
-          }
+        if (!(error instanceof Error)) {
+          throw new Error('Expected ticket rejection')
+        }
+
+        expect(error.cause).toBe(cause)
+        expect(error.statusCode).toBe(statusCode)
+        const authRejected = statusCode === 401 || statusCode === 403
+        expect(isReauthRequiredError(error)).toBe(authRejected)
+
+        if (authRejected) {
+          expect(error.message).toBe(oauthTicketFailureAuthMessage(hadNativeSession))
         }
       }
     }

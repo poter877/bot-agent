@@ -82,7 +82,7 @@ export const completionToApplyOnSubmit = (
   isLocalCommand: (name: string) => boolean = () => false
 ): string | null => {
   // The gateway does not know TUI-local commands, so its fuzzy list can rank another command
-  // above one typed in full (`/connectors` matches a description word of `/login`).
+  // above one typed in full (`/grid-test` matches a description word of a gateway command).
   const typed = value.trim()
 
   if (!rowText || (/^\/[\w-]+$/.test(typed) && isLocalCommand(typed.slice(1)))) {

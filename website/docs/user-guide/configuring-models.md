@@ -11,10 +11,8 @@ Hermes uses two kinds of model slots:
 
 This page covers configuring both from the dashboard. If you prefer config files or the CLI, jump to [Alternative methods](#alternative-methods) at the bottom. To run models on your own machine instead of a cloud provider, see [Local Models](./local-models.md).
 
-:::tip Fastest path: Nous Portal
-[Nous Portal](./features/tool-gateway.md) provides 300+ models under one subscription. On a fresh install, run `hermes setup --portal` to log in and set Nous as your provider in one command. Inspect what's wired up with `hermes portal info`.
-
-- Portal subscribers also get **10% off token-billed providers**.
+:::tip Managed deployments: the picker shows the company catalog
+When this Hermes is company-managed (desktop runtime or `HERMES_BOT_BACKEND_URL` configured), the model picker projects the company model gateway's server-side catalog and switching validates against it — there is no vendor-key path to configure. See [Company Topology](../developer-guide/company-topology.md) for how model access is wired.
 :::
 
 :::note `model:` schema — empty string vs. mapping
