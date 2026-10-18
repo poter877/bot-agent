@@ -1,0 +1,49 @@
+# 视频工厂 Docker 部署：默认从当前 React 源码构建；Watchtower 按需启用
+#
+# 使用：
+#   1. 复制 .env.example 为 .env
+#   2. docker compose up -d
+#   3. 访问 http://localhost:5679 ，设置页「关于更新」可检查/一键更新
+#
+# 数据持久化在命名卷 huobao-data（SQLite + 生成的图片/视频 + 可在线编辑的 workspace/skills）。
+
+services:
+  app:
+    image: ${VIDEO_FACTORY_IMAGE:-video-factory:local}
+    pull_policy: build
+    build:
+      context: .
+      args:
+        # 构建时注入版本号（发布镜像时务必指定，如 HUOBAO_VERSION=1.2.0）
+        HUOBAO_VERSION: ${HUOBAO_VERSION:-dev}
+    ports:
+      - "5679:5679"
+    environment:
+      # 使用自己的已发布 React 镜像时，配置 URL 并启用 auto-update profile
+      HUOBAO_WATCHTOWER_URL: ${HUOBAO_WATCHTOWER_URL:-}
+      HUOBAO_WATCHTOWER_TOKEN: ${WATCHTOWER_TOKEN:-please-change-me}
+      # 可覆盖为自己发布的版本清单
+      HUOBAO_UPDATE_FEED: ${HUOBAO_UPDATE_FEED:-}
+    volumes:
+      - huobao-data:/app/data
+    labels:
+      # Watchtower --label-enable：只更新显式标记的容器
+      com.centurylinklabs.watchtower.enable: "true"
+    restart: unless-stopped
+
+  watchtower:
+    profiles: [auto-update]
+    image: containrrr/watchtower:latest
+    command: >
+      --http-api-update
+      --http-api-token ${WATCHTOWER_TOKEN:-please-change-me}
+      --label-enable
+      --cleanup
+      --rolling-restart
+      --interval 86400
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+
+volumes:
+  huobao-data:

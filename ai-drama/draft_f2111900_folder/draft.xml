@@ -1,0 +1,177 @@
+<title>CSS → Tailwind CSS 生产级重构计划</title>
+<p>编制日期：2026-10-14（Asia/Shanghai）。读者：ai-drama 项目的前端负责人、实施开发者与测试人员。本文交付 CSS/Tailwind 实施计划，样式代码尚未在本次任务中执行迁移。</p>
+<p>关联方案：<a href="https://jcnfgzqwwg0u.feishu.cn/wiki/MJIsw5a53iGGhpkBKLlcTctHnqe">Vue → React 前端重构计划</a>。本计划补充该方案的样式层：新 React 组件采用 Tailwind，已有页面 CSS Modules 分阶段迁移；Zustand、React Query、路由、API 与任务可靠性职责沿用关联方案。</p>
+<p>推荐目标：Tailwind CSS v4 + 语义设计 token + React 组件 variants + 少量有明确用途的 CSS。保留现有品牌、布局密度、主题和交互表现，通过样式基线与生产构建验收决定每批迁移是否完成。</p>
+<h1 seq="auto">目标、范围与成功标准</h1>
+<ul><li>统一样式入口：应用通用布局、间距、字体、颜色、状态和响应式样式进入 Tailwind 规范；项目设计 token 具有单一来源。</li><li>保留当前界面基线：火焰橙品牌渐变、light/dark/system 三态、紧凑工作台、四语言、Portal、媒体预览和关键控件表现一致。</li><li>减少重复：Button、Input、Textarea、Badge、Card、Tabs、Dialog、菜单等统一 variants，页面通过组件和语义 utility 组合。</li><li>限定自定义 CSS 用途：主题变量、第三方覆盖、精确光标镜像、复杂动画/滚动条以及必要的平台适配可以保留，并记录 owner、用途与测试。</li><li>交付证据：生产构建包含实际使用的状态类；视觉/键盘/拖拽/输入法验证通过；旧样式的删除具有替代映射和回退路径。</li><li>样式迁移与业务变更分别验收；新 React 组件直接使用本规范，现有 CSS Modules 按模块收敛，避免重复搬运整套样式。</li></ul>
+<p>本文不承诺 Tailwind 会自动减少资源体积或提升帧率；CSS 体积、构建时间、交互与渲染性能都以同一基线数据集的测量结果判断。生产就绪需要样式、功能与部署验证共同通过。</p>
+<h1 seq="auto">当前代码的样式基线</h1>
+<table><colgroup><col width="170"/><col width="275"/><col width="325"/></colgroup><thead><tr><th background-color="light-gray"><p>对象</p></th><th background-color="light-gray"><p>本次扫描结果</p></th><th background-color="light-gray"><p>实施意义</p></th></tr></thead><tbody><tr><td><p>旧 Vue 前端</p></td><td><p>16 个包含样式的文件/区域；约 5,435 行 CSS</p></td><td><p>用于视觉和行为比对，避免只检查新 React 的局部实现。</p></td></tr><tr><td><p>旧 Vue 工作台</p></td><td><p>episode.vue 的样式约 2,730 行</p></td><td><p>最大工作包；按侧栏、剧本、资产、视频和导出拆分。</p></td></tr><tr><td><p>全局设计变量</p></td><td><p>studio.css 约 574 行；120 个不同自定义变量名</p></td><td><p>先建立 token 注册表，再接入 Tailwind @theme。</p></td></tr><tr><td><p>覆盖与动画</p></td><td><p>旧样式约 32 处 !important、11 个 keyframes</p></td><td><p>逐项分类；应用内状态覆盖与第三方覆盖分开治理。</p></td></tr><tr><td><p>现有断点</p></td><td><p>max-width 760、860、900、1080px</p></td><td><p>首轮保持边界，不能直接改成默认 md/lg 的不同阈值。</p></td></tr><tr><td><p>当前 React 目录</p></td><td><p>已出现 frontend-react；18 个 CSS 文件，其中 16 个 CSS Modules，约 5,524 行</p></td><td><p>本计划以现有 React 样式为主要实施对象。</p></td></tr><tr><td><p>React 大样式文件</p></td><td><p>工作台 2,730 行；详情 699 行；tokens.css 583 行；设置 445 行；首页 276 行</p></td><td><p>仍承接大部分旧样式，需要进行样式结构重构。</p></td></tr><tr><td><p>当前 React 构建</p></td><td><p>Vite 7 系列；main.tsx 导入 tokens.css 与 tour-theme.css；尚未配置 Tailwind</p></td><td><p>在既有 Vite 配置中增加插件与统一入口。</p></td></tr></tbody></table>
+<p>以上为本次文件扫描快照，CSS 行数包含注释与空行，并非独立规则数。frontend-react 当前是未跟踪目录，可能仍在持续开发；T0 必须以实际实施时版本冻结基线。此次未验证 React 页面功能、运行截图或安装包表现。</p>
+<p>重点源码：frontend-react/src/app/styles/tokens.css、tour-theme.css；features/workbench/EpisodeWorkbenchPage.module.css；features/drama-detail/DramaDetailPage.module.css；features/projects/ProjectsPage.module.css；features/settings/SettingsPage.module.css；shared/ui/*.module.css；app/layouts/*.module.css。</p>
+<p>tokens.css 同时包含变量、reset、按钮/表单/弹窗/菜单和动画，必须按职责拆分，不能把整个文件重新包装为 @apply 后宣称已经完成。</p>
+<h1 seq="auto">技术方案与工程约束</h1>
+<table><colgroup><col width="170"/><col width="275"/><col width="325"/></colgroup><thead><tr><th background-color="light-gray"><p>能力</p></th><th background-color="light-gray"><p>采用方案</p></th><th background-color="light-gray"><p>约束/验收</p></th></tr></thead><tbody><tr><td><p>Tailwind</p></td><td><p>Tailwind CSS v4 + @tailwindcss/vite</p></td><td><p>T1 验证与当前 Vite/Node 兼容，锁定版本与 package-lock.json。</p></td></tr><tr><td><p>主题</p></td><td><p>CSS runtime token + @theme inline + html[data-theme]</p></td><td><p>主题值由现有主题控制器提供，Portal 同样继承。</p></td></tr><tr><td><p>组件 variants</p></td><td><p>class-variance-authority 或同等静态变体表</p></td><td><p>统一 size/variant/state，类名完整可扫描；只采用一种主要规范。</p></td></tr><tr><td><p>className 合并</p></td><td><p>clsx + 经兼容验证的 tailwind-merge</p></td><td><p>自定义字号、圆角和 shadow 的合并语义要有测试。</p></td></tr><tr><td><p>交互组件</p></td><td><p>继续使用 React/Radix/既有菜单与输入组件</p></td><td><p>Tailwind 负责样式，不替代 focus、键盘与 ARIA 逻辑。</p></td></tr><tr><td><p>代码格式</p></td><td><p>兼容锁定 Tailwind 版本的类名排序/检查工具</p></td><td><p>审查稳定分组，避免依赖 className 字符串先后顺序决定 CSS 优先级。</p></td></tr><tr><td><p>资源与运行</p></td><td><p>Vite 生产编译，静态 CSS 随 dist 打包</p></td><td><p>浏览器与 Electron 不依赖运行时 Tailwind CDN。</p></td></tr></tbody></table>
+<p>官方当前文档采用 v4 CSS 配置方式。优先使用 @theme、@custom-variant、@utility 和 @source；不用 v3 的 @tailwind 指令、旧 content/safelist 配置或升级工具机械转换原始 CSS。若必须支持官方 v4 范围外的浏览器，应在 T0 单独确定兼容方案。</p>
+<p>Tailwind v4 官方列出的基础浏览器范围包含 Chrome 111、Safari 16.4、Firefox 128。Electron 的实际 Chromium 版本与 Web 的浏览器范围分别核对；较新的 CSS 功能也需要独立确认，构建 target 不能为全部现代 CSS 自动提供兼容性。</p>
+<p>参考：<a href="https://tailwindcss.com/docs/installation/using-vite">Tailwind Vite 安装</a>；<a href="https://tailwindcss.com/docs/compatibility">Tailwind 兼容范围</a>；<a href="https://tailwindcss.com/docs/upgrade-guide">Tailwind v4 规则与升级说明</a>；<a href="https://cva.style/">CVA</a>；<a href="https://github.com/dcastil/tailwind-merge">tailwind-merge</a>。</p>
+<h1 seq="auto">统一入口、Preflight 与渐进共存</h1>
+<pre lang="text" caption="实施后目标结构"><code>frontend-react/src/app/styles/
+  index.css                 # Tailwind、层顺序与样式入口
+  runtime-tokens.css        # --hb-* 原始 light/dark 设计值
+  theme.css                 # @theme inline / utilities / variants
+  base.css                  # 页面根节点与必要基础规则
+  legacy-bridge.css         # 有退出期限的旧变量/旧组件兼容
+  vendor-overrides.css      # driver.js、sonner 等受控覆盖
+  exceptions.css            # 有说明和 owner 的 CSS 例外
+
+frontend-react/src/shared/ui/
+  button.tsx
+  button.variants.ts
+  input.tsx
+  badge.tsx
+  card.tsx
+  tabs.tsx
+  dialog.tsx
+
+frontend-react/src/shared/lib/
+  cn.ts</code></pre>
+<ul><li>main.tsx 最终只导入 app/styles/index.css；公共样式不再由多个页面重复注入。driver.js 原始样式和覆盖的导入关系统一管理。</li><li>固定 layer 顺序：theme → base → vendor → legacy → components → utilities。应用自己的 utility 可以按约定覆盖 legacy 普通规则。</li><li>正常 CSS 中未分层的规则优先于分层规则；未迁移 CSS Modules 需要明确进入 legacy layer，或在该组件迁移时整体移除旧 import。只把 Tailwind 放到后面不保证有效。</li><li>!important 的 layer 优先级有反转规则；每处现有 important 单独核对，应用状态逻辑优先通过结构/variants 解决，不采用全局 important 开关。</li><li>第一批可只导入 Tailwind theme 与 utilities，暂不加入 Preflight，保持当前 reset；随后在独立验收批次启用 Preflight 并删除重复 reset。</li><li>启用 Preflight 时检查 heading、button、input、select、SVG、img/video、border 和默认字体/line-height；先通过基础控件和 Mention 的基线，再迁移全站。</li><li>既有 CSS Modules 若仍需 @apply/@variant，使用 @reference 引用统一主题，避免每个文件重复导入完整 Tailwind；适用范围限于残余 CSS 例外。</li></ul>
+<pre lang="css" caption="source 路径以该样式文件位置解析，T1 必须验证"><code>/* 最终入口示例；Preflight 在独立验收批次后启用 */
+@layer theme, base, vendor, legacy, components, utilities;
+@import &quot;tailwindcss&quot; source(&quot;../..&quot;);
+@import &quot;./runtime-tokens.css&quot; layer(base);
+@import &quot;./base.css&quot; layer(base);
+@import &quot;./legacy-bridge.css&quot; layer(legacy);
+@import &quot;./vendor-overrides.css&quot; layer(components);
+@import &quot;./theme.css&quot;;
+
+/* index.css 位于 src/app/styles，显式覆盖根 HTML */
+@source &quot;../../../index.html&quot;;</code></pre>
+<p>旧 Vue 与 React 是两个前端入口，首轮只在 React 入口引入 Tailwind。前端目录正式切换时复核 source 路径和 dist 引用。兼容层只服务未迁移组件，每次迁移同步减少对应 selector 和旧变量 alias。</p>
+<p>参考：<a href="https://tailwindcss.com/docs/preflight">Preflight 及禁用方式</a>；<a href="https://tailwindcss.com/docs/adding-custom-styles">自定义样式与 cascade layers</a>；<a href="https://tailwindcss.com/docs/functions-and-directives">@reference 与指令</a>。</p>
+<h1 seq="auto">设计 token 注册与映射</h1>
+<p>先为现有 120 个变量建立注册表，字段包括旧名、新 --hb-* 名、light/dark 值、utility 名、使用组件、owner、兼容 alias 和删除条件。原始品牌值继续使用现有颜色和渐变，不在同一批迁移中改换色彩体系。</p>
+<table><colgroup><col width="170"/><col width="275"/><col width="325"/></colgroup><thead><tr><th background-color="light-gray"><p>当前变量/含义</p></th><th background-color="light-gray"><p>目标 utility / token</p></th><th background-color="light-gray"><p>规则</p></th></tr></thead><tbody><tr><td><p>--surface-base</p></td><td><p>bg-app / --hb-surface-base</p></td><td><p>页面背景随主题变化。</p></td></tr><tr><td><p>--surface-raised</p></td><td><p>bg-surface / --hb-surface-raised</p></td><td><p>卡片、弹窗和菜单底色。</p></td></tr><tr><td><p>--surface-muted、--surface-input</p></td><td><p>bg-surface-muted、bg-input</p></td><td><p>区分禁用/分组背景和输入背景。</p></td></tr><tr><td><p>--text-0、--text-1、--text-2、--text-3</p></td><td><p>text-content、text-content-secondary、text-content-muted、text-content-subtle</p></td><td><p>保持正文、次级和提示层级，避免到处写 gray 色阶。</p></td></tr><tr><td><p>--border、--border-strong、--border-focus</p></td><td><p>border-outline、border-outline-strong、border-focus</p></td><td><p>使用 border utility 时明确颜色。</p></td></tr><tr><td><p>--accent、--accent-bg、--accent-text</p></td><td><p>bg-brand / text-brand、bg-brand-soft、text-brand-content</p></td><td><p>强调、选中与徽标语义分开。</p></td></tr><tr><td><p>--accent-gradient</p></td><td><p>bg-brand-gradient（@utility）</p></td><td><p>保留既有线性渐变，hover/active 的 glow/scale 独立定义。</p></td></tr><tr><td><p>--on-accent</p></td><td><p>text-on-action</p></td><td><p>主要动作的前景颜色。</p></td></tr><tr><td><p>--button-bg、--button-text、--button-bg-hover、--button-bg-active</p></td><td><p>bg-button、text-button-content、hover:bg-button-hover、active:bg-button-active</p></td><td><p>背景与前景使用不同 token，默认按钮变体统一定义。</p></td></tr><tr><td><p>--button-focus</p></td><td><p>shadow-focus（精确 focus shadow）</p></td><td><p>首轮保留 3.5px 焦点圈的尺寸和颜色，转 ring 前单独比较。</p></td></tr><tr><td><p>--action-danger、--action-danger-bg</p></td><td><p>text-danger / bg-danger、bg-danger-soft</p></td><td><p>危险 ghost 与 solid variant 分开。</p></td></tr><tr><td><p>success/error/info/warning 系列</p></td><td><p>语义状态色与 soft 背景</p></td><td><p>文本、图标和状态同时表达，不只依赖颜色。</p></td></tr><tr><td><p>--radius-sm、--radius、--radius-lg、--radius-xl</p></td><td><p>rounded-item、rounded-control、rounded-panel、rounded-dialog</p></td><td><p>对应当前 8/10/14/20px，避免默认 radius 数值替换。</p></td></tr><tr><td><p>--radius-pill</p></td><td><p>rounded-pill</p></td><td><p>按钮/标签的项目语义 token。</p></td></tr><tr><td><p>--shadow-panel、--shadow-card、--shadow-elevated</p></td><td><p>shadow-panel、shadow-card、shadow-dialog</p></td><td><p>保持现有多层 shadow 参数。</p></td></tr><tr><td><p>--font-body、--font-display、--font-mono</p></td><td><p>font-ui、font-display、font-code</p></td><td><p>继续当前中文/日文/韩文字体回退链。</p></td></tr><tr><td><p>--sp-* 与各固定尺寸</p></td><td><p>4px 基线 spacing + 少量尺寸 token</p></td><td><p>匹配已有 4/8/12/16/20/24px；10/14/18px 等精确值按组件统一。</p></td></tr><tr><td><p>--ease-out 与动画参数</p></td><td><p>ease-app、animate-* 项目 utility</p></td><td><p>交互 easing 保留；动画按 reduced motion 降级。</p></td></tr><tr><td><p>--z-menu:1000、--z-blocking:2000</p></td><td><p>z-[var(--hb-z-menu)]、z-[var(--hb-z-blocking)]</p></td><td><p>保留层级并整理 Dialog、Toaster、Tour 的优先关系。</p></td></tr><tr><td><p>scrim/media/header/scrollbar 等</p></td><td><p>语义 raw token + 对应 utility/受控 CSS</p></td><td><p>媒体黑底、透明遮罩和滚动条保留用途边界。</p></td></tr></tbody></table>
+<p>名称冲突必须提前处理：旧样式已有 --radius-lg、--shadow-sm、--font-mono，容易与 Tailwind theme namespace 同名；新原始值统一使用 --hb-*，Tailwind 用独立语义名映射，杜绝 --radius-lg: var(--radius-lg) 这类自引用。旧 alias 只在 legacy-bridge 内保留。</p>
+<pre lang="css" caption="生产代码必须补齐 dark 值、完整 token 与基线验证"><code>/* runtime-tokens.css：下方仅示意一组，实施时完整迁移 light/dark 值 */
+:root {
+  --hb-surface-base: #f7f8fa;
+  --hb-surface-raised: #ffffff;
+  --hb-text-primary: #17181a;
+  --hb-outline: #e7e9ee;
+  --hb-brand: #f97316;
+  --hb-brand-gradient: linear-gradient(135deg, #f97316 0%, #fb923c 100%);
+  --hb-radius-control: 10px;
+  --hb-radius-panel: 14px;
+}
+
+/* theme.css：映射原始变量，使 utility 在使用元素处解析 */
+@theme inline {
+  --color-app: var(--hb-surface-base);
+  --color-surface: var(--hb-surface-raised);
+  --color-content: var(--hb-text-primary);
+  --color-outline: var(--hb-outline);
+  --color-brand: var(--hb-brand);
+  --radius-control: var(--hb-radius-control);
+  --radius-panel: var(--hb-radius-panel);
+}
+
+@custom-variant dark (&amp;:where([data-theme=&quot;dark&quot;], [data-theme=&quot;dark&quot;] *));
+
+@utility bg-brand-gradient {
+  background-image: var(--hb-brand-gradient);
+}</code></pre>
+<p>字体大小要单独登记：当前 body 为 14px/1.6，按钮为 13px/1，表单为 13.5px，许多标签为 10–12px，且有 font-weight 550/650。保留 font-ui、text-ui、text-form 等精确 token 和 line-height；不能用 text-sm 的默认参数替换所有文字。</p>
+<p>参考：<a href="https://tailwindcss.com/docs/theme">Tailwind @theme 与 inline 映射</a>。</p>
+<h1 seq="auto">普通 CSS 到 utility 的转换规则</h1>
+<table><colgroup><col width="170"/><col width="275"/><col width="325"/></colgroup><thead><tr><th background-color="light-gray"><p>现有规则</p></th><th background-color="light-gray"><p>迁移表达</p></th><th background-color="light-gray"><p>注意点</p></th></tr></thead><tbody><tr><td><p>display:flex；align-items:center</p></td><td><p>flex items-center</p></td><td><p>保留子元素的 shrink/min-size。</p></td></tr><tr><td><p>flex:1；min-width:0；min-height:0</p></td><td><p>flex-1 min-w-0 min-h-0</p></td><td><p>工作台滚动边界需要全部保留。</p></td></tr><tr><td><p>gap:12px；padding:16px</p></td><td><p>gap-3 p-4（4px 基线）</p></td><td><p>根字号/缩放影响 rem 时核对 computed style。</p></td></tr><tr><td><p>border:1px solid var(--border)</p></td><td><p>border border-outline</p></td><td><p>border 的默认颜色不能省略。</p></td></tr><tr><td><p>border-radius:var(--radius-lg)</p></td><td><p>rounded-panel</p></td><td><p>token 映射先完成。</p></td></tr><tr><td><p>background/text/shadow</p></td><td><p>bg-surface text-content shadow-panel</p></td><td><p>通过语义 token 接主题。</p></td></tr><tr><td><p>overflow-y:auto</p></td><td><p>overflow-y-auto</p></td><td><p>父级高度与 min-h-0 需要一起验收。</p></td></tr><tr><td><p>ellipsis/truncate</p></td><td><p>min-w-0 truncate</p></td><td><p>多语言标题与 flex 布局下验证。</p></td></tr><tr><td><p>单一 hover/focus/disabled</p></td><td><p>hover:*、focus-visible:*、disabled:*</p></td><td><p>键盘与触屏独立验证。</p></td></tr><tr><td><p>active/on/selected/failed 类</p></td><td><p>data-[active=true]:*、aria-selected:* 或 variants</p></td><td><p>语义值由现有 React 状态提供，避免另建样式状态。</p></td></tr><tr><td><p>父级 hover 显示按钮</p></td><td><p>group + group-hover:* + group-focus-within:*</p></td><td><p>关键操作也有非 hover 的访问路径。</p></td></tr><tr><td><p>伪元素装饰</p></td><td><p>before:*、after:* 或明确子节点</p></td><td><p>装饰不承担唯一状态文本。</p></td></tr><tr><td><p>max-width 精确断点</p></td><td><p>项目断点/custom variant</p></td><td><p>首轮保持 760/860/900/1080px 边界语义。</p></td></tr><tr><td><p>动态像素宽度/位置</p></td><td><p>静态 utility + runtime CSS variable/style</p></td><td><p>只在运行时传值，不拼接动态 className。</p></td></tr><tr><td><p>重要覆盖</p></td><td><p>variants 或保留有记录的第三方 selector</p></td><td><p>逐条解释 !important 用途和删除条件。</p></td></tr><tr><td><p>动画/复杂背景/scrollbar</p></td><td><p>小量 @utility/@keyframes 或 exceptions.css</p></td><td><p>动画与定位 transform 分层；测试 reduced motion。</p></td></tr></tbody></table>
+<ul><li>每批按组件执行转换，并同时清理对应 .module.css 引用；先提取重复 UI，再给组件定义 variants。</li><li>优先表达布局与语义，单次精确值可用 arbitrary value；跨三处以上重复的设计值收敛为 token 或组件 prop。</li><li>合理使用 @apply 处理第三方 DOM 和确需 CSS 的选择器；页面样式以 JSX 组合为主，避免长期保留巨大类选择器库。</li><li>CSS 中 class 顺序不等于 className 字符串顺序。cn/merge 只处理约定冲突组，不能替代 cascade、状态 variants 或 DOM 层级设计。</li></ul>
+<h1 seq="auto">基础组件 variants 与状态样式</h1>
+<table><colgroup><col width="170"/><col width="275"/><col width="325"/></colgroup><thead><tr><th background-color="light-gray"><p>组件</p></th><th background-color="light-gray"><p>约定 props / variants</p></th><th background-color="light-gray"><p>验收重点</p></th></tr></thead><tbody><tr><td><p>Button/IconButton</p></td><td><p>variant: default/primary/ghost/danger；size: default/sm/icon；loading</p></td><td><p>当前高度、字体、渐变、glow、按压、焦点、disabled。</p></td></tr><tr><td><p>Input/Textarea</p></td><td><p>size、invalid、disabled；统一 field wrapper</p></td><td><p>placeholder、focus shadow、IME、错误文本与 readonly。</p></td></tr><tr><td><p>Badge/StatusBadge</p></td><td><p>tone: default/brand/success/error/info/warning</p></td><td><p>语义配色、图标、长文本和对比。</p></td></tr><tr><td><p>Card</p></td><td><p>selected、interactive、padding</p></td><td><p>shadow、hover border、selected outline，不改变点击范围。</p></td></tr><tr><td><p>Tabs/Segmented</p></td><td><p>orientation、size；由 aria-selected 或 data-state 表示当前项</p></td><td><p>键盘导航、下划线/芯片和长语言文案。</p></td></tr><tr><td><p>Dialog/AlertDialog</p></td><td><p>size、tone；head/body/foot slot</p></td><td><p>Portal、focus trap、滚动、遮罩层级与关闭结果。</p></td></tr><tr><td><p>Popover/Combobox/Menu</p></td><td><p>placement、size、selected、disabled</p></td><td><p>定位交给现有 adapter/Floating UI，样式只描述外观。</p></td></tr><tr><td><p>Skeleton/Progress</p></td><td><p>size、motion、progress</p></td><td><p>减少动画模式、实时数值和刷新状态。</p></td></tr></tbody></table>
+<pre lang="typescript" caption="示意 token/class 表；shadow、active/motion 细节在 T2 按基线补齐"><code>/* 类名表保留完整字符串，供 Tailwind 扫描和组件 variants 复用 */
+const buttonTone = {
+  default: &#x27;bg-button text-button-content hover:bg-button-hover active:bg-button-active&#x27;,
+  primary: &#x27;bg-brand-gradient text-on-action hover:shadow-brand&#x27;,
+  ghost: &#x27;bg-transparent text-brand-content hover:bg-brand-soft&#x27;,
+  danger: &#x27;bg-danger-soft text-danger hover:bg-danger-soft-hover&#x27;,
+} as const
+
+const buttonSize = {
+  default: &#x27;min-h-9 px-[18px] text-ui&#x27;,
+  sm: &#x27;min-h-[30px] px-[14px] text-caption&#x27;,
+  icon: &#x27;size-9 shrink-0 p-0&#x27;,
+} as const
+
+const buttonBase =
+  &#x27;inline-flex items-center justify-center gap-1.5 rounded-pill &#x27; +
+  &#x27;font-semibold leading-none whitespace-nowrap select-none &#x27; +
+  &#x27;focus-visible:outline-none focus-visible:shadow-focus &#x27; +
+  &#x27;disabled:cursor-not-allowed disabled:opacity-45 &#x27; +
+  &#x27;motion-reduce:transition-none&#x27;</code></pre>
+<p>状态样式直接消费 Zustand 的交互状态、React Query 的 pending/error/任务终态、Radix 的 data-state 等已有协议。loading 按钮保留可访问名称和宽度，spinner 不挤压文案；danger solid 与 soft 分开，避免改变删除确认的视觉语义。</p>
+<p>cn 辅助函数集中维护，合并器版本必须支持锁定的 Tailwind。测试自定义字号 text-ui、圆角 rounded-panel、shadow-focus 和组合 variants 的合并；重要尺寸变化通过组件 props 表达，不用任意 className 覆盖全套控制样式。</p>
+<h1 seq="auto">页面与工作台迁移清单</h1>
+<table><colgroup><col width="170"/><col width="275"/><col width="325"/></colgroup><thead><tr><th background-color="light-gray"><p>工作包</p></th><th background-color="light-gray"><p>主要目标文件</p></th><th background-color="light-gray"><p>替换与验收</p></th></tr></thead><tbody><tr><td><p>应用/布局</p></td><td><p>app/layouts/*、RouteError.module.css</p></td><td><p>shell/header/nav、全高布局、错误状态、内容滚动。</p></td></tr><tr><td><p>首页</p></td><td><p>ProjectsPage.module.css</p></td><td><p>项目卡、筛选、搜索、空态、骨架和创建弹窗；group hover/focus。</p></td></tr><tr><td><p>项目详情</p></td><td><p>DramaDetailPage.module.css</p></td><td><p>集卡片、素材库、编辑、删除和媒体预览；图片比例。</p></td></tr><tr><td><p>设置</p></td><td><p>SettingsPage.module.css</p></td><td><p>页签、配置卡、模型 chips、表单、提示词/技能长文案、存储统计。</p></td></tr><tr><td><p>工作台侧栏/顶栏</p></td><td><p>EpisodeWorkbenchPage.module.css 的导航与进度段</p></td><td><p>收起状态、stage selected/done/pending、按钮密度与进度标识。</p></td></tr><tr><td><p>剧本/资产</p></td><td><p>ScriptPanel、AssetsPanel 及对应样式</p></td><td><p>编辑器与 dirty 状态、资产网格、预览、上传/生成。</p></td></tr><tr><td><p>分镜/视频</p></td><td><p>VideosPanel 及对应大样式段</p></td><td><p>镜头列表、参考绑定、模型参数、提示词、历史、拖拽列宽。</p></td></tr><tr><td><p>导出/任务</p></td><td><p>ExportPanel、TaskDrawer、MigrationOverlay</p></td><td><p>选择范围、成片卡、媒体、进度、遮罩和层级。</p></td></tr><tr><td><p>公共控件</p></td><td><p>shared/ui 的 8 类 CSS Modules</p></td><td><p>Select/ModelSelect、Mention、Modal、确认/语言弹窗、主题/语言菜单。</p></td></tr><tr><td><p>全局与第三方</p></td><td><p>tokens.css、tour-theme.css</p></td><td><p>拆 token/reset/components/animation，集中维护第三方覆盖。</p></td></tr></tbody></table>
+<p>顺序为基础 token/控件 → 首页 → 详情/设置 → 工作台 → 跨平台清理。工作台根据 React 已拆出的 parts 划分样式批次，不把 2,730 行 CSS 统一改成一个巨大 className 映射文件。</p>
+<p>原先用于 driver.js 引导的 selector 要与样式类脱钩：保留稳定 data-tour 属性，并更新引导配置与测试。删除 .head-actions、.tour-help-btn 等类前核对它们是否仍是功能/自动化定位入口。</p>
+<h1 seq="auto">动态布局、浮层与 Mention 的精确迁移</h1>
+<h2 seq="auto">运行时尺寸与定位</h2>
+<ul><li>当前视频列宽通过 --vleft/--vright 动态传入。继续由 Zustand 保存有限、校验后的数值，在 DOM 边界输出 --hb-video-left/right；静态 grid utility 消费变量。</li><li>布局保留现有嵌套列结构，分别实现左侧列表+主区和主区+检查器，不因样式工具更换而调整分镜/检查器关系。</li><li>Floating UI 或现有 panelStyle 中的 top/left/width/transform 保持 style 输出，Tailwind 处理边框、背景、间距等静态属性。</li><li>定位 transform 与入场 scale/translate 尽量放在不同外层/内层节点，防止动画覆盖浮层定位。</li><li>body 拖拽 cursor/user-select 状态使用专用 data 属性或小量全局例外 CSS；pointer up/cancel/unmount 均清理。</li></ul>
+<pre lang="typescript" caption="动态数据使用 CSS variable，className 保持静态"><code>import type { CSSProperties } from &#x27;react&#x27;
+
+const columnsStyle = {
+  &#x27;--hb-video-left&#x27;: String(leftWidth) + &#x27;px&#x27;,
+  &#x27;--hb-video-right&#x27;: String(rightWidth) + &#x27;px&#x27;,
+} as CSSProperties
+
+// 左侧列表 + 主区；右检查器仍由原来的嵌套布局处理
+&lt;section
+  style={columnsStyle}
+  className=&quot;grid min-h-0 min-w-0 grid-cols-[var(--hb-video-left)_minmax(0,1fr)]&quot;
+/&gt;</code></pre>
+<h2 seq="auto">Portal 与主题</h2>
+<ul><li>html[data-theme] 上定义主题值，Portal 渲染到 body 后仍可继承。不要把主题只放在 #root 子节点。</li><li>Dialog、菜单、Mention、Toaster、Tour 和迁移遮罩建立层级表；当前 menu 1000、blocking 2000 是基线，检查第三方实际层级后定义新完整规范。</li><li>透明遮罩、backdrop-filter、视频黑底、滚动锁定与焦点恢复一起验收。样式迁移不能把弹窗遮挡或关闭行为问题藏在 z-index 数字里。</li></ul>
+<h2 seq="auto">MentionTextarea 镜像</h2>
+<ul><li>textarea 与高亮镜像必须共享字体、字号、字重、line-height、padding、border 宽度、letter-spacing、white-space 和 wrap 规则。</li><li>定义单一 mention surface metrics，将背景透明/文字透明/caret 分别作为变体。Preflight 对 textarea、边框和字体的改变进入专门回归。</li><li>镜像的 scrollTop/scrollLeft 与真实输入保持同步，测试 emoji、中文 IME、日韩长文本、换行、粘贴、缩放和光标插入。</li><li>高亮通过安全 React token 节点或明确 global 类输出；当前 CSS Modules 中 .mention-token 等原始字符串与局部哈希类的对应关系需要核对，不能假设自动匹配。</li><li>光标下拉需要虚拟锚点计算和键盘逻辑；保留少量精确 CSS 属于允许例外，不以自定义 CSS 零行作为完成标准。</li></ul>
+<h1 seq="auto">主题、响应式、动画与可访问性</h1>
+<ul><li>Zustand 管 themeMode，启动控制器解析 system 后在首帧前写 html[data-theme]；Tailwind custom dark variant 只读取结果，不建立第二份主题状态。</li><li>通常 bg-surface/text-content 随 raw token 自动变色；只有结构/显示方式有主题差异才加 dark variant，减少重复的 light/dark 色阶硬编码。</li><li>现有 max-width 是 &lt;= 边界，Tailwind max-* 是 &lt; 边界；T0 记录 759/760/761、859/860/861、899/900/901、1079/1080/1081px 的行为。</li><li>首轮可保留精确 media query 或定义与旧边界一致的 custom variant；改成 mobile-first 是后续独立布局调整。若引入 --breakpoint-*，与默认 breakpoints 统一使用 rem 或完整重设同一种单位，复核排序。</li><li>spinner、skeleton、dialog/menu/task drawer、进度流水线和 marquee 有不同用途；在 motion-reduce 下取消非必要位移/闪动，保留文字/状态反馈。</li><li>v4 hover 受设备 hover 能力影响。项目卡更多操作、媒体播放、下载和重试不能只有悬停入口，同时支持 focus、触屏或明确按钮。</li><li>scale/translate 在 v4 可使用独立 CSS 属性；自定义 transition 列表包含实际改变的属性，不只留下 transform 导致动画失效。</li><li>保持 focus-visible、ARIA 状态、disabled 命中区域、label/error 提示和较小窗口可操作性；强制色彩模式、200% 缩放与四语言长文案列入验证。</li></ul>
+<p>参考：<a href="https://tailwindcss.com/docs/dark-mode">dark mode 与 data-theme</a>；<a href="https://tailwindcss.com/docs/responsive-design">响应式断点</a>；<a href="https://tailwindcss.com/docs/hover-focus-and-other-states">状态 variants</a>；<a href="https://tailwindcss.com/docs/animation">动画</a>；<a href="https://tailwindcss.com/docs/upgrade-guide">v4 hover 与 transforms</a>。</p>
+<h1 seq="auto">源码扫描、第三方覆盖与 CSS 例外</h1>
+<ul><li>明确 React src 与根 index.html 的扫描路径；从仓库根、frontend-react 或 CI 构建均得到相同结果。避免扫描旧 Vue、后端 prompt、构建产物和无关文档类名。</li><li>variant/class map 使用完整字符串，例如失败态映射到 bg-danger-soft text-danger；禁止用 &#x27;bg-&#x27; + tone、任意运行时宽度拼出 utility。</li><li>Tailwind 不默认扫描 CSS、node_modules、被 gitignore 忽略文件等。外部组件类名若需要 Tailwind 生成，使用明确 @source；动态第三方 DOM 的少量 utility 可使用有限 @source inline。</li><li>不对全部颜色、宽度和状态做大范围 safelist；可枚举的类名放入静态变体表，运行时数值交给 CSS variable。</li><li>driver.js 通过原始样式 + 项目覆盖支持主题。可管理的 vendor CSS 加入 vendor layer；不能控制的内联/运行时样式以允许的 API、CSS variables 或最小覆盖处理。</li><li>sonner 优先使用库支持的样式/class 接口。背景、字色和焦点不依赖每个业务调用临时传入一套样式。</li><li>滚动条、富文本/高亮镜像、需要精确浏览器行为的选择器和平台例外保留在登记清单；每条记录理由、owner、目标浏览器和验收用例。</li><li>残余 CSS Modules 用于真正的局部特殊样式。迁移结束删除布局/间距/颜色等已由 utility 替代的规则；新增普通页面样式遵守 Tailwind 规范。</li></ul>
+<p>参考：<a href="https://tailwindcss.com/docs/detecting-classes-in-source-files">Tailwind 源码检测与 @source</a>；<a href="https://tailwindcss.com/docs/compatibility">CSS Modules 与工具兼容</a>。</p>
+<h1 seq="auto">视觉、交互与生产构建验收</h1>
+<table><colgroup><col width="170"/><col width="275"/><col width="325"/></colgroup><thead><tr><th background-color="light-gray"><p>验证层</p></th><th background-color="light-gray"><p>必测内容</p></th><th background-color="light-gray"><p>通过证据</p></th></tr></thead><tbody><tr><td><p>Token/编译</p></td><td><p>light/dark 值、utility、CVA 静态类、source 路径、css layers</p></td><td><p>生产 CSS 实际命中；undefined/self-referential variable 为零。</p></td></tr><tr><td><p>公共控件</p></td><td><p>Button/输入/下拉/弹窗/菜单的默认、hover、focus、disabled、loading、error</p></td><td><p>组件样例页或测试 fixture 截图、keyboard 行为通过。</p></td></tr><tr><td><p>页面视觉</p></td><td><p>首页、详情、设置、工作台各面板、空态、错误态、生成态</p></td><td><p>同硬件/字体/数据集的基线截图与差异解释。</p></td></tr><tr><td><p>主题/语言</p></td><td><p>light/dark/system；zh/en/ja/ko</p></td><td><p>关键页面长文案、Portal、图标、Toaster 和 Tour 验证。</p></td></tr><tr><td><p>响应式</p></td><td><p>主要桌面窗口与全部断点边界；200% 缩放</p></td><td><p>无错误横向溢出、被裁剪关键操作或不可用检查器。</p></td></tr><tr><td><p>复杂交互</p></td><td><p>Mention/IME、列拖拽、媒体预览、Dialog/menu focus 与滚动</p></td><td><p>行为测试与人工检查结果可复现。</p></td></tr><tr><td><p>构建/部署</p></td><td><p>Vite dist、Hono 深路由、Docker、Electron macOS/Windows</p></td><td><p>CSS 资源无 404，冷启动主题无明显闪烁，动态状态样式齐全。</p></td></tr><tr><td><p>资源/性能</p></td><td><p>CSS gzip、加载请求、构建时间、卡片和工作台交互</p></td><td><p>与冻结基线比较；性能目标和异常原因记录。</p></td></tr></tbody></table>
+<ul><li>视觉回归用 Playwright 等工具，固定字体、视口、时间、模拟任务与数据；避免拿不同 OS 字体的差异当样式回归。</li><li>截图差异阈值在 T0 对抗锯齿与平台波动校准。颜色、边界、字号、焦点和关键布局的变化都需要说明，不能仅用宽松像素阈值放行。</li><li>测试不把 Tailwind className 字符串等同于表现正确；对控件执行用户动作，检查语义、计算样式与可见状态。</li><li>CSS-only 批次也要验证点击目标、拖拽、focus 和输入法。常规测试用固定响应，不发起真实付费 AI 生成。</li><li>生产冷启动检查全部状态和懒加载 route，防止开发环境出现过的类恰好掩盖 source 扫描遗漏。</li><li>质量门槛：类型/lint/build 与现有业务关键测试通过；每个迁移包的视觉、交互与回退证据齐备；例外清单没有未归属条目。</li></ul>
+<p>建议预算：最终普通自定义 CSS 相对基线明显减少，精确幅度在 T0 分类后设定；生产 CSS gzip 体积目标以基线为上限或明确解释增加的必要项。开发期间 legacy + utilities 的临时双份体积不作为最终完成结果，依赖 React 的全部流程测试再合并发布。</p>
+<h1 seq="auto">里程碑、依赖与实施顺序</h1>
+<table><colgroup><col width="130"/><col width="215"/><col width="240"/><col width="185"/></colgroup><thead><tr><th background-color="light-gray"><p>阶段</p></th><th background-color="light-gray"><p>输入 → 交付物</p></th><th background-color="light-gray"><p>退出条件</p></th><th background-color="light-gray"><p>估算</p></th></tr></thead><tbody><tr><td><p>T0 基线</p></td><td><p>当前代码 → CSS/token/例外清单、截图和支持矩阵、owner</p></td><td><p>冻结版本和数据集，范围与预算可验收</p></td><td><p>1–2 开发日</p></td></tr><tr><td><p>T1 接入</p></td><td><p>T0 → Tailwind/Vite、source、layers、临时 Preflight 方案</p></td><td><p>dev/build/CI 产物一致，不破坏旧基础控件</p></td><td><p>1–2 日</p></td></tr><tr><td><p>T2 Token/variants</p></td><td><p>T1 → 120 token 注册、theme、cn、Button/Input/Badge/Card</p></td><td><p>主题、数值与状态变体通过</p></td><td><p>2–3 日</p></td></tr><tr><td><p>T3 公共复杂控件</p></td><td><p>T2 → Select/ModelSelect/Dialog/Menu/Mention/主题语言菜单</p></td><td><p>焦点、IME、Portal 与精确文本布局通过</p></td><td><p>1–2 日</p></td></tr><tr><td><p>T4 普通页面</p></td><td><p>T2/T3 → 首页、详情、设置、布局样式迁移</p></td><td><p>页面/四语言/断点回归通过，对应旧 CSS 清理</p></td><td><p>2–3 日</p></td></tr><tr><td><p>T5 工作台</p></td><td><p>T3/T4 → 侧栏、剧本、资产、视频、任务、导出分批迁移</p></td><td><p>拖拽、任务状态、媒体与生产流程通过</p></td><td><p>3–5 日</p></td></tr><tr><td><p>T6 发布验证</p></td><td><p>T4/T5 → 完整 Preflight、性能、Docker、两平台包验收</p></td><td><p>生产检查和兼容矩阵通过</p></td><td><p>1–2 日</p></td></tr><tr><td><p>T7 清理/回退</p></td><td><p>T6 → 删除无引用 CSS、例外归档、开发规范与回退包</p></td><td><p>无双重样式所有权，回退演练通过</p></td><td><p>0.5–1 日</p></td></tr></tbody></table>
+<p>单名熟悉当前项目的前端开发者估算约 12–20 个开发工作日，建议预留约 20% 缓冲；设计/QA/发布等待另计。时间不是交付承诺，T0 后依据复杂控件和现有 React 完成度重新估算。</p>
+<p>关键路径：T0 → T1 → T2 → T3 → T5 → T6 → T7。普通页面在基础 variants 稳定后可分包推进；主题/layer/控件接口由同一负责人维护，避免并行批次产生不同 token 或不同按钮规范。</p>
+<p>与 React 重构衔接：React 基础接入时完成 T1/T2；新建页面直接遵守 Tailwind 规范，已有 CSS Modules 按 T3–T5 转换。每个样式批次单独记录风险与视觉结果，业务任务/缓存/草稿修正仍按 React 文档验收。</p>
+<h1 seq="auto">责任、接口与变更治理</h1>
+<p>以下是建议角色，具体人员尚未指派；T0 由项目负责人确认 owner 和验收方。本文不假设团队人数或未经确认的日期。</p>
+<table><colgroup><col width="170"/><col width="275"/><col width="325"/></colgroup><thead><tr><th background-color="light-gray"><p>角色</p></th><th background-color="light-gray"><p>负责交付</p></th><th background-color="light-gray"><p>接口/验收方</p></th></tr></thead><tbody><tr><td><p>前端架构 owner</p></td><td><p>Tailwind 版本、layer/source、token/cn/variants 与例外规范</p></td><td><p>接口提供给各页面实施者；技术负责人评审。</p></td></tr><tr><td><p>模块实施 owner</p></td><td><p>组件/页面转换、对应 CSS 删除、行为和视觉证据</p></td><td><p>基于冻结 variants；交给 QA 与前端评审。</p></td></tr><tr><td><p>设计/产品验收角色</p></td><td><p>品牌、密度、主题、断点与文案外观</p></td><td><p>确认必要的视觉偏差；不把新视觉提案混入迁移。</p></td></tr><tr><td><p>QA/自动化角色</p></td><td><p>截图/交互/键盘/IME/媒体与回归矩阵</p></td><td><p>给出通过/阻断清单，失败回到对应模块 owner。</p></td></tr><tr><td><p>桌面/发布角色</p></td><td><p>CSS 静态资源、字体、窗口缩放、Docker 和两平台包</p></td><td><p>产物版本、构建配置与回退演练归档。</p></td></tr><tr><td><p>项目负责人</p></td><td><p>范围、资源、里程碑调整与最终发布判断</p></td><td><p>业务、设计和技术验收完成后进入切换。</p></td></tr></tbody></table>
+<p>治理节点只设置在关键交付上：T0 确认基线；T2 固定 token/组件接口；每个模块退出时验收；T6 确定可发布性。新增颜色/字号/组件变体、改变断点或改变控制布局，需要更新 token/variants 与相关截图，按受影响范围重新验收。</p>
+<h1 seq="auto">风险触发、处理动作与回退</h1>
+<table><colgroup><col width="130"/><col width="215"/><col width="240"/><col width="185"/></colgroup><thead><tr><th background-color="light-gray"><p>预警信号</p></th><th background-color="light-gray"><p>影响</p></th><th background-color="light-gray"><p>处理 / owner</p></th><th background-color="light-gray"><p>备选或回退终态</p></th></tr></thead><tbody><tr><td><p>utility 在 dev 有效、build 缺失</p></td><td><p>状态或 route 冷启动样式丢失</p></td><td><p>架构 owner 修正 source 与静态 class map</p></td><td><p>恢复该模块旧 CSS，生成确定产物后重试。</p></td></tr><tr><td><p>Tailwind 类被旧 selector 覆盖</p></td><td><p>布局与主题不稳定</p></td><td><p>架构/模块 owner 修正 layer、删除同元素旧类并检查 important</p></td><td><p>保留未迁移组件在 legacy，暂停该模块切换。</p></td></tr><tr><td><p>Preflight 改变字号/边框/镜像</p></td><td><p>控件和 Mention 错位</p></td><td><p>控件 owner 校准 shared metrics；QA 回归</p></td><td><p>暂不启用 Preflight，完成基础控件后单独切换。</p></td></tr><tr><td><p>Portal 变色失败或被遮挡</p></td><td><p>弹窗/菜单不可操作</p></td><td><p>组件 owner 把 token 放在 html 并核对完整层级</p></td><td><p>回退 Portal 组件样式，避免全站 z-index 补丁。</p></td></tr><tr><td><p>拖拽/缩屏后列溢出</p></td><td><p>工作台检查器与列表不可用</p></td><td><p>工作台 owner 保持结构与动态值 clamp，测试边界</p></td><td><p>恢复旧布局规则，新 token/普通 utility 可保留。</p></td></tr><tr><td><p>主题变量自引用或同名冲突</p></td><td><p>字体/圆角/阴影无效</p></td><td><p>token owner 统一 --hb-* 原始名、修正 @theme inline</p></td><td><p>保留旧 alias 与原值，撤销问题映射。</p></td></tr><tr><td><p>class merge 删除了有效自定义 utility</p></td><td><p>某些 size/state 外观错误</p></td><td><p>组件 owner 调整 merge 配置与 props，补契约</p></td><td><p>暂用确定的静态 variants，减少外部覆盖。</p></td></tr><tr><td><p>大量 @apply/legacy 一直增加</p></td><td><p>只有工具切换，没有样式治理</p></td><td><p>架构 owner 拆基础组件，固定每批删除清单</p></td><td><p>缩小批次，先完成公共控件再扩展页面。</p></td></tr><tr><td><p>视觉差异来自业务/字体同时变化</p></td><td><p>验收结论失真</p></td><td><p>QA 冻结数据与环境，分离业务变更</p></td><td><p>回到上一个可对比批次，重新建立基线。</p></td></tr></tbody></table>
+<p>回退单位为模块或前端静态产物：JSX 的 classes、token、legacy 对应删除与组件代码一起回退，不能只替换一份 CSS。发布前保留验证过的旧 dist 与构建信息，完成冷启动与深链接回退演练。</p>
+<p>样式重构不迁移数据库，也不改写生成任务协议。回退不触碰用户 SQLite 与媒体目录；此前已经提交的后台生成操作仍按既有后端流程处理。</p>
+<h1 seq="auto">最终完成定义</h1>
+<ul><li>Tailwind/Vite、Node 与合并工具的版本兼容已验证，统一样式入口和 source 路径进入 CI。</li><li>120 个原始设计变量完成注册/映射或有明确废弃记录；light/dark/system、Portal 和首帧主题验收通过。</li><li>公共 Button/Input/Card/Badge/Tabs/Dialog/Select/Mention 等采用统一 variants，普通业务组件不再各自重定义同款样式。</li><li>工作台及普通页面的通用布局/间距/颜色/状态进入 utility；每个旧 CSS 删除项有替代与截图依据。</li><li>允许的自定义 CSS 和 !important 都在例外清单中，有用途、owner 和测试；兼容层只保留明确尚未退出的条目。</li><li>断点边界、四语言、输入法、拖拽、键盘焦点、媒体、任务状态和 reduced motion 无阻断回归。</li><li>类型/lint/build、业务关键回归与视觉/交互检查通过；生产 CSS 类与资源在冷启动、路由懒加载下完整。</li><li>Hono、Docker、Electron macOS/Windows 的样式资源、窗口/主题与回退验收完成。</li><li>开发规范、token/variants、例外与验收记录随代码维护；性能目标有测量结果，计划按实际实施更新。</li></ul>
+<h1 seq="auto">官方资料与实施参考</h1>
+<p>资料查阅日期：2026-10-14。方案分工、时间区间和验收预算为本项目建议，具体 API 与工具配置以实施时锁定版本为准。</p>
+<p><a href="https://tailwindcss.com/docs/installation/using-vite">Tailwind：Vite 集成</a></p>
+<p><a href="https://tailwindcss.com/docs/theme">Tailwind：theme 与 inline</a></p>
+<p><a href="https://tailwindcss.com/docs/dark-mode">Tailwind：暗色与 data-theme</a></p>
+<p><a href="https://tailwindcss.com/docs/detecting-classes-in-source-files">Tailwind：source 检测与有限 safelist</a></p>
+<p><a href="https://tailwindcss.com/docs/preflight">Tailwind：Preflight</a></p>
+<p><a href="https://tailwindcss.com/docs/adding-custom-styles">Tailwind：添加样式与 layers</a></p>
+<p><a href="https://tailwindcss.com/docs/functions-and-directives">Tailwind：指令与 @reference</a></p>
+<p><a href="https://tailwindcss.com/docs/hover-focus-and-other-states">Tailwind：状态 variants</a></p>
+<p><a href="https://tailwindcss.com/docs/responsive-design">Tailwind：响应式</a></p>
+<p><a href="https://tailwindcss.com/docs/animation">Tailwind：animation</a></p>
+<p><a href="https://tailwindcss.com/docs/compatibility">Tailwind：兼容范围</a></p>
+<p><a href="https://tailwindcss.com/docs/upgrade-guide">Tailwind：v4 变化与陷阱</a></p>
+<p><a href="https://cva.style/">CVA：组件 variants</a></p>
+<p><a href="https://github.com/dcastil/tailwind-merge">tailwind-merge：类名合并与兼容</a></p>

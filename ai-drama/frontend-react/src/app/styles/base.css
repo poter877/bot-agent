@@ -1,0 +1,54 @@
+/**
+ * base.css — 页面根节点与必要基础规则（旧 tokens.css 的 reset 段）。
+ * Preflight 在独立验收批次后才启用，届时删除与此重复的 reset。
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  font-family: var(--hb-font-body);
+  font-size: 14px;
+  background: var(--hb-surface-base);
+  color: var(--hb-text-primary);
+  line-height: 1.6;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5 {
+  font-family: var(--hb-font-display);
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--hb-text-primary);
+  letter-spacing: -0.02em;
+}
+h1 {
+  font-size: 2rem;
+}
+h2 {
+  font-size: 1.5rem;
+}
+h3 {
+  font-size: 1.2rem;
+}
+p {
+  line-height: 1.7;
+}

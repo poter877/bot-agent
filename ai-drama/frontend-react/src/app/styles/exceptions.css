@@ -1,0 +1,28 @@
+/**
+ * exceptions.css — 有说明与 owner 的 CSS 例外（layer: components）。
+ *
+ * 规则：每条例外必须记录用途、owner 与删除条件；新代码不允许在此堆放
+ * 布局/间距/颜色等可由 Tailwind utility 表达的规则。
+ *
+ * 当前例外：
+ * 1. ::-webkit-scrollbar 滚动条外观（6px 细滚动条、圆角、主题色 thumb）
+ *    用途：全局视觉基线（原 studio.css 起即有）；Tailwind 无对应原生 utility
+ *    owner：前端架构 owner；删除条件：如改用原生滚动条或引入滚动条库时
+ * 2. reduced-motion 全局降级待各动画组件逐步接入 motion-reduce 后在此汇总
+ */
+
+/* 滚动条（webkit）——例外 1 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--hb-scrollbar-thumb);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--hb-scrollbar-thumb-hover);
+}

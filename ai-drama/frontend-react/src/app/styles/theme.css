@@ -1,0 +1,208 @@
+/**
+ * theme.css — Tailwind @theme 语义映射（CSS-first 配置，v4 规范）。
+ *
+ * - @theme inline：utility 在使用处内联 var(--hb-*) 引用，主题切换由
+ *   html[data-theme] 翻转 runtime-tokens.css 的原始值，不生成第二份主题状态。
+ * - 原始值一律 --hb-*（runtime-tokens.css），此处只做语义命名，杜绝
+ *   --radius-lg: var(--radius-lg) 这类与旧变量同名的自引用。
+ * - dark variant 只读取 html[data-theme] 的结果（Portal 渲染到 body 同样继承）。
+ * - 断点：首轮保持旧边界 760/860/900/1080px（max-width 语义与旧 media query 一致）。
+ */
+
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+/* 旧响应式边界（<= 语义，含边界值本身；mobile-first 改造属后续独立批次） */
+@custom-variant max-760 (@media (max-width: 760px));
+@custom-variant max-860 (@media (max-width: 860px));
+@custom-variant max-900 (@media (max-width: 900px));
+@custom-variant max-1080 (@media (max-width: 1080px));
+
+@theme inline {
+  /* ===== 表面/背景 ===== */
+  --color-app: var(--hb-surface-base);
+  --color-surface: var(--hb-surface-raised);
+  --color-surface-muted: var(--hb-surface-muted);
+  --color-surface-soft: var(--hb-surface-soft);
+  --color-input: var(--hb-surface-input);
+  --color-elevated: var(--hb-bg-2);
+  --color-sunken: var(--hb-bg-3);
+  --color-hover-overlay: var(--hb-bg-hover);
+  --color-active-overlay: var(--hb-bg-active);
+  --color-track: var(--hb-overlay-track);
+
+  /* ===== 文本层级（避免到处写 gray 色阶）===== */
+  --color-content: var(--hb-text-primary);
+  --color-content-secondary: var(--hb-text-secondary);
+  --color-content-muted: var(--hb-text-muted);
+  --color-content-subtle: var(--hb-text-subtle);
+
+  /* ===== 边框 ===== */
+  --color-outline: var(--hb-border);
+  --color-outline-strong: var(--hb-border-strong);
+  --color-outline-hover: var(--hb-border-hover);
+
+  /* ===== 品牌 ===== */
+  --color-brand: var(--hb-brand);
+  --color-brand-dark: var(--hb-brand-dark);
+  --color-brand-soft: var(--hb-brand-soft);
+  --color-brand-content: var(--hb-brand-content);
+  --color-on-action: var(--hb-on-accent);
+  --color-focus-ring: var(--hb-focus-ring);
+
+  /* ===== 动作 ===== */
+  --color-button: var(--hb-button-bg);
+  --color-button-hover: var(--hb-button-bg-hover);
+  --color-button-active: var(--hb-button-bg-active);
+  --color-button-content: var(--hb-button-text);
+  --color-action-primary: var(--hb-action-primary);
+  --color-action-secondary: var(--hb-action-secondary);
+  --color-action-secondary-hover: var(--hb-action-secondary-hover);
+
+  /* ===== 语义状态（文本/图标/背景同时表达，不只靠颜色）===== */
+  --color-success: var(--hb-success);
+  --color-success-soft: var(--hb-success-soft);
+  --color-danger: var(--hb-danger);
+  --color-danger-soft: var(--hb-action-danger-soft);
+  --color-danger-soft-hover: var(--hb-action-danger-soft-hover);
+  --color-info: var(--hb-info);
+  --color-info-soft: var(--hb-info-soft);
+  --color-warning: var(--hb-warning);
+  --color-warning-soft: var(--hb-warning-soft);
+  --color-tag-success: var(--hb-tag-success-text);
+  --color-tag-info: var(--hb-tag-info-text);
+  --color-tag-warning: var(--hb-tag-warning-text);
+  --color-warn-text: var(--hb-warn-text);
+  --color-warn-bg: var(--hb-warn-bg);
+  --color-warn-border: var(--hb-warn-border);
+  --color-warn-link: var(--hb-warn-link);
+
+  /* ===== 主题语义 ===== */
+  --color-seg-active: var(--hb-seg-active-bg);
+  --color-inverse: var(--hb-inverse-surface);
+  --color-on-inverse: var(--hb-on-inverse);
+  --color-media-surface: var(--hb-media-surface);
+  --color-header: var(--hb-header-bg);
+  --color-scrim: var(--hb-scrim);
+  --color-switch: var(--hb-switch-bg);
+
+  /* ===== 圆角（对应当前 8/10/14/20px，不用默认 radius 数值替换）===== */
+  --radius-item: var(--hb-radius-item);
+  --radius-control: var(--hb-radius-control);
+  --radius-panel: var(--hb-radius-panel);
+  --radius-dialog: var(--hb-radius-dialog);
+  --radius-pill: var(--hb-radius-pill);
+
+  /* ===== 阴影（保持现有多层参数）===== */
+  --shadow-item: var(--hb-shadow-xs);
+  --shadow-raise: var(--hb-shadow-sm);
+  --shadow-raised: var(--hb-shadow-lg);
+  --shadow-panel: var(--hb-shadow-panel);
+  --shadow-card: var(--hb-shadow-card);
+  --shadow-dialog: var(--hb-shadow-elevated);
+
+  /* ===== 字体（继续中文/日文/韩文回退链）===== */
+  --font-ui: var(--hb-font-body);
+  --font-display: var(--hb-font-display);
+  --font-code: var(--hb-font-mono);
+
+  /* ===== 字号（精确 token：body 14px/1.6、按钮 13px/1、表单 13.5px、标签 10–12px；
+       不用 text-sm 默认参数替换）===== */
+  --text-body: 14px;
+  --text-body--line-height: 1.6;
+  --text-form: 13.5px;
+  --text-form--line-height: 1.6;
+  --text-ui: 13px;
+  --text-ui--line-height: 1;
+  --text-caption: 12px;
+  --text-caption--line-height: 1.5;
+  --text-micro: 11px;
+  --text-micro--line-height: 1.4;
+  --text-tiny: 10px;
+  --text-tiny--line-height: 1.4;
+
+  /* ===== 缓动 ===== */
+  --ease-app: var(--hb-ease-out);
+}
+
+/* ===== 项目自定义 utility ===== */
+
+/* 动画 token（keyframes 随 token 使用时产出；reduced-motion 降级在组件层处理） */
+@theme {
+  --animate-fade-in: fadeIn 0.3s var(--hb-ease-out);
+  --animate-fade-up: fadeUp 0.35s var(--hb-ease-out) both;
+  --animate-scale-in: scaleIn 0.24s var(--hb-ease-out);
+  --animate-menu-in: menuIn 0.16s var(--hb-ease-out);
+  --animate-menu-in-top: menuInTop 0.16s var(--hb-ease-out);
+  --animate-skeleton-pulse: skeleton-pulse 1.4s ease-in-out infinite alternate;
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes fadeUp {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes scaleIn {
+    from {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  @keyframes menuIn {
+    from {
+      opacity: 0;
+      transform: translateY(-4px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+  @keyframes menuInTop {
+    from {
+      opacity: 0;
+      transform: translateY(4px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+  @keyframes skeleton-pulse {
+    to {
+      opacity: 0.55;
+    }
+  }
+}
+
+/* 品牌渐变（保留既有线性渐变；hover/active 的 glow 独立定义） */
+@utility bg-brand-gradient {
+  background-image: var(--hb-brand-gradient);
+}
+
+/* 精确 focus 圈：首轮保留 3.5px 焦点环的尺寸与颜色，转 ring 前单独比较 */
+@utility shadow-focus {
+  box-shadow: 0 0 0 3.5px var(--hb-focus-ring);
+}
+
+/* 主按钮 hover 的品牌发光 */
+@utility shadow-brand-glow {
+  box-shadow:
+    0 2px 10px var(--hb-brand-glow),
+    0 4px 18px var(--hb-brand-glow);
+}

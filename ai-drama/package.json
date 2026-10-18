@@ -1,0 +1,21 @@
+{
+  "name": "video-factory",
+  "version": "1.0.0",
+  "private": true,
+  "description": "视频工厂 — AI 视频制作工具（桌面版编排入口）",
+  "license": "MIT",
+  "scripts": {
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "npm --prefix frontend-react run dev",
+    "dev:frontend-react": "npm run dev:frontend",
+    "dev:desktop": "cd desktop && npm run dev",
+    "build:frontend": "npm --prefix frontend-react run build",
+    "build:frontend-react": "npm run build:frontend",
+    "typecheck:frontend": "npm --prefix frontend-react run typecheck",
+    "test:frontend": "npm --prefix frontend-react run test",
+    "test:frontend-react": "npm run test:frontend",
+    "lint:frontend": "npm --prefix frontend-react run lint",
+    "dist": "cd desktop && npm run dist",
+    "dist:win": "cd desktop && npm run dist:win"
+  }
+}

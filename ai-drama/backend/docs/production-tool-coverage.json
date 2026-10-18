@@ -1,0 +1,5296 @@
+{
+  "reference": "calesthio/OpenMontage local checkout",
+  "referencePythonFiles": 190,
+  "uniqueNamedToolsAndSources": 153,
+  "executionCounts": {
+    "local": 45,
+    "provider-adapter": 77,
+    "source-or-analysis": 16,
+    "unified-service": 15
+  },
+  "pipelineCoverage": {
+    "matched": 153,
+    "unmapped": [],
+    "meaning": "Eligible workflow stages and selection conditions. Alternative models are selected by need; not every tool is run in every video."
+  },
+  "verification": "Native media and provider contract/recovery suites are run separately. Cloud endpoints require credentials; no paid live generation is claimed by this inventory.",
+  "sources": [
+    "https://developers.openai.com/api/docs/deprecations",
+    "https://ai.google.dev/gemini-api/docs/imagen"
+  ],
+  "tools": [
+    {
+      "id": "action_timeline_compiler",
+      "referenceProvider": "openmontage",
+      "category": "character",
+      "capability": "character_animation",
+      "referenceFiles": [
+        "tools/character/character_animation.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "action_timeline_compiler",
+        "mode": "default",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "character_animation"
+        ],
+        "purpose": "编译批准动作时间轴并以真实角色关节结构逐帧渲染，成片应用到对应镜头",
+        "trigger": "镜头给出结构化角色动作，依赖角色规格、绑定和姿态库"
+      }
+    },
+    {
+      "id": "archive_org",
+      "referenceProvider": "archive_org",
+      "category": "stock",
+      "capability": "",
+      "referenceFiles": [
+        "tools/video/stock_sources/archive_org.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "archive_org",
+      "serviceType": "stock",
+      "notes": [],
+      "pipeline": {
+        "toolId": "archive_org",
+        "mode": "selectable",
+        "role": "research",
+        "stages": [
+          "research",
+          "idea",
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "documentary",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "搜索真实图片或视频，下载选定候选并将署名写入项目素材，再按镜头取用",
+        "trigger": "启用该素材源且有检索词；不得将不同素材源重复并发下载同一镜头",
+        "selectionKey": "stock"
+      }
+    },
+    {
+      "id": "atlas_3d",
+      "referenceProvider": "atlas_cloud",
+      "category": "graphics",
+      "capability": "3d_asset_generation",
+      "referenceFiles": [
+        "tools/graphics/atlas_3d.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "atlascloud",
+      "serviceType": "model3d",
+      "notes": [],
+      "pipeline": {
+        "toolId": "atlas_3d",
+        "mode": "selectable",
+        "role": "model",
+        "stages": [
+          "character_design",
+          "rig_plan",
+          "assets"
+        ],
+        "categories": [
+          "character_animation",
+          "animation",
+          "cinematic",
+          "explainer"
+        ],
+        "purpose": "生成模型并写入项目三维资产；需要骨骼或渲染时串联后续工具，模型本身不是影片",
+        "trigger": "结构化分镜明确需要三维模型且启用对应服务",
+        "selectionKey": "model3d"
+      }
+    },
+    {
+      "id": "atlas_image",
+      "referenceProvider": "atlascloud",
+      "category": "graphics",
+      "capability": "image_generation",
+      "referenceFiles": [
+        "tools/graphics/atlas_image.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "atlascloud",
+      "serviceType": "image",
+      "notes": [],
+      "pipeline": {
+        "toolId": "atlas_image",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的插画、分镜图或角色参考图；同能力模型只选一项",
+        "trigger": "镜头缺少画面且选择该图片服务；纪录证据与真实软件界面不允许生成替代",
+        "selectionKey": "image"
+      }
+    },
+    {
+      "id": "atlas_refresh_image",
+      "referenceProvider": "atlascloud",
+      "category": "graphics",
+      "capability": "image_generation",
+      "referenceFiles": [
+        "tools/graphics/atlas_refresh_image.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "atlascloud",
+      "serviceType": "image",
+      "notes": [],
+      "pipeline": {
+        "toolId": "atlas_refresh_image",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的插画、分镜图或角色参考图；同能力模型只选一项",
+        "trigger": "镜头缺少画面且选择该图片服务；纪录证据与真实软件界面不允许生成替代",
+        "selectionKey": "image"
+      }
+    },
+    {
+      "id": "atlas_video",
+      "referenceProvider": "atlascloud",
+      "category": "video",
+      "capability": "video_generation",
+      "referenceFiles": [
+        "tools/video/atlas_video.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "atlascloud",
+      "serviceType": "video",
+      "notes": [],
+      "pipeline": {
+        "toolId": "atlas_video",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的动态镜头；通过统一服务选择一个已配置的视频模型，停用原厂标明替代",
+        "trigger": "镜头声明需要生成视频且无现成画面，单镜头不超过生成服务时长",
+        "selectionKey": "video"
+      }
+    },
+    {
+      "id": "audio_energy",
+      "referenceProvider": "ffmpeg",
+      "category": "analysis",
+      "capability": "analysis",
+      "referenceFiles": [
+        "tools/analysis/audio_energy.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "audio_energy",
+        "mode": "default",
+        "role": "analysis",
+        "stages": [
+          "research",
+          "idea",
+          "assets"
+        ],
+        "categories": [
+          "podcast",
+          "talking_head",
+          "clip_factory",
+          "cinematic",
+          "animation"
+        ],
+        "purpose": "计算真实能量节奏，辅助原声选段与音乐节奏，不伪称语义识别",
+        "trigger": "存在音轨且流程需要节奏或口播停顿分析"
+      }
+    },
+    {
+      "id": "audio_enhance",
+      "referenceProvider": "ffmpeg",
+      "category": "audio",
+      "capability": "audio_processing",
+      "referenceFiles": [
+        "tools/audio/audio_enhance.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "audio_enhance",
+        "mode": "selectable",
+        "role": "post",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "avatar",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "对选中音轨做降噪与响度归一化，再回写逐镜头配音或整片音轨",
+        "trigger": "开启音频处理且存在目标音轨"
+      }
+    },
+    {
+      "id": "audio_mixer",
+      "referenceProvider": "ffmpeg",
+      "category": "audio",
+      "capability": "audio_processing",
+      "referenceFiles": [
+        "tools/audio/audio_mixer.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "audio_mixer",
+        "mode": "selectable",
+        "role": "post",
+        "stages": [
+          "assets",
+          "compose"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "avatar",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "提取音轨、混音或压低配乐，使用实际音频输出供后续合成",
+        "trigger": "批准声音计划选择混音/提取，且有相应音轨"
+      }
+    },
+    {
+      "id": "audio_probe",
+      "referenceProvider": "ffprobe",
+      "category": "analysis",
+      "capability": "analysis",
+      "referenceFiles": [
+        "tools/analysis/audio_probe.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "audio_probe",
+        "mode": "default",
+        "role": "analysis",
+        "stages": [
+          "research",
+          "idea",
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "avatar",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "检查实际原音/配音/音乐的时长与流信息，供音轨对齐和选段",
+        "trigger": "存在待处理音轨或带音频原片"
+      }
+    },
+    {
+      "id": "auto_reframe",
+      "referenceProvider": "ffmpeg",
+      "category": "video",
+      "capability": "video_post",
+      "referenceFiles": [
+        "tools/video/auto_reframe.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "auto_reframe",
+        "mode": "default",
+        "role": "post",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "clip_factory",
+          "talking_head",
+          "podcast",
+          "hybrid",
+          "documentary",
+          "screen_demo",
+          "avatar"
+        ],
+        "purpose": "将真实选段适配项目画幅；有脸部跟踪时使用真实主体坐标，录屏优先留边",
+        "trigger": "原视频比例与交付比例不符或明确选择适配"
+      }
+    },
+    {
+      "id": "azure_stt",
+      "referenceProvider": "azure",
+      "category": "analysis",
+      "capability": "analysis",
+      "referenceFiles": [
+        "tools/analysis/azure_stt.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "azure",
+      "serviceType": "transcription",
+      "notes": [],
+      "pipeline": {
+        "toolId": "azure_stt",
+        "mode": "selectable",
+        "role": "analysis",
+        "stages": [
+          "research",
+          "idea",
+          "script"
+        ],
+        "categories": [
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "为原片建立可核对的逐字稿；自动字幕必须使用真实时码，不伪造文本模型时间轴",
+        "trigger": "已开启转录且原片无逐字稿；文本型ASR只能写文本，不能替代精确字幕",
+        "selectionKey": "transcription"
+      }
+    },
+    {
+      "id": "azure_tts",
+      "referenceProvider": "azure",
+      "category": "audio",
+      "capability": "tts",
+      "referenceFiles": [
+        "tools/audio/azure_tts.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "azure",
+      "serviceType": "speech",
+      "notes": [],
+      "pipeline": {
+        "toolId": "azure_tts",
+        "mode": "selectable",
+        "role": "voice",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "avatar",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "将批准讲稿合成逐镜头配音并匹配真实时长，保留原片类默认不重配嘉宾原话",
+        "trigger": "已开启配音且镜头有讲稿、缺少配音；同能力音色服务只选一项",
+        "selectionKey": "speech"
+      }
+    },
+    {
+      "id": "bg_remove",
+      "referenceProvider": "rembg",
+      "category": "enhancement",
+      "capability": "enhancement",
+      "referenceFiles": [
+        "tools/enhancement/bg_remove.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "bg_remove",
+        "mode": "selectable",
+        "role": "post",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "avatar",
+          "hybrid",
+          "character_animation",
+          "animation"
+        ],
+        "purpose": "为选定角色/前景图分割背景，并把透明前景交给合成步骤",
+        "trigger": "分镜明确需要移除背景且部署rembg权重"
+      }
+    },
+    {
+      "id": "bgm_montage_lite",
+      "referenceProvider": "bmts-lite",
+      "category": "video",
+      "capability": "video_post",
+      "referenceFiles": [
+        "tools/video/bmts_lite.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "bgm_montage_lite",
+        "mode": "selectable",
+        "role": "post",
+        "stages": [
+          "assets",
+          "compose"
+        ],
+        "categories": [
+          "cinematic",
+          "hybrid",
+          "documentary",
+          "animation"
+        ],
+        "purpose": "按批准音乐节奏制作补充混剪段，结果进入对应镜头并保留原作证据来源",
+        "trigger": "分镜明确选择音乐节奏混剪且素材与音乐均已就绪"
+      }
+    },
+    {
+      "id": "blender_world",
+      "referenceProvider": "blender",
+      "category": "graphics",
+      "capability": "3d_world_rendering",
+      "referenceFiles": [
+        "tools/graphics/blender_world.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "blender_world",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "character_animation",
+          "animation",
+          "cinematic",
+          "explainer"
+        ],
+        "purpose": "以批准的结构化场景调用本机Blender渲染实际视频并应用到镜头",
+        "trigger": "分镜明确选择Blender且提供world_spec和可用运行环境"
+      }
+    },
+    {
+      "id": "cap_recorder",
+      "referenceProvider": "cap",
+      "category": "capture",
+      "capability": "screen_capture",
+      "referenceFiles": [
+        "tools/capture/cap_recorder.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "cap_recorder",
+        "mode": "interactive",
+        "role": "interactive",
+        "stages": [
+          "idea"
+        ],
+        "categories": [
+          "screen_demo"
+        ],
+        "purpose": "根据用户明确录屏需求检查环境或录制真实屏幕并入库，不能伪造软件操作",
+        "trigger": "用户明确启用录屏并指定屏幕/时长；不得因进入流程自动读取或录制桌面",
+        "selectionKey": "capture"
+      }
+    },
+    {
+      "id": "cartesia_tts",
+      "referenceProvider": "cartesia",
+      "category": "audio",
+      "capability": "tts",
+      "referenceFiles": [
+        "tools/audio/cartesia_tts.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "cartesia",
+      "serviceType": "speech",
+      "notes": [],
+      "pipeline": {
+        "toolId": "cartesia_tts",
+        "mode": "selectable",
+        "role": "voice",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "avatar",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "将批准讲稿合成逐镜头配音并匹配真实时长，保留原片类默认不重配嘉宾原话",
+        "trigger": "已开启配音且镜头有讲稿、缺少配音；同能力音色服务只选一项",
+        "selectionKey": "speech"
+      }
+    },
+    {
+      "id": "character_animation_reviewer",
+      "referenceProvider": "openmontage",
+      "category": "character",
+      "capability": "character_animation",
+      "referenceFiles": [
+        "tools/character/character_animation.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "character_animation_reviewer",
+        "mode": "default",
+        "role": "analysis",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "character_animation"
+        ],
+        "purpose": "检查角色引用与动作时间轴一致性，错误停止后续渲染或验片",
+        "trigger": "SVG关节链已建立；程序检查不冒充人工浏览器确认"
+      }
+    },
+    {
+      "id": "character_rig_renderer",
+      "referenceProvider": "openmontage",
+      "category": "character",
+      "capability": "character_animation",
+      "referenceFiles": [
+        "tools/character/character_animation.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "character_rig_renderer",
+        "mode": "default",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "character_animation"
+        ],
+        "purpose": "编译批准动作时间轴并以真实角色关节结构逐帧渲染，成片应用到对应镜头",
+        "trigger": "镜头给出结构化角色动作，依赖角色规格、绑定和姿态库"
+      }
+    },
+    {
+      "id": "character_spec_generator",
+      "referenceProvider": "openmontage",
+      "category": "character",
+      "capability": "character_animation",
+      "referenceFiles": [
+        "tools/character/character_animation.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "character_spec_generator",
+        "mode": "default",
+        "role": "model",
+        "stages": [
+          "character_design",
+          "assets"
+        ],
+        "categories": [
+          "character_animation"
+        ],
+        "purpose": "将已批准的结构化角色描述变成固定规格，作为所有镜头共同输入",
+        "trigger": "选择SVG关节角色动画路径并提供角色表"
+      }
+    },
+    {
+      "id": "clip_search",
+      "referenceProvider": "openmontage",
+      "category": "video",
+      "capability": "clip_retrieval",
+      "referenceFiles": [
+        "tools/video/clip_search.py"
+      ],
+      "implemented": true,
+      "executionFamily": "source-or-analysis",
+      "actualProvider": "openmontage",
+      "notes": [],
+      "pipeline": {
+        "toolId": "clip_search",
+        "mode": "default",
+        "role": "analysis",
+        "stages": [
+          "script",
+          "scene_plan"
+        ],
+        "categories": [
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "screen_demo",
+          "podcast",
+          "clip_factory"
+        ],
+        "purpose": "依据用户选段目标检索当前项目真实带时码原稿，不生成不存在的原话",
+        "trigger": "已有原稿且需要从素材中选段"
+      }
+    },
+    {
+      "id": "code_snippet",
+      "referenceProvider": "pygments",
+      "category": "graphics",
+      "capability": "graphics",
+      "referenceFiles": [
+        "tools/graphics/code_snippet.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "code_snippet",
+        "mode": "default",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "animation",
+          "screen_demo"
+        ],
+        "purpose": "把用户或脚本给出的真实代码渲染成清晰代码卡片，供讲解镜头使用",
+        "trigger": "结构化分镜标为code并提供实际代码"
+      }
+    },
+    {
+      "id": "cogvideo_video",
+      "referenceProvider": "cogvideo",
+      "category": "video",
+      "capability": "video_generation",
+      "referenceFiles": [
+        "tools/video/cogvideo_video.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "comfyui",
+      "serviceType": "video",
+      "notes": [
+        "Requires a deployed ComfyUI instance, matching model/custom nodes and a user-supplied API workflow. No weights or custom-node installers are bundled."
+      ],
+      "pipeline": {
+        "toolId": "cogvideo_video",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的动态镜头；通过统一服务选择一个已配置的视频模型，停用原厂标明替代",
+        "trigger": "镜头声明需要生成视频且无现成画面，单镜头不超过生成服务时长",
+        "selectionKey": "video"
+      }
+    },
+    {
+      "id": "color_grade",
+      "referenceProvider": "ffmpeg",
+      "category": "enhancement",
+      "capability": "enhancement",
+      "referenceFiles": [
+        "tools/enhancement/color_grade.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "color_grade",
+        "mode": "selectable",
+        "role": "post",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "cinematic",
+          "hybrid",
+          "documentary",
+          "character_animation"
+        ],
+        "purpose": "将选定镜头按批准色调统一处理并回写画面",
+        "trigger": "开启调色并指定真实预设"
+      }
+    },
+    {
+      "id": "comfyui_image",
+      "referenceProvider": "comfyui",
+      "category": "graphics",
+      "capability": "image_generation",
+      "referenceFiles": [
+        "tools/graphics/comfyui_image.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "comfyui",
+      "serviceType": "image",
+      "notes": [
+        "Requires a deployed ComfyUI instance, matching model/custom nodes and a user-supplied API workflow. No weights or custom-node installers are bundled."
+      ],
+      "pipeline": {
+        "toolId": "comfyui_image",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的插画、分镜图或角色参考图；同能力模型只选一项",
+        "trigger": "镜头缺少画面且选择该图片服务；纪录证据与真实软件界面不允许生成替代",
+        "selectionKey": "image"
+      }
+    },
+    {
+      "id": "comfyui_music",
+      "referenceProvider": "comfyui",
+      "category": "audio",
+      "capability": "music_generation",
+      "referenceFiles": [
+        "tools/audio/comfyui_music.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "comfyui",
+      "serviceType": "music",
+      "notes": [
+        "Requires a deployed ComfyUI instance, matching model/custom nodes and a user-supplied API workflow. No weights or custom-node installers are bundled."
+      ],
+      "pipeline": {
+        "toolId": "comfyui_music",
+        "mode": "selectable",
+        "role": "music",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "avatar",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "依据配乐方向生成独立音乐音轨，再进入响度检查和混音",
+        "trigger": "已开启音乐生成、存在配乐说明且无音乐轨",
+        "selectionKey": "music"
+      }
+    },
+    {
+      "id": "comfyui_video",
+      "referenceProvider": "comfyui",
+      "category": "video",
+      "capability": "video_generation",
+      "referenceFiles": [
+        "tools/video/comfyui_video.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "comfyui",
+      "serviceType": "video",
+      "notes": [
+        "Requires a deployed ComfyUI instance, matching model/custom nodes and a user-supplied API workflow. No weights or custom-node installers are bundled."
+      ],
+      "pipeline": {
+        "toolId": "comfyui_video",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的动态镜头；通过统一服务选择一个已配置的视频模型，停用原厂标明替代",
+        "trigger": "镜头声明需要生成视频且无现成画面，单镜头不超过生成服务时长",
+        "selectionKey": "video"
+      }
+    },
+    {
+      "id": "composition_validator",
+      "referenceProvider": "local",
+      "category": "analysis",
+      "capability": "analysis",
+      "referenceFiles": [
+        "tools/analysis/composition_validator.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "composition_validator",
+        "mode": "default",
+        "role": "analysis",
+        "stages": [
+          "edit"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "avatar",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "校验实际片段、顺序和总时长，失败即停止合成",
+        "trigger": "所有镜头已有可用媒体"
+      }
+    },
+    {
+      "id": "corpus_builder",
+      "referenceProvider": "openmontage",
+      "category": "video",
+      "capability": "corpus_population",
+      "referenceFiles": [
+        "tools/video/corpus_builder.py"
+      ],
+      "implemented": true,
+      "executionFamily": "source-or-analysis",
+      "actualProvider": "openmontage",
+      "notes": [],
+      "pipeline": {
+        "toolId": "corpus_builder",
+        "mode": "default",
+        "role": "analysis",
+        "stages": [
+          "research",
+          "idea"
+        ],
+        "categories": [
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "建立项目原稿和素材索引，将真实来源及时间片段供后续检索",
+        "trigger": "至少存在一份原始素材或逐字稿"
+      }
+    },
+    {
+      "id": "coverr",
+      "referenceProvider": "coverr",
+      "category": "stock",
+      "capability": "",
+      "referenceFiles": [
+        "tools/video/stock_sources/coverr.py"
+      ],
+      "implemented": true,
+      "executionFamily": "source-or-analysis",
+      "actualProvider": "tavily",
+      "notes": [
+        "Returns attributed source pages via Tavily. Download and license review happen at the source page; no scraped direct-download link is invented."
+      ],
+      "pipeline": {
+        "toolId": "coverr",
+        "mode": "selectable",
+        "role": "research",
+        "stages": [
+          "research",
+          "idea"
+        ],
+        "categories": [
+          "explainer",
+          "documentary",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "发现来源网页并写入待核实资料；这些来源适配器不把网页冒充可直接下载的视频",
+        "trigger": "开启联网资料研究并选中对应来源；需要媒体时再由可验证下载链接入库",
+        "selectionKey": "research"
+      }
+    },
+    {
+      "id": "dareful",
+      "referenceProvider": "dareful",
+      "category": "stock",
+      "capability": "",
+      "referenceFiles": [
+        "tools/video/stock_sources/dareful.py"
+      ],
+      "implemented": true,
+      "executionFamily": "source-or-analysis",
+      "actualProvider": "tavily",
+      "notes": [
+        "Returns attributed source pages via Tavily. Download and license review happen at the source page; no scraped direct-download link is invented."
+      ],
+      "pipeline": {
+        "toolId": "dareful",
+        "mode": "selectable",
+        "role": "research",
+        "stages": [
+          "research",
+          "idea"
+        ],
+        "categories": [
+          "explainer",
+          "documentary",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "发现来源网页并写入待核实资料；这些来源适配器不把网页冒充可直接下载的视频",
+        "trigger": "开启联网资料研究并选中对应来源；需要媒体时再由可验证下载链接入库",
+        "selectionKey": "research"
+      }
+    },
+    {
+      "id": "dashscope_asr",
+      "referenceProvider": "dashscope",
+      "category": "analysis",
+      "capability": "analysis",
+      "referenceFiles": [
+        "tools/analysis/dashscope_asr.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "dashscope",
+      "serviceType": "transcription",
+      "notes": [],
+      "pipeline": {
+        "toolId": "dashscope_asr",
+        "mode": "selectable",
+        "role": "analysis",
+        "stages": [
+          "research",
+          "idea",
+          "script"
+        ],
+        "categories": [
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "为原片建立可核对的逐字稿；自动字幕必须使用真实时码，不伪造文本模型时间轴",
+        "trigger": "已开启转录且原片无逐字稿；文本型ASR只能写文本，不能替代精确字幕",
+        "selectionKey": "transcription"
+      }
+    },
+    {
+      "id": "dashscope_image",
+      "referenceProvider": "dashscope",
+      "category": "graphics",
+      "capability": "image_generation",
+      "referenceFiles": [
+        "tools/graphics/dashscope_image.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "dashscope",
+      "serviceType": "image",
+      "notes": [],
+      "pipeline": {
+        "toolId": "dashscope_image",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的插画、分镜图或角色参考图；同能力模型只选一项",
+        "trigger": "镜头缺少画面且选择该图片服务；纪录证据与真实软件界面不允许生成替代",
+        "selectionKey": "image"
+      }
+    },
+    {
+      "id": "dashscope_tts",
+      "referenceProvider": "dashscope",
+      "category": "audio",
+      "capability": "tts",
+      "referenceFiles": [
+        "tools/audio/dashscope_tts.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "dashscope",
+      "serviceType": "speech",
+      "notes": [],
+      "pipeline": {
+        "toolId": "dashscope_tts",
+        "mode": "selectable",
+        "role": "voice",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "avatar",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "将批准讲稿合成逐镜头配音并匹配真实时长，保留原片类默认不重配嘉宾原话",
+        "trigger": "已开启配音且镜头有讲稿、缺少配音；同能力音色服务只选一项",
+        "selectionKey": "speech"
+      }
+    },
+    {
+      "id": "diagram_gen",
+      "referenceProvider": "mermaid",
+      "category": "graphics",
+      "capability": "graphics",
+      "referenceFiles": [
+        "tools/graphics/diagram_gen.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "diagram_gen",
+        "mode": "default",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar",
+          "screen_demo",
+          "podcast"
+        ],
+        "purpose": "依据已批准的节点、连接或Mermaid结构生成准确图解并应用到对应镜头",
+        "trigger": "结构化分镜标为diagram并提供实际图表定义"
+      }
+    },
+    {
+      "id": "direct_clip_search",
+      "referenceProvider": "openmontage",
+      "category": "video",
+      "capability": "clip_acquisition",
+      "referenceFiles": [
+        "tools/video/direct_clip_search.py"
+      ],
+      "implemented": true,
+      "executionFamily": "source-or-analysis",
+      "actualProvider": "openmontage",
+      "notes": [],
+      "pipeline": {
+        "toolId": "direct_clip_search",
+        "mode": "selectable",
+        "role": "research",
+        "stages": [
+          "research",
+          "idea"
+        ],
+        "categories": [
+          "explainer",
+          "documentary",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "发现来源网页并写入待核实资料；这些来源适配器不把网页冒充可直接下载的视频",
+        "trigger": "开启联网资料研究并选中对应来源；需要媒体时再由可验证下载链接入库",
+        "selectionKey": "research"
+      }
+    },
+    {
+      "id": "doubao_tts",
+      "referenceProvider": "doubao",
+      "category": "audio",
+      "capability": "tts",
+      "referenceFiles": [
+        "tools/audio/doubao_tts.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "doubao",
+      "serviceType": "speech",
+      "notes": [],
+      "pipeline": {
+        "toolId": "doubao_tts",
+        "mode": "selectable",
+        "role": "voice",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "avatar",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "将批准讲稿合成逐镜头配音并匹配真实时长，保留原片类默认不重配嘉宾原话",
+        "trigger": "已开启配音且镜头有讲稿、缺少配音；同能力音色服务只选一项",
+        "selectionKey": "speech"
+      }
+    },
+    {
+      "id": "elevenlabs_tts",
+      "referenceProvider": "elevenlabs",
+      "category": "audio",
+      "capability": "tts",
+      "referenceFiles": [
+        "tools/audio/elevenlabs_tts.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "elevenlabs",
+      "serviceType": "speech",
+      "notes": [],
+      "pipeline": {
+        "toolId": "elevenlabs_tts",
+        "mode": "selectable",
+        "role": "voice",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "avatar",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "将批准讲稿合成逐镜头配音并匹配真实时长，保留原片类默认不重配嘉宾原话",
+        "trigger": "已开启配音且镜头有讲稿、缺少配音；同能力音色服务只选一项",
+        "selectionKey": "speech"
+      }
+    },
+    {
+      "id": "esa",
+      "referenceProvider": "esa",
+      "category": "stock",
+      "capability": "",
+      "referenceFiles": [
+        "tools/video/stock_sources/esa.py"
+      ],
+      "implemented": true,
+      "executionFamily": "source-or-analysis",
+      "actualProvider": "tavily",
+      "notes": [
+        "Returns attributed source pages via Tavily. Download and license review happen at the source page; no scraped direct-download link is invented."
+      ],
+      "pipeline": {
+        "toolId": "esa",
+        "mode": "selectable",
+        "role": "research",
+        "stages": [
+          "research",
+          "idea"
+        ],
+        "categories": [
+          "explainer",
+          "documentary",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "发现来源网页并写入待核实资料；这些来源适配器不把网页冒充可直接下载的视频",
+        "trigger": "开启联网资料研究并选中对应来源；需要媒体时再由可验证下载链接入库",
+        "selectionKey": "research"
+      }
+    },
+    {
+      "id": "export_bundle",
+      "referenceProvider": "local",
+      "category": "publishers",
+      "capability": "publish",
+      "referenceFiles": [
+        "tools/publishers/export_bundle.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "export_bundle",
+        "mode": "default",
+        "role": "delivery",
+        "stages": [
+          "publish",
+          "compose"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "avatar",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "将实际成片、真实字幕和来源清单打包成本地交付文件，不自动发布到外部平台",
+        "trigger": "成片和交付元数据均已就绪；无publish阶段的流程在compose完成后交付"
+      }
+    },
+    {
+      "id": "eye_enhance",
+      "referenceProvider": "mediapipe",
+      "category": "enhancement",
+      "capability": "enhancement",
+      "referenceFiles": [
+        "tools/enhancement/eye_enhance.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "eye_enhance",
+        "mode": "selectable",
+        "role": "post",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "talking_head",
+          "avatar",
+          "podcast",
+          "clip_factory",
+          "localization",
+          "cinematic",
+          "character_animation"
+        ],
+        "purpose": "只处理用户或真实检测给出的面部/眼部区域，结果回写目标镜头",
+        "trigger": "指定有效区域并开启对应局部增强"
+      }
+    },
+    {
+      "id": "face_enhance",
+      "referenceProvider": "ffmpeg",
+      "category": "enhancement",
+      "capability": "enhancement",
+      "referenceFiles": [
+        "tools/enhancement/face_enhance.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "face_enhance",
+        "mode": "selectable",
+        "role": "post",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "talking_head",
+          "avatar",
+          "podcast",
+          "clip_factory",
+          "localization",
+          "cinematic",
+          "character_animation"
+        ],
+        "purpose": "只处理用户或真实检测给出的面部/眼部区域，结果回写目标镜头",
+        "trigger": "指定有效区域并开启对应局部增强"
+      }
+    },
+    {
+      "id": "face_restore",
+      "referenceProvider": "codeformer",
+      "category": "enhancement",
+      "capability": "enhancement",
+      "referenceFiles": [
+        "tools/enhancement/face_restore.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "face_restore",
+        "mode": "selectable",
+        "role": "post",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "documentary",
+          "talking_head",
+          "avatar",
+          "podcast",
+          "clip_factory"
+        ],
+        "purpose": "用实际GFPGAN修复需要处理的人脸素材并回写，不替换事实依据原件",
+        "trigger": "明确启用修复且部署GFPGAN权重"
+      }
+    },
+    {
+      "id": "face_tracker",
+      "referenceProvider": "mediapipe",
+      "category": "analysis",
+      "capability": "analysis",
+      "referenceFiles": [
+        "tools/analysis/face_tracker.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "face_tracker",
+        "mode": "selectable",
+        "role": "analysis",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "talking_head",
+          "avatar",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "检测真实人脸坐标，供重构图和局部处理，不把中心裁切冒充人脸跟踪",
+        "trigger": "开启人物跟踪且已安装OpenCV运行环境"
+      }
+    },
+    {
+      "id": "fal_3d",
+      "referenceProvider": "fal",
+      "category": "graphics",
+      "capability": "3d_asset_generation",
+      "referenceFiles": [
+        "tools/graphics/fal_3d.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "fal",
+      "serviceType": "model3d",
+      "notes": [],
+      "pipeline": {
+        "toolId": "fal_3d",
+        "mode": "selectable",
+        "role": "model",
+        "stages": [
+          "character_design",
+          "rig_plan",
+          "assets"
+        ],
+        "categories": [
+          "character_animation",
+          "animation",
+          "cinematic",
+          "explainer"
+        ],
+        "purpose": "生成模型并写入项目三维资产；需要骨骼或渲染时串联后续工具，模型本身不是影片",
+        "trigger": "结构化分镜明确需要三维模型且启用对应服务",
+        "selectionKey": "model3d"
+      }
+    },
+    {
+      "id": "fal_elevenlabs_music",
+      "referenceProvider": "fal.ai",
+      "category": "audio",
+      "capability": "music_generation",
+      "referenceFiles": [
+        "tools/audio/fal_elevenlabs_music.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "fal",
+      "serviceType": "music",
+      "notes": [],
+      "pipeline": {
+        "toolId": "fal_elevenlabs_music",
+        "mode": "selectable",
+        "role": "music",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "avatar",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "依据配乐方向生成独立音乐音轨，再进入响度检查和混音",
+        "trigger": "已开启音乐生成、存在配乐说明且无音乐轨",
+        "selectionKey": "music"
+      }
+    },
+    {
+      "id": "fal_elevenlabs_tts",
+      "referenceProvider": "fal.ai",
+      "category": "audio",
+      "capability": "tts",
+      "referenceFiles": [
+        "tools/audio/fal_elevenlabs_tts.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "fal",
+      "serviceType": "speech",
+      "notes": [],
+      "pipeline": {
+        "toolId": "fal_elevenlabs_tts",
+        "mode": "selectable",
+        "role": "voice",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "avatar",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "将批准讲稿合成逐镜头配音并匹配真实时长，保留原片类默认不重配嘉宾原话",
+        "trigger": "已开启配音且镜头有讲稿、缺少配音；同能力音色服务只选一项",
+        "selectionKey": "speech"
+      }
+    },
+    {
+      "id": "fish_audio_tts",
+      "referenceProvider": "fish_audio",
+      "category": "audio",
+      "capability": "tts",
+      "referenceFiles": [
+        "tools/audio/fish_audio_tts.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "fish_audio",
+      "serviceType": "speech",
+      "notes": [],
+      "pipeline": {
+        "toolId": "fish_audio_tts",
+        "mode": "selectable",
+        "role": "voice",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "avatar",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "将批准讲稿合成逐镜头配音并匹配真实时长，保留原片类默认不重配嘉宾原话",
+        "trigger": "已开启配音且镜头有讲稿、缺少配音；同能力音色服务只选一项",
+        "selectionKey": "speech"
+      }
+    },
+    {
+      "id": "flux_image",
+      "referenceProvider": "flux",
+      "category": "graphics",
+      "capability": "image_generation",
+      "referenceFiles": [
+        "tools/graphics/flux_image.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "fal",
+      "serviceType": "image",
+      "notes": [],
+      "pipeline": {
+        "toolId": "flux_image",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的插画、分镜图或角色参考图；同能力模型只选一项",
+        "trigger": "镜头缺少画面且选择该图片服务；纪录证据与真实软件界面不允许生成替代",
+        "selectionKey": "image"
+      }
+    },
+    {
+      "id": "frame_sampler",
+      "referenceProvider": "ffmpeg",
+      "category": "analysis",
+      "capability": "analysis",
+      "referenceFiles": [
+        "tools/analysis/frame_sampler.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "frame_sampler",
+        "mode": "default",
+        "role": "analysis",
+        "stages": [
+          "research",
+          "idea",
+          "compose"
+        ],
+        "categories": [
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "从真实视频抽取有时间戳的参考帧，供分镜与成片检查",
+        "trigger": "原始素材是视频，或成片已产生"
+      }
+    },
+    {
+      "id": "freesound_music",
+      "referenceProvider": "freesound",
+      "category": "audio",
+      "capability": "music_search",
+      "referenceFiles": [
+        "tools/audio/freesound_music.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "freesound",
+      "serviceType": "stock",
+      "notes": [],
+      "pipeline": {
+        "toolId": "freesound_music",
+        "mode": "selectable",
+        "role": "music",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "avatar",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "检索并下载有来源署名的音乐或音效，供已批准的声音计划使用",
+        "trigger": "选择该声音来源及明确检索词，下载选中项并保留许可",
+        "selectionKey": "music"
+      }
+    },
+    {
+      "id": "gemini_fal_image",
+      "referenceProvider": "",
+      "category": "graphics",
+      "capability": "image_generation",
+      "referenceFiles": [
+        "tools/graphics/gemini_fal_image.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "fal",
+      "serviceType": "image",
+      "notes": [],
+      "pipeline": {
+        "toolId": "gemini_fal_image",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的插画、分镜图或角色参考图；同能力模型只选一项",
+        "trigger": "镜头缺少画面且选择该图片服务；纪录证据与真实软件界面不允许生成替代",
+        "selectionKey": "image"
+      }
+    },
+    {
+      "id": "gemini_omni_fal",
+      "referenceProvider": "gemini_omni",
+      "category": "video",
+      "capability": "video_generation",
+      "referenceFiles": [
+        "tools/video/gemini_omni_fal.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "fal",
+      "serviceType": "video",
+      "notes": [],
+      "pipeline": {
+        "toolId": "gemini_omni_fal",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的动态镜头；通过统一服务选择一个已配置的视频模型，停用原厂标明替代",
+        "trigger": "镜头声明需要生成视频且无现成画面，单镜头不超过生成服务时长",
+        "selectionKey": "video"
+      }
+    },
+    {
+      "id": "gemini_omni_video",
+      "referenceProvider": "gemini_omni",
+      "category": "video",
+      "capability": "video_generation",
+      "referenceFiles": [
+        "tools/video/gemini_omni_video.py"
+      ],
+      "implemented": true,
+      "executionFamily": "unified-service",
+      "actualProvider": "shared",
+      "serviceType": "video",
+      "notes": [
+        "Equivalent capability uses the configured shared service; not a direct connection to the original provider/deployment."
+      ],
+      "pipeline": {
+        "toolId": "gemini_omni_video",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的动态镜头；通过统一服务选择一个已配置的视频模型，停用原厂标明替代",
+        "trigger": "镜头声明需要生成视频且无现成画面，单镜头不超过生成服务时长",
+        "selectionKey": "video"
+      }
+    },
+    {
+      "id": "gemini_replicate_image",
+      "referenceProvider": "replicate",
+      "category": "graphics",
+      "capability": "image_generation",
+      "referenceFiles": [
+        "tools/graphics/gemini_replicate_image.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "replicate",
+      "serviceType": "image",
+      "notes": [],
+      "pipeline": {
+        "toolId": "gemini_replicate_image",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的插画、分镜图或角色参考图；同能力模型只选一项",
+        "trigger": "镜头缺少画面且选择该图片服务；纪录证据与真实软件界面不允许生成替代",
+        "selectionKey": "image"
+      }
+    },
+    {
+      "id": "gemini_tts",
+      "referenceProvider": "gemini",
+      "category": "audio",
+      "capability": "tts",
+      "referenceFiles": [
+        "tools/audio/gemini_tts.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "gemini",
+      "serviceType": "speech",
+      "notes": [],
+      "pipeline": {
+        "toolId": "gemini_tts",
+        "mode": "selectable",
+        "role": "voice",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "avatar",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "将批准讲稿合成逐镜头配音并匹配真实时长，保留原片类默认不重配嘉宾原话",
+        "trigger": "已开启配音且镜头有讲稿、缺少配音；同能力音色服务只选一项",
+        "selectionKey": "speech"
+      }
+    },
+    {
+      "id": "google_imagen",
+      "referenceProvider": "google_imagen",
+      "category": "graphics",
+      "capability": "image_generation",
+      "referenceFiles": [
+        "tools/graphics/google_imagen.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "gemini",
+      "serviceType": "image",
+      "notes": [
+        "Imagen migrated to the supported Gemini Nano Banana image API."
+      ],
+      "pipeline": {
+        "toolId": "google_imagen",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的插画、分镜图或角色参考图；同能力模型只选一项",
+        "trigger": "镜头缺少画面且选择该图片服务；纪录证据与真实软件界面不允许生成替代",
+        "selectionKey": "image"
+      }
+    },
+    {
+      "id": "google_music",
+      "referenceProvider": "google",
+      "category": "audio",
+      "capability": "music_generation",
+      "referenceFiles": [
+        "tools/audio/google_music.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "google",
+      "serviceType": "music",
+      "notes": [],
+      "pipeline": {
+        "toolId": "google_music",
+        "mode": "selectable",
+        "role": "music",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "avatar",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "依据配乐方向生成独立音乐音轨，再进入响度检查和混音",
+        "trigger": "已开启音乐生成、存在配乐说明且无音乐轨",
+        "selectionKey": "music"
+      }
+    },
+    {
+      "id": "google_tts",
+      "referenceProvider": "google_tts",
+      "category": "audio",
+      "capability": "tts",
+      "referenceFiles": [
+        "tools/audio/google_tts.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "google_tts",
+      "serviceType": "speech",
+      "notes": [],
+      "pipeline": {
+        "toolId": "google_tts",
+        "mode": "selectable",
+        "role": "voice",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "avatar",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "将批准讲稿合成逐镜头配音并匹配真实时长，保留原片类默认不重配嘉宾原话",
+        "trigger": "已开启配音且镜头有讲稿、缺少配音；同能力音色服务只选一项",
+        "selectionKey": "speech"
+      }
+    },
+    {
+      "id": "green_screen_composite",
+      "referenceProvider": "ffmpeg",
+      "category": "video",
+      "capability": "video_post",
+      "referenceFiles": [
+        "tools/video/green_screen_composite.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "green_screen_composite",
+        "mode": "selectable",
+        "role": "post",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "avatar",
+          "hybrid",
+          "character_animation",
+          "screen_demo"
+        ],
+        "purpose": "对指定绿幕素材抠像并合成指定真实背景，产物替换目标镜头",
+        "trigger": "结构化分镜指定绿幕、颜色和背景素材"
+      }
+    },
+    {
+      "id": "green_screen_processor",
+      "referenceProvider": "ffmpeg",
+      "category": "video",
+      "capability": "video_post",
+      "referenceFiles": [
+        "tools/video/green_screen_processor.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "green_screen_processor",
+        "mode": "selectable",
+        "role": "post",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "avatar",
+          "hybrid",
+          "character_animation",
+          "screen_demo"
+        ],
+        "purpose": "对指定绿幕素材抠像并合成指定真实背景，产物替换目标镜头",
+        "trigger": "结构化分镜指定绿幕、颜色和背景素材"
+      }
+    },
+    {
+      "id": "grok_image",
+      "referenceProvider": "grok",
+      "category": "graphics",
+      "capability": "image_generation",
+      "referenceFiles": [
+        "tools/graphics/grok_image.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "grok",
+      "serviceType": "image",
+      "notes": [],
+      "pipeline": {
+        "toolId": "grok_image",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的插画、分镜图或角色参考图；同能力模型只选一项",
+        "trigger": "镜头缺少画面且选择该图片服务；纪录证据与真实软件界面不允许生成替代",
+        "selectionKey": "image"
+      }
+    },
+    {
+      "id": "grok_video",
+      "referenceProvider": "grok",
+      "category": "video",
+      "capability": "video_generation",
+      "referenceFiles": [
+        "tools/video/grok_video.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "grok",
+      "serviceType": "video",
+      "notes": [],
+      "pipeline": {
+        "toolId": "grok_video",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的动态镜头；通过统一服务选择一个已配置的视频模型，停用原厂标明替代",
+        "trigger": "镜头声明需要生成视频且无现成画面，单镜头不超过生成服务时长",
+        "selectionKey": "video"
+      }
+    },
+    {
+      "id": "h3_max_video",
+      "referenceProvider": "",
+      "category": "video",
+      "capability": "video_generation",
+      "referenceFiles": [
+        "tools/video/h3_max_video.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "fal",
+      "serviceType": "video",
+      "notes": [],
+      "pipeline": {
+        "toolId": "h3_max_video",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的动态镜头；通过统一服务选择一个已配置的视频模型，停用原厂标明替代",
+        "trigger": "镜头声明需要生成视频且无现成画面，单镜头不超过生成服务时长",
+        "selectionKey": "video"
+      }
+    },
+    {
+      "id": "heygen_avatar",
+      "referenceProvider": "heygen",
+      "category": "avatar",
+      "capability": "avatar",
+      "referenceFiles": [
+        "tools/avatar/heygen_avatar.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "heygen",
+      "serviceType": "avatar",
+      "notes": [],
+      "pipeline": {
+        "toolId": "heygen_avatar",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "avatar"
+        ],
+        "purpose": "依据批准讲稿和已选形象生成真实数字人口播，再应用为该镜头视频",
+        "trigger": "选择HeyGen数字人服务并提供该服务实际要求的形象/音色",
+        "selectionKey": "avatar"
+      }
+    },
+    {
+      "id": "heygen_video",
+      "referenceProvider": "heygen",
+      "category": "video",
+      "capability": "video_generation",
+      "referenceFiles": [
+        "tools/video/heygen_video.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "heygen",
+      "serviceType": "avatar",
+      "notes": [],
+      "pipeline": {
+        "toolId": "heygen_video",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "avatar"
+        ],
+        "purpose": "依据批准讲稿和已选形象生成真实数字人口播，再应用为该镜头视频",
+        "trigger": "选择HeyGen数字人服务并提供该服务实际要求的形象/音色",
+        "selectionKey": "avatar"
+      }
+    },
+    {
+      "id": "higgsfield_video",
+      "referenceProvider": "higgsfield",
+      "category": "video",
+      "capability": "video_generation",
+      "referenceFiles": [
+        "tools/video/higgsfield_video.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "higgsfield",
+      "serviceType": "video",
+      "notes": [],
+      "pipeline": {
+        "toolId": "higgsfield_video",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的动态镜头；通过统一服务选择一个已配置的视频模型，停用原厂标明替代",
+        "trigger": "镜头声明需要生成视频且无现成画面，单镜头不超过生成服务时长",
+        "selectionKey": "video"
+      }
+    },
+    {
+      "id": "hunyuan_cloud_video",
+      "referenceProvider": "hunyuan_cloud",
+      "category": "video",
+      "capability": "video_generation",
+      "referenceFiles": [
+        "tools/video/hunyuan_cloud_video.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "hunyuan_cloud",
+      "serviceType": "video",
+      "notes": [],
+      "pipeline": {
+        "toolId": "hunyuan_cloud_video",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的动态镜头；通过统一服务选择一个已配置的视频模型，停用原厂标明替代",
+        "trigger": "镜头声明需要生成视频且无现成画面，单镜头不超过生成服务时长",
+        "selectionKey": "video"
+      }
+    },
+    {
+      "id": "hunyuan_image",
+      "referenceProvider": "hunyuan_cloud",
+      "category": "graphics",
+      "capability": "image_generation",
+      "referenceFiles": [
+        "tools/graphics/hunyuan_image.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "hunyuan_cloud",
+      "serviceType": "image",
+      "notes": [],
+      "pipeline": {
+        "toolId": "hunyuan_image",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的插画、分镜图或角色参考图；同能力模型只选一项",
+        "trigger": "镜头缺少画面且选择该图片服务；纪录证据与真实软件界面不允许生成替代",
+        "selectionKey": "image"
+      }
+    },
+    {
+      "id": "hunyuan_video",
+      "referenceProvider": "hunyuan",
+      "category": "video",
+      "capability": "video_generation",
+      "referenceFiles": [
+        "tools/video/hunyuan_video.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "comfyui",
+      "serviceType": "video",
+      "notes": [
+        "Requires a deployed ComfyUI instance, matching model/custom nodes and a user-supplied API workflow. No weights or custom-node installers are bundled."
+      ],
+      "pipeline": {
+        "toolId": "hunyuan_video",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的动态镜头；通过统一服务选择一个已配置的视频模型，停用原厂标明替代",
+        "trigger": "镜头声明需要生成视频且无现成画面，单镜头不超过生成服务时长",
+        "selectionKey": "video"
+      }
+    },
+    {
+      "id": "hyperframes_compose",
+      "referenceProvider": "hyperframes",
+      "category": "video",
+      "capability": "video_post",
+      "referenceFiles": [
+        "tools/video/hyperframes_compose.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [
+        "Structured native FFmpeg composition; does not execute external Hyperframes application code."
+      ],
+      "pipeline": {
+        "toolId": "hyperframes_compose",
+        "mode": "selectable",
+        "role": "post",
+        "stages": [
+          "compose"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "avatar",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "按批准的结构化片段顺序合成实际视频；选择一个合成器，保留现有配音和字幕配置",
+        "trigger": "显式选用该合成器；默认项目渲染器已承担同一职责时不重复合成"
+      }
+    },
+    {
+      "id": "ideogram_fal_image",
+      "referenceProvider": "",
+      "category": "graphics",
+      "capability": "image_generation",
+      "referenceFiles": [
+        "tools/graphics/ideogram_fal_image.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "fal",
+      "serviceType": "image",
+      "notes": [],
+      "pipeline": {
+        "toolId": "ideogram_fal_image",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的插画、分镜图或角色参考图；同能力模型只选一项",
+        "trigger": "镜头缺少画面且选择该图片服务；纪录证据与真实软件界面不允许生成替代",
+        "selectionKey": "image"
+      }
+    },
+    {
+      "id": "ideogram_image",
+      "referenceProvider": "ideogram",
+      "category": "graphics",
+      "capability": "image_generation",
+      "referenceFiles": [
+        "tools/graphics/ideogram_image.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "ideogram",
+      "serviceType": "image",
+      "notes": [],
+      "pipeline": {
+        "toolId": "ideogram_image",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的插画、分镜图或角色参考图；同能力模型只选一项",
+        "trigger": "镜头缺少画面且选择该图片服务；纪录证据与真实软件界面不允许生成替代",
+        "selectionKey": "image"
+      }
+    },
+    {
+      "id": "image_gen",
+      "referenceProvider": "multi",
+      "category": "graphics",
+      "capability": "image_generation",
+      "referenceFiles": [
+        "tools/graphics/image_gen.py"
+      ],
+      "implemented": true,
+      "executionFamily": "unified-service",
+      "actualProvider": "shared",
+      "serviceType": "image",
+      "notes": [],
+      "pipeline": {
+        "toolId": "image_gen",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的插画、分镜图或角色参考图；同能力模型只选一项",
+        "trigger": "镜头缺少画面且选择该图片服务；纪录证据与真实软件界面不允许生成替代",
+        "selectionKey": "image"
+      }
+    },
+    {
+      "id": "image_selector",
+      "referenceProvider": "selector",
+      "category": "graphics",
+      "capability": "image_generation",
+      "referenceFiles": [
+        "tools/graphics/image_selector.py"
+      ],
+      "implemented": true,
+      "executionFamily": "unified-service",
+      "actualProvider": "shared",
+      "serviceType": "image",
+      "notes": [],
+      "pipeline": {
+        "toolId": "image_selector",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的插画、分镜图或角色参考图；同能力模型只选一项",
+        "trigger": "镜头缺少画面且选择该图片服务；纪录证据与真实软件界面不允许生成替代",
+        "selectionKey": "image"
+      }
+    },
+    {
+      "id": "inworld_tts",
+      "referenceProvider": "inworld",
+      "category": "audio",
+      "capability": "tts",
+      "referenceFiles": [
+        "tools/audio/inworld_tts.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "inworld",
+      "serviceType": "speech",
+      "notes": [],
+      "pipeline": {
+        "toolId": "inworld_tts",
+        "mode": "selectable",
+        "role": "voice",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "avatar",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "将批准讲稿合成逐镜头配音并匹配真实时长，保留原片类默认不重配嘉宾原话",
+        "trigger": "已开启配音且镜头有讲稿、缺少配音；同能力音色服务只选一项",
+        "selectionKey": "speech"
+      }
+    },
+    {
+      "id": "jaxa",
+      "referenceProvider": "jaxa",
+      "category": "stock",
+      "capability": "",
+      "referenceFiles": [
+        "tools/video/stock_sources/jaxa.py"
+      ],
+      "implemented": true,
+      "executionFamily": "source-or-analysis",
+      "actualProvider": "tavily",
+      "notes": [
+        "Returns attributed source pages via Tavily. Download and license review happen at the source page; no scraped direct-download link is invented."
+      ],
+      "pipeline": {
+        "toolId": "jaxa",
+        "mode": "selectable",
+        "role": "research",
+        "stages": [
+          "research",
+          "idea"
+        ],
+        "categories": [
+          "explainer",
+          "documentary",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "发现来源网页并写入待核实资料；这些来源适配器不把网页冒充可直接下载的视频",
+        "trigger": "开启联网资料研究并选中对应来源；需要媒体时再由可验证下载链接入库",
+        "selectionKey": "research"
+      }
+    },
+    {
+      "id": "jimeng_video",
+      "referenceProvider": "volcengine",
+      "category": "video",
+      "capability": "video_generation",
+      "referenceFiles": [
+        "tools/video/jimeng_video.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "volcengine",
+      "serviceType": "video",
+      "notes": [],
+      "pipeline": {
+        "toolId": "jimeng_video",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的动态镜头；通过统一服务选择一个已配置的视频模型，停用原厂标明替代",
+        "trigger": "镜头声明需要生成视频且无现成画面，单镜头不超过生成服务时长",
+        "selectionKey": "video"
+      }
+    },
+    {
+      "id": "kling_avatar",
+      "referenceProvider": "kling_official",
+      "category": "avatar",
+      "capability": "avatar",
+      "referenceFiles": [
+        "tools/avatar/kling_avatar.py"
+      ],
+      "implemented": true,
+      "executionFamily": "unified-service",
+      "actualProvider": "sync",
+      "serviceType": "lipsync",
+      "notes": [
+        "Uses unified Sync character/lip-sync service; actual provider is shown in the catalog."
+      ],
+      "pipeline": {
+        "toolId": "kling_avatar",
+        "mode": "selectable",
+        "role": "post",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "avatar",
+          "character_animation",
+          "localization",
+          "hybrid"
+        ],
+        "purpose": "将人物画面与真实逐镜头配音送入Sync口型服务，完成后替换镜头视频",
+        "trigger": "开启口型同步、人物画面与配音均已就绪；只调用一个口型适配器",
+        "selectionKey": "avatar"
+      }
+    },
+    {
+      "id": "kling_lip_sync",
+      "referenceProvider": "kling_official",
+      "category": "avatar",
+      "capability": "avatar",
+      "referenceFiles": [
+        "tools/avatar/kling_lip_sync.py"
+      ],
+      "implemented": true,
+      "executionFamily": "unified-service",
+      "actualProvider": "sync",
+      "serviceType": "lipsync",
+      "notes": [
+        "Uses unified Sync character/lip-sync service; actual provider is shown in the catalog."
+      ],
+      "pipeline": {
+        "toolId": "kling_lip_sync",
+        "mode": "selectable",
+        "role": "post",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "avatar",
+          "character_animation",
+          "localization",
+          "hybrid"
+        ],
+        "purpose": "将人物画面与真实逐镜头配音送入Sync口型服务，完成后替换镜头视频",
+        "trigger": "开启口型同步、人物画面与配音均已就绪；只调用一个口型适配器",
+        "selectionKey": "avatar"
+      }
+    },
+    {
+      "id": "kling_official_image",
+      "referenceProvider": "kling_official",
+      "category": "graphics",
+      "capability": "image_generation",
+      "referenceFiles": [
+        "tools/graphics/kling_official_image.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "kling_official",
+      "serviceType": "image",
+      "notes": [],
+      "pipeline": {
+        "toolId": "kling_official_image",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的插画、分镜图或角色参考图；同能力模型只选一项",
+        "trigger": "镜头缺少画面且选择该图片服务；纪录证据与真实软件界面不允许生成替代",
+        "selectionKey": "image"
+      }
+    },
+    {
+      "id": "kling_official_video",
+      "referenceProvider": "kling_official",
+      "category": "video",
+      "capability": "video_generation",
+      "referenceFiles": [
+        "tools/video/kling_official_video.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "kling_official",
+      "serviceType": "video",
+      "notes": [],
+      "pipeline": {
+        "toolId": "kling_official_video",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的动态镜头；通过统一服务选择一个已配置的视频模型，停用原厂标明替代",
+        "trigger": "镜头声明需要生成视频且无现成画面，单镜头不超过生成服务时长",
+        "selectionKey": "video"
+      }
+    },
+    {
+      "id": "kling_tts",
+      "referenceProvider": "kling_official",
+      "category": "audio",
+      "capability": "tts",
+      "referenceFiles": [
+        "tools/audio/kling_tts.py"
+      ],
+      "implemented": true,
+      "executionFamily": "unified-service",
+      "actualProvider": "shared",
+      "serviceType": "speech",
+      "notes": [
+        "Equivalent capability uses the configured shared service; not a direct connection to the original provider/deployment."
+      ],
+      "pipeline": {
+        "toolId": "kling_tts",
+        "mode": "selectable",
+        "role": "voice",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "avatar",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "将批准讲稿合成逐镜头配音并匹配真实时长，保留原片类默认不重配嘉宾原话",
+        "trigger": "已开启配音且镜头有讲稿、缺少配音；同能力音色服务只选一项",
+        "selectionKey": "speech"
+      }
+    },
+    {
+      "id": "kling_video",
+      "referenceProvider": "kling",
+      "category": "video",
+      "capability": "video_generation",
+      "referenceFiles": [
+        "tools/video/kling_video.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "kling_official",
+      "serviceType": "video",
+      "notes": [],
+      "pipeline": {
+        "toolId": "kling_video",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的动态镜头；通过统一服务选择一个已配置的视频模型，停用原厂标明替代",
+        "trigger": "镜头声明需要生成视频且无现成画面，单镜头不超过生成服务时长",
+        "selectionKey": "video"
+      }
+    },
+    {
+      "id": "lip_sync",
+      "referenceProvider": "wav2lip",
+      "category": "avatar",
+      "capability": "avatar",
+      "referenceFiles": [
+        "tools/avatar/lip_sync.py"
+      ],
+      "implemented": true,
+      "executionFamily": "unified-service",
+      "actualProvider": "sync",
+      "serviceType": "lipsync",
+      "notes": [],
+      "pipeline": {
+        "toolId": "lip_sync",
+        "mode": "selectable",
+        "role": "post",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "avatar",
+          "character_animation",
+          "localization",
+          "hybrid"
+        ],
+        "purpose": "将人物画面与真实逐镜头配音送入Sync口型服务，完成后替换镜头视频",
+        "trigger": "开启口型同步、人物画面与配音均已就绪；只调用一个口型适配器",
+        "selectionKey": "avatar"
+      }
+    },
+    {
+      "id": "loc",
+      "referenceProvider": "loc",
+      "category": "stock",
+      "capability": "",
+      "referenceFiles": [
+        "tools/video/stock_sources/loc.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "loc",
+      "serviceType": "stock",
+      "notes": [],
+      "pipeline": {
+        "toolId": "loc",
+        "mode": "selectable",
+        "role": "research",
+        "stages": [
+          "research",
+          "idea",
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "documentary",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "搜索真实图片或视频，下载选定候选并将署名写入项目素材，再按镜头取用",
+        "trigger": "启用该素材源且有检索词；不得将不同素材源重复并发下载同一镜头",
+        "selectionKey": "stock"
+      }
+    },
+    {
+      "id": "local_diffusion",
+      "referenceProvider": "local_diffusion",
+      "category": "graphics",
+      "capability": "image_generation",
+      "referenceFiles": [
+        "tools/graphics/local_diffusion.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "comfyui",
+      "serviceType": "image",
+      "notes": [
+        "Requires a deployed ComfyUI instance, matching model/custom nodes and a user-supplied API workflow. No weights or custom-node installers are bundled."
+      ],
+      "pipeline": {
+        "toolId": "local_diffusion",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的插画、分镜图或角色参考图；同能力模型只选一项",
+        "trigger": "镜头缺少画面且选择该图片服务；纪录证据与真实软件界面不允许生成替代",
+        "selectionKey": "image"
+      }
+    },
+    {
+      "id": "ltx_api_video",
+      "referenceProvider": "ltx",
+      "category": "video",
+      "capability": "video_generation",
+      "referenceFiles": [
+        "tools/video/ltx_api_video.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "ltx",
+      "serviceType": "video",
+      "notes": [],
+      "pipeline": {
+        "toolId": "ltx_api_video",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的动态镜头；通过统一服务选择一个已配置的视频模型，停用原厂标明替代",
+        "trigger": "镜头声明需要生成视频且无现成画面，单镜头不超过生成服务时长",
+        "selectionKey": "video"
+      }
+    },
+    {
+      "id": "ltx_video_local",
+      "referenceProvider": "ltx",
+      "category": "video",
+      "capability": "video_generation",
+      "referenceFiles": [
+        "tools/video/ltx_video_local.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "comfyui",
+      "serviceType": "video",
+      "notes": [
+        "Requires a deployed ComfyUI instance, matching model/custom nodes and a user-supplied API workflow. No weights or custom-node installers are bundled."
+      ],
+      "pipeline": {
+        "toolId": "ltx_video_local",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的动态镜头；通过统一服务选择一个已配置的视频模型，停用原厂标明替代",
+        "trigger": "镜头声明需要生成视频且无现成画面，单镜头不超过生成服务时长",
+        "selectionKey": "video"
+      }
+    },
+    {
+      "id": "ltx_video_modal",
+      "referenceProvider": "ltx-modal",
+      "category": "video",
+      "capability": "video_generation",
+      "referenceFiles": [
+        "tools/video/ltx_video_modal.py"
+      ],
+      "implemented": true,
+      "executionFamily": "unified-service",
+      "actualProvider": "shared",
+      "serviceType": "video",
+      "notes": [
+        "Equivalent capability uses the configured shared service; not a direct connection to the original provider/deployment."
+      ],
+      "pipeline": {
+        "toolId": "ltx_video_modal",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的动态镜头；通过统一服务选择一个已配置的视频模型，停用原厂标明替代",
+        "trigger": "镜头声明需要生成视频且无现成画面，单镜头不超过生成服务时长",
+        "selectionKey": "video"
+      }
+    },
+    {
+      "id": "math_animate",
+      "referenceProvider": "manim",
+      "category": "graphics",
+      "capability": "graphics",
+      "referenceFiles": [
+        "tools/graphics/math_animate.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [
+        "Structured graph/formula animation; does not run arbitrary Python/Manim source."
+      ],
+      "pipeline": {
+        "toolId": "math_animate",
+        "mode": "default",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "animation"
+        ],
+        "purpose": "把结构化数学表达式渲染为真实曲线动画，不执行任意Python或模型代码",
+        "trigger": "结构化分镜标为math并提供受支持表达式"
+      }
+    },
+    {
+      "id": "minimax_fal_video",
+      "referenceProvider": "minimax",
+      "category": "video",
+      "capability": "video_generation",
+      "referenceFiles": [
+        "tools/video/minimax_fal_video.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "fal",
+      "serviceType": "video",
+      "notes": [],
+      "pipeline": {
+        "toolId": "minimax_fal_video",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的动态镜头；通过统一服务选择一个已配置的视频模型，停用原厂标明替代",
+        "trigger": "镜头声明需要生成视频且无现成画面，单镜头不超过生成服务时长",
+        "selectionKey": "video"
+      }
+    },
+    {
+      "id": "minimax_image",
+      "referenceProvider": "minimax",
+      "category": "graphics",
+      "capability": "image_generation",
+      "referenceFiles": [
+        "tools/graphics/minimax_image.py"
+      ],
+      "implemented": true,
+      "executionFamily": "unified-service",
+      "actualProvider": "shared",
+      "serviceType": "image",
+      "notes": [
+        "Equivalent capability uses the configured shared service; not a direct connection to the original provider/deployment."
+      ],
+      "pipeline": {
+        "toolId": "minimax_image",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的插画、分镜图或角色参考图；同能力模型只选一项",
+        "trigger": "镜头缺少画面且选择该图片服务；纪录证据与真实软件界面不允许生成替代",
+        "selectionKey": "image"
+      }
+    },
+    {
+      "id": "minimax_video",
+      "referenceProvider": "minimax",
+      "category": "video",
+      "capability": "video_generation",
+      "referenceFiles": [
+        "tools/video/minimax_video.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "minimax",
+      "serviceType": "video",
+      "notes": [],
+      "pipeline": {
+        "toolId": "minimax_video",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的动态镜头；通过统一服务选择一个已配置的视频模型，停用原厂标明替代",
+        "trigger": "镜头声明需要生成视频且无现成画面，单镜头不超过生成服务时长",
+        "selectionKey": "video"
+      }
+    },
+    {
+      "id": "mixkit",
+      "referenceProvider": "envato",
+      "category": "stock",
+      "capability": "",
+      "referenceFiles": [
+        "tools/video/stock_sources/mixkit.py"
+      ],
+      "implemented": true,
+      "executionFamily": "source-or-analysis",
+      "actualProvider": "tavily",
+      "notes": [
+        "Returns attributed source pages via Tavily. Download and license review happen at the source page; no scraped direct-download link is invented."
+      ],
+      "pipeline": {
+        "toolId": "mixkit",
+        "mode": "selectable",
+        "role": "research",
+        "stages": [
+          "research",
+          "idea"
+        ],
+        "categories": [
+          "explainer",
+          "documentary",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "发现来源网页并写入待核实资料；这些来源适配器不把网页冒充可直接下载的视频",
+        "trigger": "开启联网资料研究并选中对应来源；需要媒体时再由可验证下载链接入库",
+        "selectionKey": "research"
+      }
+    },
+    {
+      "id": "music_gen",
+      "referenceProvider": "elevenlabs",
+      "category": "audio",
+      "capability": "music_generation",
+      "referenceFiles": [
+        "tools/audio/music_gen.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "elevenlabs",
+      "serviceType": "music",
+      "notes": [],
+      "pipeline": {
+        "toolId": "music_gen",
+        "mode": "selectable",
+        "role": "music",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "avatar",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "依据配乐方向生成独立音乐音轨，再进入响度检查和混音",
+        "trigger": "已开启音乐生成、存在配乐说明且无音乐轨",
+        "selectionKey": "music"
+      }
+    },
+    {
+      "id": "music_library",
+      "referenceProvider": "local",
+      "category": "audio",
+      "capability": "music_library",
+      "referenceFiles": [
+        "tools/audio/music_library.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "music_library",
+        "mode": "default",
+        "role": "music",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "avatar",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "检查项目已有音乐，优先复用用户选择的曲目而非重复生成",
+        "trigger": "项目已有配乐或音乐来源"
+      }
+    },
+    {
+      "id": "nara",
+      "referenceProvider": "nara",
+      "category": "stock",
+      "capability": "",
+      "referenceFiles": [
+        "tools/video/stock_sources/nara.py"
+      ],
+      "implemented": true,
+      "executionFamily": "source-or-analysis",
+      "actualProvider": "tavily",
+      "notes": [
+        "Returns attributed source pages via Tavily. Download and license review happen at the source page; no scraped direct-download link is invented."
+      ],
+      "pipeline": {
+        "toolId": "nara",
+        "mode": "selectable",
+        "role": "research",
+        "stages": [
+          "research",
+          "idea"
+        ],
+        "categories": [
+          "explainer",
+          "documentary",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "发现来源网页并写入待核实资料；这些来源适配器不把网页冒充可直接下载的视频",
+        "trigger": "开启联网资料研究并选中对应来源；需要媒体时再由可验证下载链接入库",
+        "selectionKey": "research"
+      }
+    },
+    {
+      "id": "nasa",
+      "referenceProvider": "nasa",
+      "category": "stock",
+      "capability": "",
+      "referenceFiles": [
+        "tools/video/stock_sources/nasa.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "nasa",
+      "serviceType": "stock",
+      "notes": [],
+      "pipeline": {
+        "toolId": "nasa",
+        "mode": "selectable",
+        "role": "research",
+        "stages": [
+          "research",
+          "idea",
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "documentary",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "搜索真实图片或视频，下载选定候选并将署名写入项目素材，再按镜头取用",
+        "trigger": "启用该素材源且有检索词；不得将不同素材源重复并发下载同一镜头",
+        "selectionKey": "stock"
+      }
+    },
+    {
+      "id": "noaa",
+      "referenceProvider": "noaa",
+      "category": "stock",
+      "capability": "",
+      "referenceFiles": [
+        "tools/video/stock_sources/noaa.py"
+      ],
+      "implemented": true,
+      "executionFamily": "source-or-analysis",
+      "actualProvider": "tavily",
+      "notes": [
+        "Returns attributed source pages via Tavily. Download and license review happen at the source page; no scraped direct-download link is invented."
+      ],
+      "pipeline": {
+        "toolId": "noaa",
+        "mode": "selectable",
+        "role": "research",
+        "stages": [
+          "research",
+          "idea"
+        ],
+        "categories": [
+          "explainer",
+          "documentary",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "发现来源网页并写入待核实资料；这些来源适配器不把网页冒充可直接下载的视频",
+        "trigger": "开启联网资料研究并选中对应来源；需要媒体时再由可验证下载链接入库",
+        "selectionKey": "research"
+      }
+    },
+    {
+      "id": "openai_fal_image",
+      "referenceProvider": "",
+      "category": "graphics",
+      "capability": "image_generation",
+      "referenceFiles": [
+        "tools/graphics/openai_fal_image.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "fal",
+      "serviceType": "image",
+      "notes": [],
+      "pipeline": {
+        "toolId": "openai_fal_image",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的插画、分镜图或角色参考图；同能力模型只选一项",
+        "trigger": "镜头缺少画面且选择该图片服务；纪录证据与真实软件界面不允许生成替代",
+        "selectionKey": "image"
+      }
+    },
+    {
+      "id": "openai_image",
+      "referenceProvider": "openai",
+      "category": "graphics",
+      "capability": "image_generation",
+      "referenceFiles": [
+        "tools/graphics/openai_image.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "openai",
+      "serviceType": "image",
+      "notes": [],
+      "pipeline": {
+        "toolId": "openai_image",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的插画、分镜图或角色参考图；同能力模型只选一项",
+        "trigger": "镜头缺少画面且选择该图片服务；纪录证据与真实软件界面不允许生成替代",
+        "selectionKey": "image"
+      }
+    },
+    {
+      "id": "openai_tts",
+      "referenceProvider": "openai",
+      "category": "audio",
+      "capability": "tts",
+      "referenceFiles": [
+        "tools/audio/openai_tts.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "openai",
+      "serviceType": "speech",
+      "notes": [],
+      "pipeline": {
+        "toolId": "openai_tts",
+        "mode": "selectable",
+        "role": "voice",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "avatar",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "将批准讲稿合成逐镜头配音并匹配真实时长，保留原片类默认不重配嘉宾原话",
+        "trigger": "已开启配音且镜头有讲稿、缺少配音；同能力音色服务只选一项",
+        "selectionKey": "speech"
+      }
+    },
+    {
+      "id": "pexels",
+      "referenceProvider": "pexels",
+      "category": "stock",
+      "capability": "",
+      "referenceFiles": [
+        "tools/video/stock_sources/pexels.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "pexels",
+      "serviceType": "stock",
+      "notes": [],
+      "pipeline": {
+        "toolId": "pexels",
+        "mode": "selectable",
+        "role": "research",
+        "stages": [
+          "research",
+          "idea",
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "documentary",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "搜索真实图片或视频，下载选定候选并将署名写入项目素材，再按镜头取用",
+        "trigger": "启用该素材源且有检索词；不得将不同素材源重复并发下载同一镜头",
+        "selectionKey": "stock"
+      }
+    },
+    {
+      "id": "pexels_image",
+      "referenceProvider": "pexels",
+      "category": "graphics",
+      "capability": "image_generation",
+      "referenceFiles": [
+        "tools/graphics/pexels_image.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "pexels",
+      "serviceType": "stock",
+      "notes": [],
+      "pipeline": {
+        "toolId": "pexels_image",
+        "mode": "selectable",
+        "role": "research",
+        "stages": [
+          "research",
+          "idea",
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "documentary",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "搜索真实图片或视频，下载选定候选并将署名写入项目素材，再按镜头取用",
+        "trigger": "启用该素材源且有检索词；不得将不同素材源重复并发下载同一镜头",
+        "selectionKey": "stock"
+      }
+    },
+    {
+      "id": "pexels_video",
+      "referenceProvider": "pexels",
+      "category": "video",
+      "capability": "video_generation",
+      "referenceFiles": [
+        "tools/video/pexels_video.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "pexels",
+      "serviceType": "stock",
+      "notes": [],
+      "pipeline": {
+        "toolId": "pexels_video",
+        "mode": "selectable",
+        "role": "research",
+        "stages": [
+          "research",
+          "idea",
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "documentary",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "搜索真实图片或视频，下载选定候选并将署名写入项目素材，再按镜头取用",
+        "trigger": "启用该素材源且有检索词；不得将不同素材源重复并发下载同一镜头",
+        "selectionKey": "stock"
+      }
+    },
+    {
+      "id": "piper_tts",
+      "referenceProvider": "piper",
+      "category": "audio",
+      "capability": "tts",
+      "referenceFiles": [
+        "tools/audio/piper_tts.py"
+      ],
+      "implemented": true,
+      "executionFamily": "unified-service",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "piper_tts",
+        "mode": "selectable",
+        "role": "voice",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "avatar",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "将批准讲稿合成逐镜头配音并匹配真实时长，保留原片类默认不重配嘉宾原话",
+        "trigger": "已开启配音且镜头有讲稿、缺少配音；同能力音色服务只选一项",
+        "selectionKey": "speech"
+      }
+    },
+    {
+      "id": "pixabay_image",
+      "referenceProvider": "pixabay",
+      "category": "graphics",
+      "capability": "image_generation",
+      "referenceFiles": [
+        "tools/graphics/pixabay_image.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "pixabay",
+      "serviceType": "stock",
+      "notes": [],
+      "pipeline": {
+        "toolId": "pixabay_image",
+        "mode": "selectable",
+        "role": "research",
+        "stages": [
+          "research",
+          "idea",
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "documentary",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "搜索真实图片或视频，下载选定候选并将署名写入项目素材，再按镜头取用",
+        "trigger": "启用该素材源且有检索词；不得将不同素材源重复并发下载同一镜头",
+        "selectionKey": "stock"
+      }
+    },
+    {
+      "id": "pixabay_music",
+      "referenceProvider": "pixabay_music",
+      "category": "audio",
+      "capability": "music_search",
+      "referenceFiles": [
+        "tools/audio/pixabay_music.py"
+      ],
+      "implemented": true,
+      "executionFamily": "source-or-analysis",
+      "actualProvider": "tavily",
+      "notes": [
+        "Returns attributed source pages via Tavily. Download and license review happen at the source page; no scraped direct-download link is invented."
+      ],
+      "pipeline": {
+        "toolId": "pixabay_music",
+        "mode": "selectable",
+        "role": "music",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "avatar",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "检索并下载有来源署名的音乐或音效，供已批准的声音计划使用",
+        "trigger": "选择该声音来源及明确检索词，下载选中项并保留许可",
+        "selectionKey": "music"
+      }
+    },
+    {
+      "id": "pixabay_video",
+      "referenceProvider": "pixabay",
+      "category": "video",
+      "capability": "video_generation",
+      "referenceFiles": [
+        "tools/video/pixabay_video.py",
+        "tools/video/stock_sources/pixabay_video.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "pixabay",
+      "serviceType": "stock",
+      "notes": [],
+      "pipeline": {
+        "toolId": "pixabay_video",
+        "mode": "selectable",
+        "role": "research",
+        "stages": [
+          "research",
+          "idea",
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "documentary",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "搜索真实图片或视频，下载选定候选并将署名写入项目素材，再按镜头取用",
+        "trigger": "启用该素材源且有检索词；不得将不同素材源重复并发下载同一镜头",
+        "selectionKey": "stock"
+      }
+    },
+    {
+      "id": "pond5_pd",
+      "referenceProvider": "pond5",
+      "category": "stock",
+      "capability": "",
+      "referenceFiles": [
+        "tools/video/stock_sources/pond5_pd.py"
+      ],
+      "implemented": true,
+      "executionFamily": "source-or-analysis",
+      "actualProvider": "tavily",
+      "notes": [
+        "Returns attributed source pages via Tavily. Download and license review happen at the source page; no scraped direct-download link is invented."
+      ],
+      "pipeline": {
+        "toolId": "pond5_pd",
+        "mode": "selectable",
+        "role": "research",
+        "stages": [
+          "research",
+          "idea"
+        ],
+        "categories": [
+          "explainer",
+          "documentary",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "发现来源网页并写入待核实资料；这些来源适配器不把网页冒充可直接下载的视频",
+        "trigger": "开启联网资料研究并选中对应来源；需要媒体时再由可验证下载链接入库",
+        "selectionKey": "research"
+      }
+    },
+    {
+      "id": "pose_library_builder",
+      "referenceProvider": "openmontage",
+      "category": "character",
+      "capability": "character_animation",
+      "referenceFiles": [
+        "tools/character/character_animation.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "pose_library_builder",
+        "mode": "default",
+        "role": "model",
+        "stages": [
+          "rig_plan",
+          "assets"
+        ],
+        "categories": [
+          "character_animation"
+        ],
+        "purpose": "以同一角色规格建立关节结构和姿态库，产物传给动作时间轴与渲染",
+        "trigger": "角色规格已存在且选择SVG关节动画路径"
+      }
+    },
+    {
+      "id": "qwen_image_21",
+      "referenceProvider": "qwen_local",
+      "category": "graphics",
+      "capability": "image_generation",
+      "referenceFiles": [
+        "tools/graphics/qwen_image_21.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "comfyui",
+      "serviceType": "image",
+      "notes": [
+        "Requires a deployed ComfyUI instance, matching model/custom nodes and a user-supplied API workflow. No weights or custom-node installers are bundled."
+      ],
+      "pipeline": {
+        "toolId": "qwen_image_21",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的插画、分镜图或角色参考图；同能力模型只选一项",
+        "trigger": "镜头缺少画面且选择该图片服务；纪录证据与真实软件界面不允许生成替代",
+        "selectionKey": "image"
+      }
+    },
+    {
+      "id": "recraft_image",
+      "referenceProvider": "recraft",
+      "category": "graphics",
+      "capability": "image_generation",
+      "referenceFiles": [
+        "tools/graphics/recraft_image.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "recraft",
+      "serviceType": "image",
+      "notes": [],
+      "pipeline": {
+        "toolId": "recraft_image",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的插画、分镜图或角色参考图；同能力模型只选一项",
+        "trigger": "镜头缺少画面且选择该图片服务；纪录证据与真实软件界面不允许生成替代",
+        "selectionKey": "image"
+      }
+    },
+    {
+      "id": "remotion_caption_burn",
+      "referenceProvider": "remotion",
+      "category": "video",
+      "capability": "subtitle",
+      "referenceFiles": [
+        "tools/video/remotion_caption_burn.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "remotion_caption_burn",
+        "mode": "selectable",
+        "role": "post",
+        "stages": [
+          "compose"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "avatar",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "把已核对的真实字幕烧录到视频，供明确选择独立字幕后处理的流程",
+        "trigger": "选择字幕后处理；普通合成已烧录时不得重复烧录"
+      }
+    },
+    {
+      "id": "runway_video",
+      "referenceProvider": "runway",
+      "category": "video",
+      "capability": "video_generation",
+      "referenceFiles": [
+        "tools/video/runway_video.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "runway",
+      "serviceType": "video",
+      "notes": [],
+      "pipeline": {
+        "toolId": "runway_video",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的动态镜头；通过统一服务选择一个已配置的视频模型，停用原厂标明替代",
+        "trigger": "镜头声明需要生成视频且无现成画面，单镜头不超过生成服务时长",
+        "selectionKey": "video"
+      }
+    },
+    {
+      "id": "scene_detect",
+      "referenceProvider": "ffmpeg",
+      "category": "analysis",
+      "capability": "analysis",
+      "referenceFiles": [
+        "tools/analysis/scene_detect.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "scene_detect",
+        "mode": "default",
+        "role": "analysis",
+        "stages": [
+          "research",
+          "idea"
+        ],
+        "categories": [
+          "clip_factory",
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "screen_demo"
+        ],
+        "purpose": "检测真实切点并把可用时间范围传给脚本与选段阶段",
+        "trigger": "存在原视频且需要镜头/片段分析"
+      }
+    },
+    {
+      "id": "screen_capture_selector",
+      "referenceProvider": "selector",
+      "category": "capture",
+      "capability": "screen_capture",
+      "referenceFiles": [
+        "tools/capture/screen_capture_selector.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "screen_capture_selector",
+        "mode": "interactive",
+        "role": "interactive",
+        "stages": [
+          "idea"
+        ],
+        "categories": [
+          "screen_demo"
+        ],
+        "purpose": "根据用户明确录屏需求检查环境或录制真实屏幕并入库，不能伪造软件操作",
+        "trigger": "用户明确启用录屏并指定屏幕/时长；不得因进入流程自动读取或录制桌面",
+        "selectionKey": "capture"
+      }
+    },
+    {
+      "id": "screen_recorder",
+      "referenceProvider": "ffmpeg",
+      "category": "capture",
+      "capability": "screen_capture",
+      "referenceFiles": [
+        "tools/capture/screen_recorder.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "screen_recorder",
+        "mode": "interactive",
+        "role": "interactive",
+        "stages": [
+          "idea"
+        ],
+        "categories": [
+          "screen_demo"
+        ],
+        "purpose": "根据用户明确录屏需求检查环境或录制真实屏幕并入库，不能伪造软件操作",
+        "trigger": "用户明确启用录屏并指定屏幕/时长；不得因进入流程自动读取或录制桌面",
+        "selectionKey": "capture"
+      }
+    },
+    {
+      "id": "seedance_ark",
+      "referenceProvider": "ark",
+      "category": "video",
+      "capability": "video_generation",
+      "referenceFiles": [
+        "tools/video/seedance_ark.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "volcengine",
+      "serviceType": "video",
+      "notes": [],
+      "pipeline": {
+        "toolId": "seedance_ark",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的动态镜头；通过统一服务选择一个已配置的视频模型，停用原厂标明替代",
+        "trigger": "镜头声明需要生成视频且无现成画面，单镜头不超过生成服务时长",
+        "selectionKey": "video"
+      }
+    },
+    {
+      "id": "seedance_replicate",
+      "referenceProvider": "seedance",
+      "category": "video",
+      "capability": "video_generation",
+      "referenceFiles": [
+        "tools/video/seedance_replicate.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "replicate",
+      "serviceType": "video",
+      "notes": [],
+      "pipeline": {
+        "toolId": "seedance_replicate",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的动态镜头；通过统一服务选择一个已配置的视频模型，停用原厂标明替代",
+        "trigger": "镜头声明需要生成视频且无现成画面，单镜头不超过生成服务时长",
+        "selectionKey": "video"
+      }
+    },
+    {
+      "id": "seedance_video",
+      "referenceProvider": "seedance",
+      "category": "video",
+      "capability": "video_generation",
+      "referenceFiles": [
+        "tools/video/seedance_video.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "volcengine",
+      "serviceType": "video",
+      "notes": [],
+      "pipeline": {
+        "toolId": "seedance_video",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的动态镜头；通过统一服务选择一个已配置的视频模型，停用原厂标明替代",
+        "trigger": "镜头声明需要生成视频且无现成画面，单镜头不超过生成服务时长",
+        "selectionKey": "video"
+      }
+    },
+    {
+      "id": "seedream_image",
+      "referenceProvider": "bytedance",
+      "category": "graphics",
+      "capability": "image_generation",
+      "referenceFiles": [
+        "tools/graphics/seedream_image.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "volcengine",
+      "serviceType": "image",
+      "notes": [],
+      "pipeline": {
+        "toolId": "seedream_image",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的插画、分镜图或角色参考图；同能力模型只选一项",
+        "trigger": "镜头缺少画面且选择该图片服务；纪录证据与真实软件界面不允许生成替代",
+        "selectionKey": "image"
+      }
+    },
+    {
+      "id": "showcase_card",
+      "referenceProvider": "ffmpeg",
+      "category": "video",
+      "capability": "video_post",
+      "referenceFiles": [
+        "tools/video/showcase_card.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "showcase_card",
+        "mode": "default",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar",
+          "screen_demo",
+          "podcast"
+        ],
+        "purpose": "把批准的标题、观点或音频播客文案制作成可读卡片并应用到镜头",
+        "trigger": "结构化分镜标为card或音频播客缺少承载画面"
+      }
+    },
+    {
+      "id": "silence_cutter",
+      "referenceProvider": "ffmpeg",
+      "category": "video",
+      "capability": "video_post",
+      "referenceFiles": [
+        "tools/video/silence_cutter.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "silence_cutter",
+        "mode": "selectable",
+        "role": "post",
+        "stages": [
+          "research",
+          "idea",
+          "assets"
+        ],
+        "categories": [
+          "talking_head",
+          "podcast",
+          "clip_factory",
+          "screen_demo"
+        ],
+        "purpose": "先检测静音、可选裁切；改变时间轴的裁切必须同步字幕和选段范围",
+        "trigger": "明确开启静音检测或允许删静音；默认只检测不改原声"
+      }
+    },
+    {
+      "id": "sora_video",
+      "referenceProvider": "openai",
+      "category": "video",
+      "capability": "video_generation",
+      "referenceFiles": [
+        "tools/video/sora_video.py"
+      ],
+      "implemented": true,
+      "executionFamily": "unified-service",
+      "actualProvider": "shared",
+      "serviceType": "video",
+      "notes": [
+        "Original Videos API shut down 2026-09-24. Uses a supported configured video model instead of calling a retired API."
+      ],
+      "pipeline": {
+        "toolId": "sora_video",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的动态镜头；通过统一服务选择一个已配置的视频模型，停用原厂标明替代",
+        "trigger": "镜头声明需要生成视频且无现成画面，单镜头不超过生成服务时长",
+        "selectionKey": "video"
+      }
+    },
+    {
+      "id": "subtitle_gen",
+      "referenceProvider": "openmontage",
+      "category": "subtitle",
+      "capability": "subtitle",
+      "referenceFiles": [
+        "tools/subtitle/subtitle_gen.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "subtitle_gen",
+        "mode": "default",
+        "role": "post",
+        "stages": [
+          "edit",
+          "publish"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "avatar",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "将真实字幕时序或已批准逐镜头字幕导出SRT/VTT，供烧录与交付",
+        "trigger": "存在非空字幕"
+      }
+    },
+    {
+      "id": "suno_music",
+      "referenceProvider": "suno",
+      "category": "audio",
+      "capability": "music_generation",
+      "referenceFiles": [
+        "tools/audio/suno_music.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "atlascloud",
+      "serviceType": "music",
+      "notes": [],
+      "pipeline": {
+        "toolId": "suno_music",
+        "mode": "selectable",
+        "role": "music",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "avatar",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "依据配乐方向生成独立音乐音轨，再进入响度检查和混音",
+        "trigger": "已开启音乐生成、存在配乐说明且无音乐轨",
+        "selectionKey": "music"
+      }
+    },
+    {
+      "id": "svg_rig_builder",
+      "referenceProvider": "openmontage",
+      "category": "character",
+      "capability": "character_animation",
+      "referenceFiles": [
+        "tools/character/character_animation.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "svg_rig_builder",
+        "mode": "default",
+        "role": "model",
+        "stages": [
+          "rig_plan",
+          "assets"
+        ],
+        "categories": [
+          "character_animation"
+        ],
+        "purpose": "以同一角色规格建立关节结构和姿态库，产物传给动作时间轴与渲染",
+        "trigger": "角色规格已存在且选择SVG关节动画路径"
+      }
+    },
+    {
+      "id": "talking_head",
+      "referenceProvider": "sadtalker",
+      "category": "avatar",
+      "capability": "avatar",
+      "referenceFiles": [
+        "tools/avatar/talking_head.py"
+      ],
+      "implemented": true,
+      "executionFamily": "unified-service",
+      "actualProvider": "sync",
+      "serviceType": "lipsync",
+      "notes": [],
+      "pipeline": {
+        "toolId": "talking_head",
+        "mode": "selectable",
+        "role": "post",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "avatar",
+          "character_animation",
+          "localization",
+          "hybrid"
+        ],
+        "purpose": "将人物画面与真实逐镜头配音送入Sync口型服务，完成后替换镜头视频",
+        "trigger": "开启口型同步、人物画面与配音均已就绪；只调用一个口型适配器",
+        "selectionKey": "avatar"
+      }
+    },
+    {
+      "id": "threejs_asset_catalog",
+      "referenceProvider": "multi",
+      "category": "graphics",
+      "capability": "3d_asset_acquisition",
+      "referenceFiles": [
+        "tools/graphics/threejs_asset_catalog.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "threejs_asset_catalog",
+        "mode": "default",
+        "role": "model",
+        "stages": [
+          "rig_plan",
+          "assets"
+        ],
+        "categories": [
+          "character_animation",
+          "animation",
+          "cinematic",
+          "explainer"
+        ],
+        "purpose": "检查当前项目真实GLB模型并记录资产清单，供后续场景/绑定引用",
+        "trigger": "结构化制作计划引用已导入GLB模型"
+      }
+    },
+    {
+      "id": "threejs_world",
+      "referenceProvider": "threejs",
+      "category": "graphics",
+      "capability": "3d_world_generation",
+      "referenceFiles": [
+        "tools/graphics/threejs_world.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "threejs_world",
+        "mode": "selectable",
+        "role": "model",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "character_animation",
+          "animation",
+          "cinematic",
+          "explainer"
+        ],
+        "purpose": "生成可交互的结构化三维场景工程供预览；浏览器场景不是已渲染影片",
+        "trigger": "分镜明确选择Three.js场景；需要影片时必须接实际录制/渲染"
+      }
+    },
+    {
+      "id": "transcriber",
+      "referenceProvider": "whisperx",
+      "category": "analysis",
+      "capability": "analysis",
+      "referenceFiles": [
+        "tools/analysis/transcriber.py"
+      ],
+      "implemented": true,
+      "executionFamily": "unified-service",
+      "actualProvider": "openai",
+      "serviceType": "transcription",
+      "notes": [],
+      "pipeline": {
+        "toolId": "transcriber",
+        "mode": "selectable",
+        "role": "analysis",
+        "stages": [
+          "research",
+          "idea",
+          "script"
+        ],
+        "categories": [
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "为原片建立可核对的逐字稿；自动字幕必须使用真实时码，不伪造文本模型时间轴",
+        "trigger": "已开启转录且原片无逐字稿；文本型ASR只能写文本，不能替代精确字幕",
+        "selectionKey": "transcription"
+      }
+    },
+    {
+      "id": "transcript_fetcher",
+      "referenceProvider": "youtube-transcript-api",
+      "category": "analysis",
+      "capability": "analysis",
+      "referenceFiles": [
+        "tools/analysis/transcript_fetcher.py"
+      ],
+      "implemented": true,
+      "executionFamily": "source-or-analysis",
+      "actualProvider": "youtube-transcript-api",
+      "notes": [],
+      "pipeline": {
+        "toolId": "transcript_fetcher",
+        "mode": "selectable",
+        "role": "analysis",
+        "stages": [
+          "research",
+          "idea"
+        ],
+        "categories": [
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization",
+          "explainer",
+          "avatar"
+        ],
+        "purpose": "从提供的网址获取真实字幕并写回相应原始素材，保留已有时码",
+        "trigger": "明确选择网页字幕获取并提供来源网址",
+        "selectionKey": "research"
+      }
+    },
+    {
+      "id": "tts_selector",
+      "referenceProvider": "selector",
+      "category": "audio",
+      "capability": "tts",
+      "referenceFiles": [
+        "tools/audio/tts_selector.py"
+      ],
+      "implemented": true,
+      "executionFamily": "unified-service",
+      "actualProvider": "shared",
+      "serviceType": "speech",
+      "notes": [],
+      "pipeline": {
+        "toolId": "tts_selector",
+        "mode": "selectable",
+        "role": "voice",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "avatar",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "将批准讲稿合成逐镜头配音并匹配真实时长，保留原片类默认不重配嘉宾原话",
+        "trigger": "已开启配音且镜头有讲稿、缺少配音；同能力音色服务只选一项",
+        "selectionKey": "speech"
+      }
+    },
+    {
+      "id": "unsplash",
+      "referenceProvider": "unsplash",
+      "category": "stock",
+      "capability": "",
+      "referenceFiles": [
+        "tools/video/stock_sources/unsplash.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "unsplash",
+      "serviceType": "stock",
+      "notes": [],
+      "pipeline": {
+        "toolId": "unsplash",
+        "mode": "selectable",
+        "role": "research",
+        "stages": [
+          "research",
+          "idea",
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "documentary",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "搜索真实图片或视频，下载选定候选并将署名写入项目素材，再按镜头取用",
+        "trigger": "启用该素材源且有检索词；不得将不同素材源重复并发下载同一镜头",
+        "selectionKey": "stock"
+      }
+    },
+    {
+      "id": "upscale",
+      "referenceProvider": "realesrgan",
+      "category": "enhancement",
+      "capability": "enhancement",
+      "referenceFiles": [
+        "tools/enhancement/upscale.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "upscale",
+        "mode": "selectable",
+        "role": "post",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "avatar",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "使用实际放大工具处理选定低分辨率画面，不宣称生成不存在的细节",
+        "trigger": "明确选择画面放大与倍率"
+      }
+    },
+    {
+      "id": "veo_video",
+      "referenceProvider": "veo",
+      "category": "video",
+      "capability": "video_generation",
+      "referenceFiles": [
+        "tools/video/veo_video.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "gemini",
+      "serviceType": "video",
+      "notes": [],
+      "pipeline": {
+        "toolId": "veo_video",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的动态镜头；通过统一服务选择一个已配置的视频模型，停用原厂标明替代",
+        "trigger": "镜头声明需要生成视频且无现成画面，单镜头不超过生成服务时长",
+        "selectionKey": "video"
+      }
+    },
+    {
+      "id": "video_analyzer",
+      "referenceProvider": "multi",
+      "category": "analysis",
+      "capability": "analysis",
+      "referenceFiles": [
+        "tools/analysis/video_analyzer.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "video_analyzer",
+        "mode": "default",
+        "role": "analysis",
+        "stages": [
+          "research",
+          "idea"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "avatar",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "合并技术信息、切点、抽帧与音量分析，形成后续编排的真实依据",
+        "trigger": "源片型流程导入了视频"
+      }
+    },
+    {
+      "id": "video_compose",
+      "referenceProvider": "ffmpeg",
+      "category": "video",
+      "capability": "video_post",
+      "referenceFiles": [
+        "tools/video/video_compose.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "video_compose",
+        "mode": "selectable",
+        "role": "post",
+        "stages": [
+          "compose"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "avatar",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "按批准的结构化片段顺序合成实际视频；选择一个合成器，保留现有配音和字幕配置",
+        "trigger": "显式选用该合成器；默认项目渲染器已承担同一职责时不重复合成"
+      }
+    },
+    {
+      "id": "video_downloader",
+      "referenceProvider": "yt-dlp",
+      "category": "analysis",
+      "capability": "source_ingest",
+      "referenceFiles": [
+        "tools/analysis/video_downloader.py"
+      ],
+      "implemented": true,
+      "executionFamily": "source-or-analysis",
+      "actualProvider": "yt-dlp",
+      "notes": [],
+      "pipeline": {
+        "toolId": "video_downloader",
+        "mode": "selectable",
+        "role": "research",
+        "stages": [
+          "research",
+          "idea"
+        ],
+        "categories": [
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization",
+          "explainer",
+          "avatar"
+        ],
+        "purpose": "从用户明确提供的网址获取真实视频并保留来源，随后做探测、逐字稿与镜头选段",
+        "trigger": "填写允许站点的原片网址并明确开启网页获取",
+        "selectionKey": "research"
+      }
+    },
+    {
+      "id": "video_selector",
+      "referenceProvider": "selector",
+      "category": "video",
+      "capability": "video_generation",
+      "referenceFiles": [
+        "tools/video/video_selector.py"
+      ],
+      "implemented": true,
+      "executionFamily": "unified-service",
+      "actualProvider": "shared",
+      "serviceType": "video",
+      "notes": [],
+      "pipeline": {
+        "toolId": "video_selector",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的动态镜头；通过统一服务选择一个已配置的视频模型，停用原厂标明替代",
+        "trigger": "镜头声明需要生成视频且无现成画面，单镜头不超过生成服务时长",
+        "selectionKey": "video"
+      }
+    },
+    {
+      "id": "video_stitch",
+      "referenceProvider": "ffmpeg",
+      "category": "video",
+      "capability": "video_post",
+      "referenceFiles": [
+        "tools/video/video_stitch.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "video_stitch",
+        "mode": "selectable",
+        "role": "post",
+        "stages": [
+          "compose"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "avatar",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "按批准的结构化片段顺序合成实际视频；选择一个合成器，保留现有配音和字幕配置",
+        "trigger": "显式选用该合成器；默认项目渲染器已承担同一职责时不重复合成"
+      }
+    },
+    {
+      "id": "video_trimmer",
+      "referenceProvider": "ffmpeg",
+      "category": "video",
+      "capability": "video_post",
+      "referenceFiles": [
+        "tools/video/video_trimmer.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "video_trimmer",
+        "mode": "default",
+        "role": "post",
+        "stages": [
+          "assets",
+          "edit"
+        ],
+        "categories": [
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "按已批准的真实源时码切出片段，后续重构图和增强只处理所选范围",
+        "trigger": "镜头绑定源视频并存在非零起点或选段小于原片"
+      }
+    },
+    {
+      "id": "video_understand",
+      "referenceProvider": "transformers",
+      "category": "analysis",
+      "capability": "analysis",
+      "referenceFiles": [
+        "tools/analysis/video_understand.py"
+      ],
+      "implemented": true,
+      "executionFamily": "source-or-analysis",
+      "actualProvider": "transformers",
+      "notes": [],
+      "pipeline": {
+        "toolId": "video_understand",
+        "mode": "selectable",
+        "role": "analysis",
+        "stages": [
+          "research",
+          "idea"
+        ],
+        "categories": [
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization",
+          "explainer"
+        ],
+        "purpose": "使用实际抽帧和视觉模型理解已导入画面，结果带采样局限并供编排参考",
+        "trigger": "明确启用视觉理解且配置多模态文本模型"
+      }
+    },
+    {
+      "id": "videvo",
+      "referenceProvider": "videvo",
+      "category": "stock",
+      "capability": "",
+      "referenceFiles": [
+        "tools/video/stock_sources/videvo.py"
+      ],
+      "implemented": true,
+      "executionFamily": "source-or-analysis",
+      "actualProvider": "tavily",
+      "notes": [
+        "Returns attributed source pages via Tavily. Download and license review happen at the source page; no scraped direct-download link is invented."
+      ],
+      "pipeline": {
+        "toolId": "videvo",
+        "mode": "selectable",
+        "role": "research",
+        "stages": [
+          "research",
+          "idea"
+        ],
+        "categories": [
+          "explainer",
+          "documentary",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "发现来源网页并写入待核实资料；这些来源适配器不把网页冒充可直接下载的视频",
+        "trigger": "开启联网资料研究并选中对应来源；需要媒体时再由可验证下载链接入库",
+        "selectionKey": "research"
+      }
+    },
+    {
+      "id": "visual_qa",
+      "referenceProvider": "ffmpeg",
+      "category": "analysis",
+      "capability": "analysis",
+      "referenceFiles": [
+        "tools/analysis/visual_qa.py"
+      ],
+      "implemented": true,
+      "executionFamily": "local",
+      "actualProvider": "local",
+      "notes": [],
+      "pipeline": {
+        "toolId": "visual_qa",
+        "mode": "default",
+        "role": "analysis",
+        "stages": [
+          "assets",
+          "compose"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "talking_head",
+          "avatar",
+          "screen_demo",
+          "podcast",
+          "clip_factory",
+          "localization"
+        ],
+        "purpose": "探测实际媒体尺寸、流与时长，检查问题写入验片报告",
+        "trigger": "新制作镜头或成片已产生"
+      }
+    },
+    {
+      "id": "wan_atlas_video",
+      "referenceProvider": "atlascloud",
+      "category": "video",
+      "capability": "video_generation",
+      "referenceFiles": [
+        "tools/video/wan_atlas_video.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "atlascloud",
+      "serviceType": "video",
+      "notes": [],
+      "pipeline": {
+        "toolId": "wan_atlas_video",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的动态镜头；通过统一服务选择一个已配置的视频模型，停用原厂标明替代",
+        "trigger": "镜头声明需要生成视频且无现成画面，单镜头不超过生成服务时长",
+        "selectionKey": "video"
+      }
+    },
+    {
+      "id": "wan_fal_video",
+      "referenceProvider": "",
+      "category": "video",
+      "capability": "video_generation",
+      "referenceFiles": [
+        "tools/video/wan_fal_video.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "fal",
+      "serviceType": "video",
+      "notes": [],
+      "pipeline": {
+        "toolId": "wan_fal_video",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的动态镜头；通过统一服务选择一个已配置的视频模型，停用原厂标明替代",
+        "trigger": "镜头声明需要生成视频且无现成画面，单镜头不超过生成服务时长",
+        "selectionKey": "video"
+      }
+    },
+    {
+      "id": "wan_replicate_video",
+      "referenceProvider": "replicate",
+      "category": "video",
+      "capability": "video_generation",
+      "referenceFiles": [
+        "tools/video/wan_replicate_video.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "replicate",
+      "serviceType": "video",
+      "notes": [],
+      "pipeline": {
+        "toolId": "wan_replicate_video",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的动态镜头；通过统一服务选择一个已配置的视频模型，停用原厂标明替代",
+        "trigger": "镜头声明需要生成视频且无现成画面，单镜头不超过生成服务时长",
+        "selectionKey": "video"
+      }
+    },
+    {
+      "id": "wan_video",
+      "referenceProvider": "wan",
+      "category": "video",
+      "capability": "video_generation",
+      "referenceFiles": [
+        "tools/video/wan_video.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "comfyui",
+      "serviceType": "video",
+      "notes": [
+        "Requires a deployed ComfyUI instance, matching model/custom nodes and a user-supplied API workflow. No weights or custom-node installers are bundled."
+      ],
+      "pipeline": {
+        "toolId": "wan_video",
+        "mode": "selectable",
+        "role": "visual",
+        "stages": [
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "documentary",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "制作缺失的动态镜头；通过统一服务选择一个已配置的视频模型，停用原厂标明替代",
+        "trigger": "镜头声明需要生成视频且无现成画面，单镜头不超过生成服务时长",
+        "selectionKey": "video"
+      }
+    },
+    {
+      "id": "wikimedia",
+      "referenceProvider": "wikimedia",
+      "category": "stock",
+      "capability": "",
+      "referenceFiles": [
+        "tools/video/stock_sources/wikimedia.py"
+      ],
+      "implemented": true,
+      "executionFamily": "provider-adapter",
+      "actualProvider": "wikimedia",
+      "serviceType": "stock",
+      "notes": [],
+      "pipeline": {
+        "toolId": "wikimedia",
+        "mode": "selectable",
+        "role": "research",
+        "stages": [
+          "research",
+          "idea",
+          "assets"
+        ],
+        "categories": [
+          "explainer",
+          "documentary",
+          "cinematic",
+          "animation",
+          "character_animation",
+          "hybrid",
+          "avatar"
+        ],
+        "purpose": "搜索真实图片或视频，下载选定候选并将署名写入项目素材，再按镜头取用",
+        "trigger": "启用该素材源且有检索词；不得将不同素材源重复并发下载同一镜头",
+        "selectionKey": "stock"
+      }
+    }
+  ]
+}

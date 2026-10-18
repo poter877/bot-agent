@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/favicon.png?v=20261002" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>视频工厂</title>
+    <script>
+      // 首帧前应用主题与语言对应的文档语言属性，避免深色/浅色闪烁。
+      // 读取逻辑与 shared/config/theme、preferences store 的旧键兼容策略一致。
+      (function () {
+        try {
+          var prefs = null
+          try { prefs = JSON.parse(localStorage.getItem('huobao:prefs:v1') || 'null') } catch (e) { /* ignore */ }
+          var mode = (prefs && prefs.state && prefs.state.themeMode) || localStorage.getItem('huobao:theme') || 'system'
+          var dark =
+            mode === 'dark' ||
+            (mode !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+          document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+          var locale =
+            (prefs && prefs.state && prefs.state.uiLocale) || localStorage.getItem('huobao:locale') || 'zh'
+          document.documentElement.lang = { zh: 'zh-CN', en: 'en', ja: 'ja', ko: 'ko' }[locale] || 'zh-CN'
+        } catch (e) {
+          document.documentElement.dataset.theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+        }
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

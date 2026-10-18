@@ -1,0 +1,24 @@
+/**
+ * index.css — 统一样式入口：Tailwind、层顺序与全部公共样式导入。
+ * main.tsx 只导入本文件；driver.js 原始样式由 shared/lib/tour.ts 管理。
+ *
+ * 层顺序：theme → base → vendor → components → utilities。
+ * - utilities 位于最后：同一元素上 utility 可覆盖 vendor/基础规则
+ * - Preflight 未启用（保持自有 reset）；启用属独立验收批次，
+ *   届时改为 @import "tailwindcss/preflight.css" layer(base) 并删除 base.css 重复 reset
+ */
+
+@layer theme, base, vendor, components, utilities;
+
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+
+@import './runtime-tokens.css' layer(base);
+@import './base.css' layer(base);
+@import './vendor-overrides.css' layer(components);
+@import './exceptions.css' layer(components);
+@import './theme.css';
+
+/* 源码扫描：React src 与根 index.html；排除后端与构建产物 */
+@source '../../';
+@source '../../../index.html';

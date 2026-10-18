@@ -1,0 +1,1380 @@
+[
+  {
+    "id": "action_timeline_compiler",
+    "referenceProvider": "openmontage",
+    "category": "character",
+    "capability": "character_animation",
+    "referenceFiles": [
+      "tools/character/character_animation.py"
+    ]
+  },
+  {
+    "id": "archive_org",
+    "referenceProvider": "archive_org",
+    "category": "stock",
+    "capability": "",
+    "referenceFiles": [
+      "tools/video/stock_sources/archive_org.py"
+    ]
+  },
+  {
+    "id": "atlas_3d",
+    "referenceProvider": "atlas_cloud",
+    "category": "graphics",
+    "capability": "3d_asset_generation",
+    "referenceFiles": [
+      "tools/graphics/atlas_3d.py"
+    ]
+  },
+  {
+    "id": "atlas_image",
+    "referenceProvider": "atlascloud",
+    "category": "graphics",
+    "capability": "image_generation",
+    "referenceFiles": [
+      "tools/graphics/atlas_image.py"
+    ]
+  },
+  {
+    "id": "atlas_refresh_image",
+    "referenceProvider": "atlascloud",
+    "category": "graphics",
+    "capability": "image_generation",
+    "referenceFiles": [
+      "tools/graphics/atlas_refresh_image.py"
+    ]
+  },
+  {
+    "id": "atlas_video",
+    "referenceProvider": "atlascloud",
+    "category": "video",
+    "capability": "video_generation",
+    "referenceFiles": [
+      "tools/video/atlas_video.py"
+    ]
+  },
+  {
+    "id": "audio_energy",
+    "referenceProvider": "ffmpeg",
+    "category": "analysis",
+    "capability": "analysis",
+    "referenceFiles": [
+      "tools/analysis/audio_energy.py"
+    ]
+  },
+  {
+    "id": "audio_enhance",
+    "referenceProvider": "ffmpeg",
+    "category": "audio",
+    "capability": "audio_processing",
+    "referenceFiles": [
+      "tools/audio/audio_enhance.py"
+    ]
+  },
+  {
+    "id": "audio_mixer",
+    "referenceProvider": "ffmpeg",
+    "category": "audio",
+    "capability": "audio_processing",
+    "referenceFiles": [
+      "tools/audio/audio_mixer.py"
+    ]
+  },
+  {
+    "id": "audio_probe",
+    "referenceProvider": "ffprobe",
+    "category": "analysis",
+    "capability": "analysis",
+    "referenceFiles": [
+      "tools/analysis/audio_probe.py"
+    ]
+  },
+  {
+    "id": "auto_reframe",
+    "referenceProvider": "ffmpeg",
+    "category": "video",
+    "capability": "video_post",
+    "referenceFiles": [
+      "tools/video/auto_reframe.py"
+    ]
+  },
+  {
+    "id": "azure_stt",
+    "referenceProvider": "azure",
+    "category": "analysis",
+    "capability": "analysis",
+    "referenceFiles": [
+      "tools/analysis/azure_stt.py"
+    ]
+  },
+  {
+    "id": "azure_tts",
+    "referenceProvider": "azure",
+    "category": "audio",
+    "capability": "tts",
+    "referenceFiles": [
+      "tools/audio/azure_tts.py"
+    ]
+  },
+  {
+    "id": "bg_remove",
+    "referenceProvider": "rembg",
+    "category": "enhancement",
+    "capability": "enhancement",
+    "referenceFiles": [
+      "tools/enhancement/bg_remove.py"
+    ]
+  },
+  {
+    "id": "bgm_montage_lite",
+    "referenceProvider": "bmts-lite",
+    "category": "video",
+    "capability": "video_post",
+    "referenceFiles": [
+      "tools/video/bmts_lite.py"
+    ]
+  },
+  {
+    "id": "blender_world",
+    "referenceProvider": "blender",
+    "category": "graphics",
+    "capability": "3d_world_rendering",
+    "referenceFiles": [
+      "tools/graphics/blender_world.py"
+    ]
+  },
+  {
+    "id": "cap_recorder",
+    "referenceProvider": "cap",
+    "category": "capture",
+    "capability": "screen_capture",
+    "referenceFiles": [
+      "tools/capture/cap_recorder.py"
+    ]
+  },
+  {
+    "id": "cartesia_tts",
+    "referenceProvider": "cartesia",
+    "category": "audio",
+    "capability": "tts",
+    "referenceFiles": [
+      "tools/audio/cartesia_tts.py"
+    ]
+  },
+  {
+    "id": "character_animation_reviewer",
+    "referenceProvider": "openmontage",
+    "category": "character",
+    "capability": "character_animation",
+    "referenceFiles": [
+      "tools/character/character_animation.py"
+    ]
+  },
+  {
+    "id": "character_rig_renderer",
+    "referenceProvider": "openmontage",
+    "category": "character",
+    "capability": "character_animation",
+    "referenceFiles": [
+      "tools/character/character_animation.py"
+    ]
+  },
+  {
+    "id": "character_spec_generator",
+    "referenceProvider": "openmontage",
+    "category": "character",
+    "capability": "character_animation",
+    "referenceFiles": [
+      "tools/character/character_animation.py"
+    ]
+  },
+  {
+    "id": "clip_search",
+    "referenceProvider": "openmontage",
+    "category": "video",
+    "capability": "clip_retrieval",
+    "referenceFiles": [
+      "tools/video/clip_search.py"
+    ]
+  },
+  {
+    "id": "code_snippet",
+    "referenceProvider": "pygments",
+    "category": "graphics",
+    "capability": "graphics",
+    "referenceFiles": [
+      "tools/graphics/code_snippet.py"
+    ]
+  },
+  {
+    "id": "cogvideo_video",
+    "referenceProvider": "cogvideo",
+    "category": "video",
+    "capability": "video_generation",
+    "referenceFiles": [
+      "tools/video/cogvideo_video.py"
+    ]
+  },
+  {
+    "id": "color_grade",
+    "referenceProvider": "ffmpeg",
+    "category": "enhancement",
+    "capability": "enhancement",
+    "referenceFiles": [
+      "tools/enhancement/color_grade.py"
+    ]
+  },
+  {
+    "id": "comfyui_image",
+    "referenceProvider": "comfyui",
+    "category": "graphics",
+    "capability": "image_generation",
+    "referenceFiles": [
+      "tools/graphics/comfyui_image.py"
+    ]
+  },
+  {
+    "id": "comfyui_music",
+    "referenceProvider": "comfyui",
+    "category": "audio",
+    "capability": "music_generation",
+    "referenceFiles": [
+      "tools/audio/comfyui_music.py"
+    ]
+  },
+  {
+    "id": "comfyui_video",
+    "referenceProvider": "comfyui",
+    "category": "video",
+    "capability": "video_generation",
+    "referenceFiles": [
+      "tools/video/comfyui_video.py"
+    ]
+  },
+  {
+    "id": "composition_validator",
+    "referenceProvider": "local",
+    "category": "analysis",
+    "capability": "analysis",
+    "referenceFiles": [
+      "tools/analysis/composition_validator.py"
+    ]
+  },
+  {
+    "id": "corpus_builder",
+    "referenceProvider": "openmontage",
+    "category": "video",
+    "capability": "corpus_population",
+    "referenceFiles": [
+      "tools/video/corpus_builder.py"
+    ]
+  },
+  {
+    "id": "coverr",
+    "referenceProvider": "coverr",
+    "category": "stock",
+    "capability": "",
+    "referenceFiles": [
+      "tools/video/stock_sources/coverr.py"
+    ]
+  },
+  {
+    "id": "dareful",
+    "referenceProvider": "dareful",
+    "category": "stock",
+    "capability": "",
+    "referenceFiles": [
+      "tools/video/stock_sources/dareful.py"
+    ]
+  },
+  {
+    "id": "dashscope_asr",
+    "referenceProvider": "dashscope",
+    "category": "analysis",
+    "capability": "analysis",
+    "referenceFiles": [
+      "tools/analysis/dashscope_asr.py"
+    ]
+  },
+  {
+    "id": "dashscope_image",
+    "referenceProvider": "dashscope",
+    "category": "graphics",
+    "capability": "image_generation",
+    "referenceFiles": [
+      "tools/graphics/dashscope_image.py"
+    ]
+  },
+  {
+    "id": "dashscope_tts",
+    "referenceProvider": "dashscope",
+    "category": "audio",
+    "capability": "tts",
+    "referenceFiles": [
+      "tools/audio/dashscope_tts.py"
+    ]
+  },
+  {
+    "id": "diagram_gen",
+    "referenceProvider": "mermaid",
+    "category": "graphics",
+    "capability": "graphics",
+    "referenceFiles": [
+      "tools/graphics/diagram_gen.py"
+    ]
+  },
+  {
+    "id": "direct_clip_search",
+    "referenceProvider": "openmontage",
+    "category": "video",
+    "capability": "clip_acquisition",
+    "referenceFiles": [
+      "tools/video/direct_clip_search.py"
+    ]
+  },
+  {
+    "id": "doubao_tts",
+    "referenceProvider": "doubao",
+    "category": "audio",
+    "capability": "tts",
+    "referenceFiles": [
+      "tools/audio/doubao_tts.py"
+    ]
+  },
+  {
+    "id": "elevenlabs_tts",
+    "referenceProvider": "elevenlabs",
+    "category": "audio",
+    "capability": "tts",
+    "referenceFiles": [
+      "tools/audio/elevenlabs_tts.py"
+    ]
+  },
+  {
+    "id": "esa",
+    "referenceProvider": "esa",
+    "category": "stock",
+    "capability": "",
+    "referenceFiles": [
+      "tools/video/stock_sources/esa.py"
+    ]
+  },
+  {
+    "id": "export_bundle",
+    "referenceProvider": "local",
+    "category": "publishers",
+    "capability": "publish",
+    "referenceFiles": [
+      "tools/publishers/export_bundle.py"
+    ]
+  },
+  {
+    "id": "eye_enhance",
+    "referenceProvider": "mediapipe",
+    "category": "enhancement",
+    "capability": "enhancement",
+    "referenceFiles": [
+      "tools/enhancement/eye_enhance.py"
+    ]
+  },
+  {
+    "id": "face_enhance",
+    "referenceProvider": "ffmpeg",
+    "category": "enhancement",
+    "capability": "enhancement",
+    "referenceFiles": [
+      "tools/enhancement/face_enhance.py"
+    ]
+  },
+  {
+    "id": "face_restore",
+    "referenceProvider": "codeformer",
+    "category": "enhancement",
+    "capability": "enhancement",
+    "referenceFiles": [
+      "tools/enhancement/face_restore.py"
+    ]
+  },
+  {
+    "id": "face_tracker",
+    "referenceProvider": "mediapipe",
+    "category": "analysis",
+    "capability": "analysis",
+    "referenceFiles": [
+      "tools/analysis/face_tracker.py"
+    ]
+  },
+  {
+    "id": "fal_3d",
+    "referenceProvider": "fal",
+    "category": "graphics",
+    "capability": "3d_asset_generation",
+    "referenceFiles": [
+      "tools/graphics/fal_3d.py"
+    ]
+  },
+  {
+    "id": "fal_elevenlabs_music",
+    "referenceProvider": "fal.ai",
+    "category": "audio",
+    "capability": "music_generation",
+    "referenceFiles": [
+      "tools/audio/fal_elevenlabs_music.py"
+    ]
+  },
+  {
+    "id": "fal_elevenlabs_tts",
+    "referenceProvider": "fal.ai",
+    "category": "audio",
+    "capability": "tts",
+    "referenceFiles": [
+      "tools/audio/fal_elevenlabs_tts.py"
+    ]
+  },
+  {
+    "id": "fish_audio_tts",
+    "referenceProvider": "fish_audio",
+    "category": "audio",
+    "capability": "tts",
+    "referenceFiles": [
+      "tools/audio/fish_audio_tts.py"
+    ]
+  },
+  {
+    "id": "flux_image",
+    "referenceProvider": "flux",
+    "category": "graphics",
+    "capability": "image_generation",
+    "referenceFiles": [
+      "tools/graphics/flux_image.py"
+    ]
+  },
+  {
+    "id": "frame_sampler",
+    "referenceProvider": "ffmpeg",
+    "category": "analysis",
+    "capability": "analysis",
+    "referenceFiles": [
+      "tools/analysis/frame_sampler.py"
+    ]
+  },
+  {
+    "id": "freesound_music",
+    "referenceProvider": "freesound",
+    "category": "audio",
+    "capability": "music_search",
+    "referenceFiles": [
+      "tools/audio/freesound_music.py"
+    ]
+  },
+  {
+    "id": "gemini_fal_image",
+    "referenceProvider": "",
+    "category": "graphics",
+    "capability": "image_generation",
+    "referenceFiles": [
+      "tools/graphics/gemini_fal_image.py"
+    ]
+  },
+  {
+    "id": "gemini_omni_fal",
+    "referenceProvider": "gemini_omni",
+    "category": "video",
+    "capability": "video_generation",
+    "referenceFiles": [
+      "tools/video/gemini_omni_fal.py"
+    ]
+  },
+  {
+    "id": "gemini_omni_video",
+    "referenceProvider": "gemini_omni",
+    "category": "video",
+    "capability": "video_generation",
+    "referenceFiles": [
+      "tools/video/gemini_omni_video.py"
+    ]
+  },
+  {
+    "id": "gemini_replicate_image",
+    "referenceProvider": "replicate",
+    "category": "graphics",
+    "capability": "image_generation",
+    "referenceFiles": [
+      "tools/graphics/gemini_replicate_image.py"
+    ]
+  },
+  {
+    "id": "gemini_tts",
+    "referenceProvider": "gemini",
+    "category": "audio",
+    "capability": "tts",
+    "referenceFiles": [
+      "tools/audio/gemini_tts.py"
+    ]
+  },
+  {
+    "id": "google_imagen",
+    "referenceProvider": "google_imagen",
+    "category": "graphics",
+    "capability": "image_generation",
+    "referenceFiles": [
+      "tools/graphics/google_imagen.py"
+    ]
+  },
+  {
+    "id": "google_music",
+    "referenceProvider": "google",
+    "category": "audio",
+    "capability": "music_generation",
+    "referenceFiles": [
+      "tools/audio/google_music.py"
+    ]
+  },
+  {
+    "id": "google_tts",
+    "referenceProvider": "google_tts",
+    "category": "audio",
+    "capability": "tts",
+    "referenceFiles": [
+      "tools/audio/google_tts.py"
+    ]
+  },
+  {
+    "id": "green_screen_composite",
+    "referenceProvider": "ffmpeg",
+    "category": "video",
+    "capability": "video_post",
+    "referenceFiles": [
+      "tools/video/green_screen_composite.py"
+    ]
+  },
+  {
+    "id": "green_screen_processor",
+    "referenceProvider": "ffmpeg",
+    "category": "video",
+    "capability": "video_post",
+    "referenceFiles": [
+      "tools/video/green_screen_processor.py"
+    ]
+  },
+  {
+    "id": "grok_image",
+    "referenceProvider": "grok",
+    "category": "graphics",
+    "capability": "image_generation",
+    "referenceFiles": [
+      "tools/graphics/grok_image.py"
+    ]
+  },
+  {
+    "id": "grok_video",
+    "referenceProvider": "grok",
+    "category": "video",
+    "capability": "video_generation",
+    "referenceFiles": [
+      "tools/video/grok_video.py"
+    ]
+  },
+  {
+    "id": "h3_max_video",
+    "referenceProvider": "",
+    "category": "video",
+    "capability": "video_generation",
+    "referenceFiles": [
+      "tools/video/h3_max_video.py"
+    ]
+  },
+  {
+    "id": "heygen_avatar",
+    "referenceProvider": "heygen",
+    "category": "avatar",
+    "capability": "avatar",
+    "referenceFiles": [
+      "tools/avatar/heygen_avatar.py"
+    ]
+  },
+  {
+    "id": "heygen_video",
+    "referenceProvider": "heygen",
+    "category": "video",
+    "capability": "video_generation",
+    "referenceFiles": [
+      "tools/video/heygen_video.py"
+    ]
+  },
+  {
+    "id": "higgsfield_video",
+    "referenceProvider": "higgsfield",
+    "category": "video",
+    "capability": "video_generation",
+    "referenceFiles": [
+      "tools/video/higgsfield_video.py"
+    ]
+  },
+  {
+    "id": "hunyuan_cloud_video",
+    "referenceProvider": "hunyuan_cloud",
+    "category": "video",
+    "capability": "video_generation",
+    "referenceFiles": [
+      "tools/video/hunyuan_cloud_video.py"
+    ]
+  },
+  {
+    "id": "hunyuan_image",
+    "referenceProvider": "hunyuan_cloud",
+    "category": "graphics",
+    "capability": "image_generation",
+    "referenceFiles": [
+      "tools/graphics/hunyuan_image.py"
+    ]
+  },
+  {
+    "id": "hunyuan_video",
+    "referenceProvider": "hunyuan",
+    "category": "video",
+    "capability": "video_generation",
+    "referenceFiles": [
+      "tools/video/hunyuan_video.py"
+    ]
+  },
+  {
+    "id": "hyperframes_compose",
+    "referenceProvider": "hyperframes",
+    "category": "video",
+    "capability": "video_post",
+    "referenceFiles": [
+      "tools/video/hyperframes_compose.py"
+    ]
+  },
+  {
+    "id": "ideogram_fal_image",
+    "referenceProvider": "",
+    "category": "graphics",
+    "capability": "image_generation",
+    "referenceFiles": [
+      "tools/graphics/ideogram_fal_image.py"
+    ]
+  },
+  {
+    "id": "ideogram_image",
+    "referenceProvider": "ideogram",
+    "category": "graphics",
+    "capability": "image_generation",
+    "referenceFiles": [
+      "tools/graphics/ideogram_image.py"
+    ]
+  },
+  {
+    "id": "image_gen",
+    "referenceProvider": "multi",
+    "category": "graphics",
+    "capability": "image_generation",
+    "referenceFiles": [
+      "tools/graphics/image_gen.py"
+    ]
+  },
+  {
+    "id": "image_selector",
+    "referenceProvider": "selector",
+    "category": "graphics",
+    "capability": "image_generation",
+    "referenceFiles": [
+      "tools/graphics/image_selector.py"
+    ]
+  },
+  {
+    "id": "inworld_tts",
+    "referenceProvider": "inworld",
+    "category": "audio",
+    "capability": "tts",
+    "referenceFiles": [
+      "tools/audio/inworld_tts.py"
+    ]
+  },
+  {
+    "id": "jaxa",
+    "referenceProvider": "jaxa",
+    "category": "stock",
+    "capability": "",
+    "referenceFiles": [
+      "tools/video/stock_sources/jaxa.py"
+    ]
+  },
+  {
+    "id": "jimeng_video",
+    "referenceProvider": "volcengine",
+    "category": "video",
+    "capability": "video_generation",
+    "referenceFiles": [
+      "tools/video/jimeng_video.py"
+    ]
+  },
+  {
+    "id": "kling_avatar",
+    "referenceProvider": "kling_official",
+    "category": "avatar",
+    "capability": "avatar",
+    "referenceFiles": [
+      "tools/avatar/kling_avatar.py"
+    ]
+  },
+  {
+    "id": "kling_lip_sync",
+    "referenceProvider": "kling_official",
+    "category": "avatar",
+    "capability": "avatar",
+    "referenceFiles": [
+      "tools/avatar/kling_lip_sync.py"
+    ]
+  },
+  {
+    "id": "kling_official_image",
+    "referenceProvider": "kling_official",
+    "category": "graphics",
+    "capability": "image_generation",
+    "referenceFiles": [
+      "tools/graphics/kling_official_image.py"
+    ]
+  },
+  {
+    "id": "kling_official_video",
+    "referenceProvider": "kling_official",
+    "category": "video",
+    "capability": "video_generation",
+    "referenceFiles": [
+      "tools/video/kling_official_video.py"
+    ]
+  },
+  {
+    "id": "kling_tts",
+    "referenceProvider": "kling_official",
+    "category": "audio",
+    "capability": "tts",
+    "referenceFiles": [
+      "tools/audio/kling_tts.py"
+    ]
+  },
+  {
+    "id": "kling_video",
+    "referenceProvider": "kling",
+    "category": "video",
+    "capability": "video_generation",
+    "referenceFiles": [
+      "tools/video/kling_video.py"
+    ]
+  },
+  {
+    "id": "lip_sync",
+    "referenceProvider": "wav2lip",
+    "category": "avatar",
+    "capability": "avatar",
+    "referenceFiles": [
+      "tools/avatar/lip_sync.py"
+    ]
+  },
+  {
+    "id": "loc",
+    "referenceProvider": "loc",
+    "category": "stock",
+    "capability": "",
+    "referenceFiles": [
+      "tools/video/stock_sources/loc.py"
+    ]
+  },
+  {
+    "id": "local_diffusion",
+    "referenceProvider": "local_diffusion",
+    "category": "graphics",
+    "capability": "image_generation",
+    "referenceFiles": [
+      "tools/graphics/local_diffusion.py"
+    ]
+  },
+  {
+    "id": "ltx_api_video",
+    "referenceProvider": "ltx",
+    "category": "video",
+    "capability": "video_generation",
+    "referenceFiles": [
+      "tools/video/ltx_api_video.py"
+    ]
+  },
+  {
+    "id": "ltx_video_local",
+    "referenceProvider": "ltx",
+    "category": "video",
+    "capability": "video_generation",
+    "referenceFiles": [
+      "tools/video/ltx_video_local.py"
+    ]
+  },
+  {
+    "id": "ltx_video_modal",
+    "referenceProvider": "ltx-modal",
+    "category": "video",
+    "capability": "video_generation",
+    "referenceFiles": [
+      "tools/video/ltx_video_modal.py"
+    ]
+  },
+  {
+    "id": "math_animate",
+    "referenceProvider": "manim",
+    "category": "graphics",
+    "capability": "graphics",
+    "referenceFiles": [
+      "tools/graphics/math_animate.py"
+    ]
+  },
+  {
+    "id": "minimax_fal_video",
+    "referenceProvider": "minimax",
+    "category": "video",
+    "capability": "video_generation",
+    "referenceFiles": [
+      "tools/video/minimax_fal_video.py"
+    ]
+  },
+  {
+    "id": "minimax_image",
+    "referenceProvider": "minimax",
+    "category": "graphics",
+    "capability": "image_generation",
+    "referenceFiles": [
+      "tools/graphics/minimax_image.py"
+    ]
+  },
+  {
+    "id": "minimax_video",
+    "referenceProvider": "minimax",
+    "category": "video",
+    "capability": "video_generation",
+    "referenceFiles": [
+      "tools/video/minimax_video.py"
+    ]
+  },
+  {
+    "id": "mixkit",
+    "referenceProvider": "envato",
+    "category": "stock",
+    "capability": "",
+    "referenceFiles": [
+      "tools/video/stock_sources/mixkit.py"
+    ]
+  },
+  {
+    "id": "music_gen",
+    "referenceProvider": "elevenlabs",
+    "category": "audio",
+    "capability": "music_generation",
+    "referenceFiles": [
+      "tools/audio/music_gen.py"
+    ]
+  },
+  {
+    "id": "music_library",
+    "referenceProvider": "local",
+    "category": "audio",
+    "capability": "music_library",
+    "referenceFiles": [
+      "tools/audio/music_library.py"
+    ]
+  },
+  {
+    "id": "nara",
+    "referenceProvider": "nara",
+    "category": "stock",
+    "capability": "",
+    "referenceFiles": [
+      "tools/video/stock_sources/nara.py"
+    ]
+  },
+  {
+    "id": "nasa",
+    "referenceProvider": "nasa",
+    "category": "stock",
+    "capability": "",
+    "referenceFiles": [
+      "tools/video/stock_sources/nasa.py"
+    ]
+  },
+  {
+    "id": "noaa",
+    "referenceProvider": "noaa",
+    "category": "stock",
+    "capability": "",
+    "referenceFiles": [
+      "tools/video/stock_sources/noaa.py"
+    ]
+  },
+  {
+    "id": "openai_fal_image",
+    "referenceProvider": "",
+    "category": "graphics",
+    "capability": "image_generation",
+    "referenceFiles": [
+      "tools/graphics/openai_fal_image.py"
+    ]
+  },
+  {
+    "id": "openai_image",
+    "referenceProvider": "openai",
+    "category": "graphics",
+    "capability": "image_generation",
+    "referenceFiles": [
+      "tools/graphics/openai_image.py"
+    ]
+  },
+  {
+    "id": "openai_tts",
+    "referenceProvider": "openai",
+    "category": "audio",
+    "capability": "tts",
+    "referenceFiles": [
+      "tools/audio/openai_tts.py"
+    ]
+  },
+  {
+    "id": "pexels",
+    "referenceProvider": "pexels",
+    "category": "stock",
+    "capability": "",
+    "referenceFiles": [
+      "tools/video/stock_sources/pexels.py"
+    ]
+  },
+  {
+    "id": "pexels_image",
+    "referenceProvider": "pexels",
+    "category": "graphics",
+    "capability": "image_generation",
+    "referenceFiles": [
+      "tools/graphics/pexels_image.py"
+    ]
+  },
+  {
+    "id": "pexels_video",
+    "referenceProvider": "pexels",
+    "category": "video",
+    "capability": "video_generation",
+    "referenceFiles": [
+      "tools/video/pexels_video.py"
+    ]
+  },
+  {
+    "id": "piper_tts",
+    "referenceProvider": "piper",
+    "category": "audio",
+    "capability": "tts",
+    "referenceFiles": [
+      "tools/audio/piper_tts.py"
+    ]
+  },
+  {
+    "id": "pixabay_image",
+    "referenceProvider": "pixabay",
+    "category": "graphics",
+    "capability": "image_generation",
+    "referenceFiles": [
+      "tools/graphics/pixabay_image.py"
+    ]
+  },
+  {
+    "id": "pixabay_music",
+    "referenceProvider": "pixabay_music",
+    "category": "audio",
+    "capability": "music_search",
+    "referenceFiles": [
+      "tools/audio/pixabay_music.py"
+    ]
+  },
+  {
+    "id": "pixabay_video",
+    "referenceProvider": "pixabay",
+    "category": "video",
+    "capability": "video_generation",
+    "referenceFiles": [
+      "tools/video/pixabay_video.py",
+      "tools/video/stock_sources/pixabay_video.py"
+    ]
+  },
+  {
+    "id": "pond5_pd",
+    "referenceProvider": "pond5",
+    "category": "stock",
+    "capability": "",
+    "referenceFiles": [
+      "tools/video/stock_sources/pond5_pd.py"
+    ]
+  },
+  {
+    "id": "pose_library_builder",
+    "referenceProvider": "openmontage",
+    "category": "character",
+    "capability": "character_animation",
+    "referenceFiles": [
+      "tools/character/character_animation.py"
+    ]
+  },
+  {
+    "id": "qwen_image_21",
+    "referenceProvider": "qwen_local",
+    "category": "graphics",
+    "capability": "image_generation",
+    "referenceFiles": [
+      "tools/graphics/qwen_image_21.py"
+    ]
+  },
+  {
+    "id": "recraft_image",
+    "referenceProvider": "recraft",
+    "category": "graphics",
+    "capability": "image_generation",
+    "referenceFiles": [
+      "tools/graphics/recraft_image.py"
+    ]
+  },
+  {
+    "id": "remotion_caption_burn",
+    "referenceProvider": "remotion",
+    "category": "video",
+    "capability": "subtitle",
+    "referenceFiles": [
+      "tools/video/remotion_caption_burn.py"
+    ]
+  },
+  {
+    "id": "runway_video",
+    "referenceProvider": "runway",
+    "category": "video",
+    "capability": "video_generation",
+    "referenceFiles": [
+      "tools/video/runway_video.py"
+    ]
+  },
+  {
+    "id": "scene_detect",
+    "referenceProvider": "ffmpeg",
+    "category": "analysis",
+    "capability": "analysis",
+    "referenceFiles": [
+      "tools/analysis/scene_detect.py"
+    ]
+  },
+  {
+    "id": "screen_capture_selector",
+    "referenceProvider": "selector",
+    "category": "capture",
+    "capability": "screen_capture",
+    "referenceFiles": [
+      "tools/capture/screen_capture_selector.py"
+    ]
+  },
+  {
+    "id": "screen_recorder",
+    "referenceProvider": "ffmpeg",
+    "category": "capture",
+    "capability": "screen_capture",
+    "referenceFiles": [
+      "tools/capture/screen_recorder.py"
+    ]
+  },
+  {
+    "id": "seedance_ark",
+    "referenceProvider": "ark",
+    "category": "video",
+    "capability": "video_generation",
+    "referenceFiles": [
+      "tools/video/seedance_ark.py"
+    ]
+  },
+  {
+    "id": "seedance_replicate",
+    "referenceProvider": "seedance",
+    "category": "video",
+    "capability": "video_generation",
+    "referenceFiles": [
+      "tools/video/seedance_replicate.py"
+    ]
+  },
+  {
+    "id": "seedance_video",
+    "referenceProvider": "seedance",
+    "category": "video",
+    "capability": "video_generation",
+    "referenceFiles": [
+      "tools/video/seedance_video.py"
+    ]
+  },
+  {
+    "id": "seedream_image",
+    "referenceProvider": "bytedance",
+    "category": "graphics",
+    "capability": "image_generation",
+    "referenceFiles": [
+      "tools/graphics/seedream_image.py"
+    ]
+  },
+  {
+    "id": "showcase_card",
+    "referenceProvider": "ffmpeg",
+    "category": "video",
+    "capability": "video_post",
+    "referenceFiles": [
+      "tools/video/showcase_card.py"
+    ]
+  },
+  {
+    "id": "silence_cutter",
+    "referenceProvider": "ffmpeg",
+    "category": "video",
+    "capability": "video_post",
+    "referenceFiles": [
+      "tools/video/silence_cutter.py"
+    ]
+  },
+  {
+    "id": "sora_video",
+    "referenceProvider": "openai",
+    "category": "video",
+    "capability": "video_generation",
+    "referenceFiles": [
+      "tools/video/sora_video.py"
+    ]
+  },
+  {
+    "id": "subtitle_gen",
+    "referenceProvider": "openmontage",
+    "category": "subtitle",
+    "capability": "subtitle",
+    "referenceFiles": [
+      "tools/subtitle/subtitle_gen.py"
+    ]
+  },
+  {
+    "id": "suno_music",
+    "referenceProvider": "suno",
+    "category": "audio",
+    "capability": "music_generation",
+    "referenceFiles": [
+      "tools/audio/suno_music.py"
+    ]
+  },
+  {
+    "id": "svg_rig_builder",
+    "referenceProvider": "openmontage",
+    "category": "character",
+    "capability": "character_animation",
+    "referenceFiles": [
+      "tools/character/character_animation.py"
+    ]
+  },
+  {
+    "id": "talking_head",
+    "referenceProvider": "sadtalker",
+    "category": "avatar",
+    "capability": "avatar",
+    "referenceFiles": [
+      "tools/avatar/talking_head.py"
+    ]
+  },
+  {
+    "id": "threejs_asset_catalog",
+    "referenceProvider": "multi",
+    "category": "graphics",
+    "capability": "3d_asset_acquisition",
+    "referenceFiles": [
+      "tools/graphics/threejs_asset_catalog.py"
+    ]
+  },
+  {
+    "id": "threejs_world",
+    "referenceProvider": "threejs",
+    "category": "graphics",
+    "capability": "3d_world_generation",
+    "referenceFiles": [
+      "tools/graphics/threejs_world.py"
+    ]
+  },
+  {
+    "id": "transcriber",
+    "referenceProvider": "whisperx",
+    "category": "analysis",
+    "capability": "analysis",
+    "referenceFiles": [
+      "tools/analysis/transcriber.py"
+    ]
+  },
+  {
+    "id": "transcript_fetcher",
+    "referenceProvider": "youtube-transcript-api",
+    "category": "analysis",
+    "capability": "analysis",
+    "referenceFiles": [
+      "tools/analysis/transcript_fetcher.py"
+    ]
+  },
+  {
+    "id": "tts_selector",
+    "referenceProvider": "selector",
+    "category": "audio",
+    "capability": "tts",
+    "referenceFiles": [
+      "tools/audio/tts_selector.py"
+    ]
+  },
+  {
+    "id": "unsplash",
+    "referenceProvider": "unsplash",
+    "category": "stock",
+    "capability": "",
+    "referenceFiles": [
+      "tools/video/stock_sources/unsplash.py"
+    ]
+  },
+  {
+    "id": "upscale",
+    "referenceProvider": "realesrgan",
+    "category": "enhancement",
+    "capability": "enhancement",
+    "referenceFiles": [
+      "tools/enhancement/upscale.py"
+    ]
+  },
+  {
+    "id": "veo_video",
+    "referenceProvider": "veo",
+    "category": "video",
+    "capability": "video_generation",
+    "referenceFiles": [
+      "tools/video/veo_video.py"
+    ]
+  },
+  {
+    "id": "video_analyzer",
+    "referenceProvider": "multi",
+    "category": "analysis",
+    "capability": "analysis",
+    "referenceFiles": [
+      "tools/analysis/video_analyzer.py"
+    ]
+  },
+  {
+    "id": "video_compose",
+    "referenceProvider": "ffmpeg",
+    "category": "video",
+    "capability": "video_post",
+    "referenceFiles": [
+      "tools/video/video_compose.py"
+    ]
+  },
+  {
+    "id": "video_downloader",
+    "referenceProvider": "yt-dlp",
+    "category": "analysis",
+    "capability": "source_ingest",
+    "referenceFiles": [
+      "tools/analysis/video_downloader.py"
+    ]
+  },
+  {
+    "id": "video_selector",
+    "referenceProvider": "selector",
+    "category": "video",
+    "capability": "video_generation",
+    "referenceFiles": [
+      "tools/video/video_selector.py"
+    ]
+  },
+  {
+    "id": "video_stitch",
+    "referenceProvider": "ffmpeg",
+    "category": "video",
+    "capability": "video_post",
+    "referenceFiles": [
+      "tools/video/video_stitch.py"
+    ]
+  },
+  {
+    "id": "video_trimmer",
+    "referenceProvider": "ffmpeg",
+    "category": "video",
+    "capability": "video_post",
+    "referenceFiles": [
+      "tools/video/video_trimmer.py"
+    ]
+  },
+  {
+    "id": "video_understand",
+    "referenceProvider": "transformers",
+    "category": "analysis",
+    "capability": "analysis",
+    "referenceFiles": [
+      "tools/analysis/video_understand.py"
+    ]
+  },
+  {
+    "id": "videvo",
+    "referenceProvider": "videvo",
+    "category": "stock",
+    "capability": "",
+    "referenceFiles": [
+      "tools/video/stock_sources/videvo.py"
+    ]
+  },
+  {
+    "id": "visual_qa",
+    "referenceProvider": "ffmpeg",
+    "category": "analysis",
+    "capability": "analysis",
+    "referenceFiles": [
+      "tools/analysis/visual_qa.py"
+    ]
+  },
+  {
+    "id": "wan_atlas_video",
+    "referenceProvider": "atlascloud",
+    "category": "video",
+    "capability": "video_generation",
+    "referenceFiles": [
+      "tools/video/wan_atlas_video.py"
+    ]
+  },
+  {
+    "id": "wan_fal_video",
+    "referenceProvider": "",
+    "category": "video",
+    "capability": "video_generation",
+    "referenceFiles": [
+      "tools/video/wan_fal_video.py"
+    ]
+  },
+  {
+    "id": "wan_replicate_video",
+    "referenceProvider": "replicate",
+    "category": "video",
+    "capability": "video_generation",
+    "referenceFiles": [
+      "tools/video/wan_replicate_video.py"
+    ]
+  },
+  {
+    "id": "wan_video",
+    "referenceProvider": "wan",
+    "category": "video",
+    "capability": "video_generation",
+    "referenceFiles": [
+      "tools/video/wan_video.py"
+    ]
+  },
+  {
+    "id": "wikimedia",
+    "referenceProvider": "wikimedia",
+    "category": "stock",
+    "capability": "",
+    "referenceFiles": [
+      "tools/video/stock_sources/wikimedia.py"
+    ]
+  }
+]
