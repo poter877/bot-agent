@@ -13,7 +13,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const STYLES_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../workspace/film-styles')
+const STYLES_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../workspace/film-styles')
 
 export interface FilmStyleMeta {
   slug: string
