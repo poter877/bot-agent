@@ -43,10 +43,10 @@ describe('authenticated company model directory', () => {
   })
 
   it('keeps the default inside the usable directory and reports an empty unconfigured catalog', () => {
-    expect(publicModelCatalog(CATALOG, {}).defaultModel).toBeNull()
-    expect(publicModelCatalog(CATALOG, {}).models).toEqual([])
+    expect(publicModelCatalog(CATALOG, () => false).defaultModel).toBeNull()
+    expect(publicModelCatalog(CATALOG, () => false).models).toEqual([])
     const withoutDefault = CATALOG.map(entry => ({ ...entry, enabled: entry.id === 'fast' }))
-    expect(publicModelCatalog(withoutDefault, { openai: 'k' }).defaultModel).toBe('fast')
+    expect(publicModelCatalog(withoutDefault, (provider) => provider === 'openai').defaultModel).toBe('fast')
     expect(() => parseModelCatalog(JSON.stringify(CATALOG.map(entry => ({ ...entry, default: true }))))).toThrow('at most one')
   })
 })

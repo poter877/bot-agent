@@ -1,4 +1,5 @@
 import type { Child } from 'hono/jsx'
+import { registryList } from '../llm/registry.js'
 import type { LlmModelRow, LlmRequestLogRow, MediaModelRow, UserQuotaRow } from '../../db/schema.js'
 
 /**
@@ -93,6 +94,35 @@ export function ForbiddenPage(props: { identity: AdminIdentity | null }) {
         <p class="muted">
           <a href="/api/auth/sign-in">前往登录</a>
         </p>
+      </div>
+    </Layout>
+  )
+}
+
+/** 首启初始化页：系统里还没有任何 role=admin 账号时，匿名可访问；提交后
+ *  创建第一个管理员并自动登录。一旦管理员存在，路由层直接关闭本页。 */
+export function SetupPage(props: { ok?: string; err?: string }) {
+  return (
+    <Layout identity={{ userId: '', email: '初始化模式' }} active="" ok={props.ok} err={props.err}>
+      <div class="card">
+        <h2>初始化：创建第一个管理员</h2>
+        <p class="muted">
+          系统尚未初始化（还没有任何管理员账号）。此处创建的账号自动获得 <code>role=admin</code>，
+          之后请在「用户」页管理其他账号与角色；本页在初始化完成后自动关闭。
+        </p>
+        <form method="post" action="/admin/setup" class="stack">
+          <label for="setup-email">邮箱</label>
+          <input id="setup-email" name="email" type="email" required placeholder="ops@company.com" />
+          <label for="setup-name">显示名称（可选）</label>
+          <input id="setup-name" name="name" type="text" placeholder="运维" />
+          <label for="setup-password">密码（至少 8 位）</label>
+          <input id="setup-password" name="password" type="password" required />
+          <label for="setup-confirm">确认密码</label>
+          <input id="setup-confirm" name="confirm" type="password" required />
+          <div class="full">
+            <button type="submit" class="primary">创建管理员并进入后台</button>
+          </div>
+        </form>
       </div>
     </Layout>
   )
@@ -271,14 +301,19 @@ export function ModelsPage(props: {
         <form method="post" action="/admin/models">
           <label for="m-id">模型 ID（客户端用名）</label>
           <input id="m-id" name="id" required value={editing?.id ?? ''} />
-          <label for="m-provider">Provider</label>
-          <select id="m-provider" name="provider">
-            {(['openai', 'anthropic', 'google'] as const).map((provider) => (
-              <option value={provider} selected={editing?.provider === provider}>{provider}</option>
+          <label for="m-provider">Provider（models.dev 注册表）</label>
+          <input id="m-provider" name="provider" list="registry-providers" required value={editing?.provider ?? ''} placeholder="zhipuai / moonshotai / deepseek / openai / …" />
+          <datalist id="registry-providers">
+            {registryList().map((provider) => (
+              <option key={provider.id} value={provider.id}>{provider.name}</option>
             ))}
-          </select>
+          </datalist>
           <label for="m-model">上游模型串（保密）</label>
           <input id="m-model" name="model" required value={editing?.model ?? ''} />
+          <label for="m-base-url">Base URL（留空用注册表默认端点）</label>
+          <input id="m-base-url" name="base_url" type="url" placeholder="https://…" value={editing?.baseUrl ?? ''} />
+          <label for="m-api-key">API Key（只写；留空沿用已存/环境变量）</label>
+          <input id="m-api-key" name="api_key" type="password" autocomplete="off" />
           <label for="m-display">展示名</label>
           <input id="m-display" name="display_name" value={editing?.displayName ?? ''} />
           <label for="m-max">输出上限（可空）</label>

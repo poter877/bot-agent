@@ -9,13 +9,16 @@ import { HttpApiError, assertSameOrigin } from '../../shared/http.js'
 import type { Logger } from '../../shared/logger.js'
 import type { Auth } from '../auth/auth.js'
 import type { CatalogStore } from '../llm/catalog.js'
+import type { CredentialStore } from '../llm/credentials.js'
 import { isMediaModelKind, type MediaCatalogStore } from '../media/catalog.js'
+import { adminExists, bootstrapFirstAdmin, consoleIdentity, saveModelEntry, validateBootstrapInput, type ConsoleIdentity } from './admin.shared.js'
 import { MediaModelsPage } from './admin.views.js'
 import { listRequestLog } from '../llm/requestLog.js'
 import {
   ForbiddenPage,
   ModelsPage,
   RequestsPage,
+  SetupPage,
   StatusPage,
   UserDetailPage,
   UsersPage,
@@ -41,6 +44,7 @@ export interface AdminDeps {
   auth: Auth
   catalogStore: CatalogStore
   mediaCatalogStore?: MediaCatalogStore
+  credentialStore?: CredentialStore
   startedAt?: number
 }
 
@@ -84,30 +88,21 @@ function optionalInt(fields: Record<string, string>, key: string, min: number): 
 }
 
 export function createAdminRoutes(deps: AdminDeps): Hono<AppEnv> {
-  const { config, db, redis, logger, auth, catalogStore } = deps
+  const { config, db, redis, logger, auth, catalogStore, credentialStore } = deps
   const mediaCatalogStore = deps.mediaCatalogStore
   const startedAt = deps.startedAt ?? Date.now()
   const origin = new URL(config.BETTER_AUTH_URL).origin
 
   /** Fresh role check on every console request (cookie cache disabled). */
   async function identity(c: Ctx): Promise<AdminIdentity | null> {
-    let result: { user?: { id?: string; email?: string; role?: string } } | null
-    try {
-      result = (await auth.api.getSession({
-        headers: c.req.raw.headers,
-        query: { disableCookieCache: true },
-      })) as unknown as { user?: { id?: string; email?: string; role?: string } } | null
-    } catch {
-      return null
-    }
-    const sessionUser = result?.user
-    if (!sessionUser?.id || sessionUser.role !== 'admin') return null
-    return { userId: sessionUser.id, email: sessionUser.email ?? '' }
+    return consoleIdentity(auth, c.req.raw.headers)
   }
 
   async function page(c: Ctx, render: (identity: AdminIdentity) => Promise<string>): Promise<Response> {
     const who = await identity(c)
     if (who === null) {
+      // 初始化完成前，控制台的一切匿名 GET 都引流到初始化向导。
+      if (!(await adminExists(db))) return redirectTo(c, '/admin/setup', {})
       return c.html(ForbiddenPage({ identity: null }).toString(), 403)
     }
     return c.html(await render(who))
@@ -135,6 +130,35 @@ export function createAdminRoutes(deps: AdminDeps): Hono<AppEnv> {
   }
 
   const routes = new Hono<AppEnv>()
+
+  // ── 首启初始化：唯一的免登录写路径，仅在零管理员时开放 ──
+  // 共享逻辑在 admin.shared.ts（better-auth 建号 + advisory-lock 事务提升）。
+  routes.get('/setup', async (c) => {
+    if (await adminExists(db)) return c.html(ForbiddenPage({ identity: null }).toString(), 403)
+    return c.html(SetupPage({ ...flash(c) }).toString())
+  })
+
+  routes.post('/setup', async (c) => {
+    if (await adminExists(db)) return c.html(ForbiddenPage({ identity: null }).toString(), 403)
+    try {
+      assertSameOrigin(c, origin)
+      const fields = await formFields(c)
+      const input = validateBootstrapInput(fields)
+      const result = await bootstrapFirstAdmin(db, auth, input)
+      if (!result.ok) return redirectTo(c, '/admin/setup', { err: result.error })
+      // 自动登录：让 better-auth 铸会话，把它的 Set-Cookie 附到重定向响应上。
+      const signed = await auth.api.signInEmail({ body: { email: input.email, password: input.password }, returnHeaders: true })
+      const res = redirectTo(c, '/admin', { ok: '初始化完成，已以该管理员身份登录。' })
+      for (const cookie of signed.headers.getSetCookie()) res.headers.append('set-cookie', cookie)
+      logger.info({ userId: result.userId }, 'admin bootstrap completed via /admin/setup')
+      return res
+    } catch (error) {
+      if (error instanceof HttpApiError) throw error
+      const message = error instanceof Error ? error.message : '初始化失败'
+      logger.warn({ err: error }, 'admin bootstrap failed')
+      return redirectTo(c, '/admin/setup', { err: message })
+    }
+  })
 
   routes.get('/', async (c) =>
     page(c, async (who) => {
@@ -249,26 +273,22 @@ export function createAdminRoutes(deps: AdminDeps): Hono<AppEnv> {
   routes.post('/models', action(async (c) => {
     const fields = await formFields(c)
     const id = (fields.id ?? '').trim()
-    const provider = (fields.provider ?? '').trim()
-    const model = (fields.model ?? '').trim()
-    if (!id || !model || !['openai', 'anthropic', 'google'].includes(provider)) {
-      throw new Error('模型 ID、上游模型串与 Provider 均必填')
-    }
-    await catalogStore.upsert({
-      id,
-      provider,
-      model,
-      enabled: fields.enabled === 'on',
-      displayName: (fields.display_name ?? '').trim() || null,
-      default: fields.is_default === 'on',
-      contextLength: optionalInt(fields, 'context_length', 1),
-      maxOutputTokens: optionalInt(fields, 'max_output_tokens', 1),
-      note: (fields.note ?? '').trim() || null,
-    })
-    if (fields.is_default === 'on') {
-      // Single-default invariant: the newest default wins.
-      await db.update(llmModels).set({ isDefault: false }).where(sql`${llmModels.id} <> ${id} and ${llmModels.isDefault}`)
-    }
+    await saveModelEntry(
+      { db, catalogStore, credentialStore },
+      {
+        id,
+        provider: (fields.provider ?? '').trim(),
+        model: (fields.model ?? '').trim(),
+        enabled: fields.enabled === 'on',
+        displayName: (fields.display_name ?? '').trim() || null,
+        default: fields.is_default === 'on',
+        contextLength: (fields.context_length ?? '').trim() || null,
+        maxOutputTokens: (fields.max_output_tokens ?? '').trim() || null,
+        note: (fields.note ?? '').trim() || null,
+        baseURL: (fields.base_url ?? '').trim() || null,
+        apiKey: (fields.api_key ?? '').trim() || null,
+      },
+    )
     return redirectTo(c, '/admin/models', { ok: `模型 ${id} 已保存（目录缓存 15 秒内刷新）。` })
   }))
 

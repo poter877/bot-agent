@@ -1,4 +1,4 @@
-import { boolean, index, integer, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
+import { boolean, index, integer, pgTable, primaryKey, text, timestamp } from 'drizzle-orm/pg-core'
 
 /**
  * Better Auth owned authentication schema (user / session / account /
@@ -99,6 +99,7 @@ export const llmModels = pgTable('llm_models', {
   id: text('id').primaryKey(),
   provider: text('provider').notNull(), // registry key inside this service
   model: text('model').notNull(), // upstream model string, never echoed to clients
+  baseUrl: text('base_url'), // OpenAI-compatible endpoint override; null = vendor default
   enabled: boolean('enabled').notNull().default(true),
   displayName: text('display_name'),
   isDefault: boolean('is_default').notNull().default(false),
@@ -113,6 +114,26 @@ export const llmModels = pgTable('llm_models', {
 export type LlmModelRow = typeof llmModels.$inferSelect
 
 /**
+ * Provider credentials entered from the operations console, keyed by
+ * (provider, base_url) — one credential covers every catalog entry sharing
+ * that endpoint. Values are write-only: the console shows at most a masked
+ * hint and the API never echoes api_key back to any client. Env keys
+ * (OPENAI_API_KEY, ...) remain the fallback when no row matches.
+ */
+export const llmProviderCredentials = pgTable(
+  'llm_provider_credentials',
+  {
+    provider: text('provider').notNull(),
+    baseUrl: text('base_url').notNull().default(''),
+    apiKey: text('api_key').notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.provider, table.baseUrl] })],
+)
+
+export type LlmProviderCredentialRow = typeof llmProviderCredentials.$inferSelect
+
+/**
  * The media directory — same story as llm_models, one row per client-facing
  * generation model (image/video/speech/transcription kinds). The console CRUDs
  * it; LLM_IMAGE_CATALOG/LLM_VIDEO_CATALOG only seed an empty table.
@@ -122,6 +143,7 @@ export const mediaModels = pgTable('media_models', {
   kind: text('kind').notNull(), // image | video | speech | transcription
   provider: text('provider').notNull(), // registry key inside this service
   model: text('model').notNull(), // upstream model string, never echoed to clients
+  baseUrl: text('base_url'), // OpenAI-compatible endpoint override; null = vendor default
   enabled: boolean('enabled').notNull().default(true),
   displayName: text('display_name'),
   maxImages: integer('max_images'), // image only: server-side per-call clamp

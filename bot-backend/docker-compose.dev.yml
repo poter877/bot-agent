@@ -9,9 +9,11 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: bot_backend
     ports:
-      - "5432:5432"
+      - "30173:5432"
     volumes:
-      - bot-backend-pgdata:/var/lib/postgresql/data
+      # postgres:18+ images keep PGDATA under /var/lib/postgresql/<major>/docker;
+      # mounting the legacy .../data path makes the entrypoint abort as "unused".
+      - bot-backend-pgdata:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -22,7 +24,7 @@ services:
     image: redis:7-alpine
     command: ["redis-server", "--save", "", "--appendonly", "no"]
     ports:
-      - "6379:6379"
+      - "30174:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s

@@ -11,6 +11,8 @@ import type { CatalogEntry, CatalogStore } from './catalog.js'
 import { CatalogError, parseModelCatalog, publicModelCatalog, resolveCatalogEntry } from './catalog.js'
 import { llmStreamRequestSchema, type LlmStreamRequest } from './request.js'
 import { createModelResolver, type ModelResolver } from './providers.js'
+import type { CredentialStore } from './credentials.js'
+import { registryEnvKeys } from './registry.js'
 import { enforceQuota } from './quota.js'
 import { recordRequestLog } from './requestLog.js'
 import { directMediaOnly, validateMedia } from './media.js'
@@ -40,6 +42,8 @@ export interface LlmRoutesDeps {
   catalog?: CatalogEntry[]
   /** Production catalog source (llm_models table, console CRUD). */
   catalogStore?: CatalogStore
+  /** Production credential source (llm_provider_credentials, console CRUD). */
+  credentialStore?: CredentialStore
 }
 
 function parseBody(raw: unknown): LlmStreamRequest {
@@ -199,8 +203,22 @@ export function createLlmRoutes(deps: LlmRoutesDeps): Hono<AppEnv> {
     : catalogStore
       ? () => catalogStore.load()
       : async () => staticCatalog
-  const providerKeys = { openai: config.OPENAI_API_KEY, anthropic: config.ANTHROPIC_API_KEY, google: config.GOOGLE_GENERATIVE_AI_API_KEY }
-  const resolveModel = deps.modelResolver ?? createModelResolver(providerKeys)
+  const credentialStore = deps.credentialStore
+  // 每请求/每页预取一次凭据快照；密钥判定 = 控制台凭证 > 注册表 env 名对应的
+  // 配置值。适配器/端点由 models.dev 注册表驱动（providers.ts）。
+  const credentialKeyFor = () => (credentialStore ? credentialStore.snapshot() : Promise.resolve(undefined))
+  const envApiKey = (provider: string) => {
+    for (const envKey of registryEnvKeys(provider)) {
+      const value = (config as unknown as Record<string, string | undefined>)[envKey]
+      if (value?.trim()) return value
+    }
+    return undefined
+  }
+  const hasKeyFor = async () => {
+    const credentialKey = await credentialKeyFor()
+    return (provider: string, baseURL?: string | null) =>
+      Boolean(credentialKey?.(provider, baseURL) || envApiKey(provider)?.trim())
+  }
   const concurrency = new ConcurrencyGuard(redis, config.LLM_STREAM_MAX_CONCURRENT_PER_USER)
   const timings: StreamTimings = {
     firstEventTimeoutMs: config.LLM_STREAM_FIRST_EVENT_TIMEOUT_MS,
@@ -214,7 +232,7 @@ export function createLlmRoutes(deps: LlmRoutesDeps): Hono<AppEnv> {
   routes.get('/models', async (c) => {
     requireAuthContext(c)
     c.header('Cache-Control', 'private, no-store')
-    return c.json(publicModelCatalog(await loadCatalog(), providerKeys))
+    return c.json(publicModelCatalog(await loadCatalog(), await hasKeyFor()))
   })
 
   routes.post('/stream', async (c) => {
@@ -244,7 +262,7 @@ export function createLlmRoutes(deps: LlmRoutesDeps): Hono<AppEnv> {
     const request = parseBody(body)
     let entry: CatalogEntry
     try {
-      entry = resolveCatalogEntry(await loadCatalog(), request.model, providerKeys)
+      entry = resolveCatalogEntry(await loadCatalog(), request.model, await hasKeyFor())
     } catch (error) {
       if (error instanceof CatalogError) {
         await recordRequestLog(db, {
@@ -287,6 +305,7 @@ export function createLlmRoutes(deps: LlmRoutesDeps): Hono<AppEnv> {
 
     let model: LanguageModel
     try {
+      const resolveModel = deps.modelResolver ?? createModelResolver(await credentialKeyFor(), envApiKey)
       model = resolveModel(entry)
       await validateMedia(request, entry.provider, model)
     } catch (error) {

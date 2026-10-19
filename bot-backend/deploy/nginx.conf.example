@@ -52,6 +52,6 @@
 #   }
 #
 #   upstream bot_backend {
-#     server 127.0.0.1:3000;  # add one line per API replica
+#     server 127.0.0.1:30172;  # add one line per API replica
 #     keepalive 32;
 #   }

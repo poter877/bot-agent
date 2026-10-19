@@ -10,6 +10,20 @@ import type { AppEnv } from '../shared/context.js'
  */
 export function securityMiddleware(): Array<MiddlewareHandler<AppEnv>> {
   return [
+    // 管理台的 HTML 面（/admin 服务端渲染控制台 + /console SPA）必须加载同源
+    // 脚本/样式才能工作。注册在最前、于 next() 之后再改写 CSP，保证覆盖
+    // secureHeaders 的 default-src 'none'（/api 与其余响应维持最严格）。
+    function consoleCsp(c, next) {
+      const relaxed = c.req.path.startsWith('/admin') || c.req.path.startsWith('/console')
+      return next().then(() => {
+        if (relaxed) {
+          c.res.headers.set(
+            'Content-Security-Policy',
+            "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'",
+          )
+        }
+      })
+    } satisfies MiddlewareHandler<AppEnv>,
     secureHeaders({
       // HSTS is harmless over plain HTTP dev traffic and correct behind TLS.
       strictTransportSecurity: 'max-age=31536000; includeSubDomains',

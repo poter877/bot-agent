@@ -107,7 +107,7 @@ export async function createTestApp(
 
 export async function truncateAll(database: Database): Promise<void> {
   await database.pool.query(
-    'TRUNCATE "user", session, account, verification, llm_models, media_models, user_quotas, llm_request_log, api_tokens, device_codes CASCADE',
+    'TRUNCATE "user", session, account, verification, llm_models, media_models, llm_provider_credentials, user_quotas, llm_request_log, api_tokens, device_codes, cloud_computer CASCADE',
   )
 }
 

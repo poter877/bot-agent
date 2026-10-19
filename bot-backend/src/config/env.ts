@@ -17,7 +17,7 @@ const csvList = (fallback: string[] = []) =>
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-  PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+  PORT: z.coerce.number().int().min(1).max(65535).default(30172),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 
   // Authoritative stores
@@ -67,6 +67,19 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   GOOGLE_GENERATIVE_AI_API_KEY: z.string().optional(),
+  // Text-gateway vendor keys whose names come from the models.dev registry
+  // (registry env[0] per provider); the console credential store is the
+  // primary path and these env names are the per-vendor fallback.
+  DEEPSEEK_API_KEY: z.string().optional(),
+  MOONSHOT_API_KEY: z.string().optional(),
+  ZHIPU_API_KEY: z.string().optional(),
+  GROQ_API_KEY: z.string().optional(),
+  MISTRAL_API_KEY: z.string().optional(),
+  TOGETHERAI_API_KEY: z.string().optional(),
+  FIREWORKS_API_KEY: z.string().optional(),
+  COHERE_API_KEY: z.string().optional(),
+  PERPLEXITY_API_KEY: z.string().optional(),
+  OPENAI_COMPATIBLE_API_KEY: z.string().optional(),
   XAI_API_KEY: z.string().optional(),
   FAL_KEY: z.string().optional(),
   // Async-poll media providers (ai-drama's video/image vendors moved behind

@@ -153,7 +153,7 @@ describe('pinned provider adapters receive actual media payloads', () => {
       { role: 'model', parts: [{ functionCall: { name: 'computer', args: {} } }] },
       { role: 'user', parts: [{ functionResponse: { name: 'computer', parts: [{ inlineData: { mimeType: 'image/png', data: IMAGE } }] } }] },
     ] })
-    expect(createModelResolver({ google: 'test' })({ id: 'v', provider: 'google', model: 'gemini-2.5-flash', enabled: true })).toMatchObject({ provider: 'google.generative-ai' })
+    expect(createModelResolver(() => 'test')({ id: 'v', provider: 'google', model: 'gemini-2.5-flash', enabled: true })).toMatchObject({ provider: 'google.generative-ai' })
   })
 
   it('passes a native Google video URL directly without a backend media fetch', async () => {

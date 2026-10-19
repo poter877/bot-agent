@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 import type { Db } from '../../db/client.js'
 import { llmModels } from '../../db/schema.js'
+import { registryNeedsBaseURL } from './registry.js'
 
 /**
  * The server-owned model directory (doc《流式服务端重构》§7): clients name a
@@ -17,6 +18,8 @@ const catalogEntrySchema = z.object({
   provider: z.enum(['openai', 'anthropic', 'google']),
   /** The upstream model string sent to the vendor — never echoed to clients. */
   model: z.string().min(1).max(200),
+  /** OpenAI-compatible endpoint override; empty = vendor default endpoint. */
+  baseURL: z.string().trim().max(500).optional(),
   enabled: z.boolean().default(true),
   displayName: z.string().trim().min(1).max(200).optional(),
   default: z.boolean().optional(),
@@ -72,8 +75,8 @@ export function parseModelCatalog(raw: string): CatalogEntry[] {
 }
 
 /** Public projection: upstream names and credentials never leave this module. */
-export function publicModelCatalog(catalog: CatalogEntry[], providerApiKeys: Readonly<Record<string, string | undefined>>) {
-  const available = catalog.filter((entry) => entry.enabled && providerApiKeys[entry.provider]?.trim())
+export function publicModelCatalog(catalog: CatalogEntry[], hasKey: (provider: string, baseURL?: string | null) => boolean) {
+  const available = catalog.filter((entry) => entry.enabled && hasKey(entry.provider, entry.baseURL))
   return {
     models: available.map((entry) => ({
       id: entry.id,
@@ -102,7 +105,7 @@ export function publicModelCatalog(catalog: CatalogEntry[], providerApiKeys: Rea
 export function resolveCatalogEntry(
   catalog: CatalogEntry[],
   requestedModel: string,
-  providerApiKeys: Readonly<Record<string, string | undefined>>,
+  hasKey: (provider: string, baseURL?: string | null) => boolean,
 ): CatalogEntry {
   const entry = catalog.find((candidate) => candidate.id.toLowerCase() === requestedModel.trim().toLowerCase())
   if (entry === undefined) {
@@ -111,11 +114,18 @@ export function resolveCatalogEntry(
   if (!entry.enabled) {
     throw new CatalogError(403, 'model_disabled', `Model "${entry.id}" is not enabled.`)
   }
-  if (!providerApiKeys[entry.provider]) {
+  if (!hasKey(entry.provider, entry.baseURL)) {
     throw new CatalogError(503, 'provider_key_missing', 'The model backend is not configured.')
+  }
+  if (registryNeedsBaseURL(entry.provider) && !entry.baseURL) {
+    throw new CatalogError(503, 'provider_key_missing', `Model "${entry.id}" has no endpoint configured.`)
   }
   return entry
 }
+
+
+/** Console/DB credential lookup: returns the stored API key for (provider, baseURL), if any. */
+export type CredentialLookup = (provider: string, baseURL?: string | null) => string | undefined
 
 // ── DB-backed catalog (console CRUD → gateway reads) ───────────────────────
 
@@ -124,6 +134,7 @@ export interface CatalogUpsert {
   id: string
   provider: string
   model: string
+  baseURL?: string | null
   enabled: boolean
   displayName?: string | null
   default?: boolean
@@ -146,6 +157,7 @@ function rowToEntry(row: typeof llmModels.$inferSelect): CatalogEntry {
     id: row.id,
     provider: row.provider as CatalogEntry['provider'],
     model: row.model,
+    ...(row.baseUrl ? { baseURL: row.baseUrl } : {}),
     enabled: row.enabled,
     ...(row.displayName ? { displayName: row.displayName } : {}),
     ...(row.isDefault ? { default: true } : {}),
@@ -160,6 +172,7 @@ function upsertToRow(entry: CatalogUpsert): typeof llmModels.$inferInsert {
     id: entry.id.trim(),
     provider: entry.provider,
     model: entry.model,
+    baseUrl: entry.baseURL?.trim().replace(/\/+$/, '') || null,
     enabled: entry.enabled,
     displayName: entry.displayName ?? null,
     isDefault: entry.default ?? false,

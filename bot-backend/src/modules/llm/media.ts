@@ -3,7 +3,8 @@ import { z } from 'zod'
 import type { LanguageModel } from 'ai'
 import { HttpApiError } from '../../shared/http.js'
 import type { LlmStreamRequest } from './request.js'
-import type { ProviderKey } from './providers.js'
+/** 文本网关的 provider 标识（注册表驱动，自由标签）；媒体校验只关心是否已知厂商。 */
+export type ProviderKey = string
 
 export const providerOptionsSchema = z.record(z.string(), z.record(z.string(), z.json()))
 
