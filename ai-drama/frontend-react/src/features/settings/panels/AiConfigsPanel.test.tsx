@@ -33,7 +33,7 @@ afterEach(() => { cleanup(); vi.restoreAllMocks() })
 describe('AiConfigsPanel interactions', { timeout: 30_000 }, () => {
   it('makes the selected configuration the default even when priorities are tied', async () => {
     const user = userEvent.setup()
-    const configs = [config(1, 'first-config-model'), config(2, 'second-config-model')]
+    const configs = [config(1, 'first-config-model'), config(2, 'second-config-model')].map((item) => ({ ...item, serviceType: 'lipsync' as const }))
     vi.spyOn(aiConfigApi, 'list').mockImplementation(async () => configs.map((item) => ({ ...item })))
     vi.spyOn(aiConfigApi, 'update').mockImplementation(async (id, payload) => {
       const item = configs.find((row) => row.id === id)!
@@ -55,9 +55,9 @@ describe('AiConfigsPanel interactions', { timeout: 30_000 }, () => {
     const user = userEvent.setup()
     vi.spyOn(aiConfigApi, 'list').mockResolvedValue([])
     mountPanel()
-    await user.click(screen.getByRole('button', { name: '文本' }))
-    // 文本预设即 company：手动输入是「自定义目录 id」兜底入口
-    const input = screen.getByPlaceholderText(/自定义目录 id|模型名/) as HTMLInputElement
+    await user.click(screen.getByRole('button', { name: '添加口型同步服务' }))
+    // 直连工具服务保留手动输入（公司五类只能从目录直选）
+    const input = screen.getByPlaceholderText(/模型名/) as HTMLInputElement
     await user.type(input, '候选模型')
     fireEvent.keyDown(input, { key: 'Enter', code: 'Enter', isComposing: true, keyCode: 229 })
     expect(input.value).toBe('候选模型')
@@ -70,21 +70,19 @@ describe('AiConfigsPanel interactions', { timeout: 30_000 }, () => {
 
 it('sources company model chips from the kind-routed catalog proxy', async () => {
   vi.spyOn(aiConfigApi, 'list').mockResolvedValue([])
-  const companyModels = vi.spyOn(aiConfigApi, 'companyModels').mockResolvedValue({
-    models: [{ id: 'seedream-x', displayName: 'Seedream 目录项' }, { id: 'wan-x', displayName: 'wan-x' }],
-    defaultModel: 'seedream-x',
-  })
+  const companyModels = vi.spyOn(aiConfigApi, 'companyModels').mockImplementation(async (kind?: string) =>
+    kind === 'image'
+      ? { models: [{ id: 'seedream-x', displayName: 'Seedream 目录项' }, { id: 'wan-x', displayName: 'wan-x' }], defaultModel: 'seedream-x' } as const
+      : { models: [], defaultModel: null })
   const create = vi.spyOn(aiConfigApi, 'create').mockResolvedValue({})
   mountPanel()
-  fireEvent.click(screen.getByRole('button', { name: '图片' }))
   const chip = await screen.findByRole('button', { name: /Seedream 目录项/ })
   expect(screen.getByText('wan-x')).toBeTruthy()
-  // 目录默认项在 chip 旁标注（替代旧的整行文字说明）
+  // 目录默认项在 chip 旁标注
   expect(chip.textContent).toContain('目录默认')
   expect(screen.getByText('wan-x').closest('button')!.textContent).not.toContain('目录默认')
   expect(companyModels).toHaveBeenCalledWith('image', expect.anything())
-  fireEvent.click(chip)
-  fireEvent.click(screen.getByRole('button', { name: '保存' }))
+  // 公司五类不走弹窗：目录就绪即按目录默认零接触建档
   await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({
     service_type: 'image', provider: 'company', model: ['seedream-x'],
   })))
@@ -94,10 +92,7 @@ it('creates a specialist service through the same configuration API', async () =
   vi.spyOn(aiConfigApi, 'list').mockResolvedValue([])
   const create = vi.spyOn(aiConfigApi, 'create').mockResolvedValue({})
   mountPanel()
-  for (const label of ['语音合成', '语音识别', '口型同步', '骨骼绑定', '联网资料', '联网素材']) {
-    expect(screen.getByRole('button', { name: label })).toBeTruthy()
-  }
-  fireEvent.click(screen.getByRole('button', { name: '口型同步' }))
+  fireEvent.click(screen.getByRole('button', { name: '添加口型同步服务' }))
   const dialog = screen.getByRole('dialog')
   const baseUrl = dialog.querySelector<HTMLInputElement>('input[name="base_url"]')!
   expect(baseUrl.value).toBe('https://api.sync.so')
@@ -110,7 +105,7 @@ it('creates a specialist service through the same configuration API', async () =
 })
 
 it('edits a configured service with an empty key and tests by server-side ID', async () => {
-  vi.spyOn(aiConfigApi, 'list').mockResolvedValue([{ ...config(7, 'gpt-4o-mini-tts'), serviceType: 'speech', hasApiKey: true }])
+  vi.spyOn(aiConfigApi, 'list').mockResolvedValue([{ ...config(7, 'gpt-4o-mini-tts'), serviceType: 'lipsync', hasApiKey: true }])
   const update = vi.spyOn(aiConfigApi, 'update').mockResolvedValue(null)
   const probe = vi.spyOn(aiConfigApi, 'test').mockResolvedValue({ ok: true, reachable: true })
   mountPanel()
@@ -128,26 +123,46 @@ it('adds catalog-provided capabilities through the unified settings form', async
   vi.spyOn(aiConfigApi, 'list').mockResolvedValue([])
   const create = vi.spyOn(aiConfigApi, 'create').mockResolvedValue({})
   mountPanel()
-  fireEvent.click(await screen.findByRole('button', { name: '音乐与音效' }))
+  fireEvent.click(await screen.findByRole('button', { name: '添加音乐与音效服务' }))
   expect(screen.getByRole('dialog').textContent).toContain('ElevenLabs 音乐')
   fireEvent.change(screen.getByLabelText('API Key'), { target: { value: 'music-secret' } })
   fireEvent.click(screen.getByRole('button', { name: '保存' }))
   await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({ service_type: 'music', provider: 'elevenlabs', model: ['music_v1'], base_url: 'https://api.elevenlabs.io' })))
 })
-it('applies the company preset for core services and appends catalog tool rows after it', async () => {
+it('renders company services as catalog pickers and keeps catalog tool presets addable', async () => {
   vi.mocked(toolboxApi.catalog).mockResolvedValue({ tools: [], providers: [{ provider: 'openai', serviceType: 'image', name: 'OpenAI 旧工具', baseUrl: 'https://old.example.com', models: ['gpt-image-1', 'gpt-image-2'] }] })
   vi.spyOn(aiConfigApi, 'list').mockResolvedValue([])
   const create = vi.spyOn(aiConfigApi, 'create').mockResolvedValue({})
   mountPanel()
   await waitFor(() => expect(toolboxApi.catalog).toHaveBeenCalled())
-  fireEvent.click(screen.getByRole('button', { name: '图片' }))
-  // 公司后端是图片服务的默认且首选预设；工具行预设仅追加在后排
-  expect(screen.getByRole('dialog').textContent).toContain('公司模型服务')
+  // 公司五类不再有“添加服务”弹窗（图片的添加按钮来自目录工具预设，公司类型文本则完全没有）
+  expect(screen.queryByRole('button', { name: '添加文本服务' })).toBeNull()
+  fireEvent.click(await screen.findByRole('button', { name: '添加图片服务' }))
   expect(screen.getByRole('button', { name: 'OpenAI 旧工具' })).toBeTruthy()
-  expect(screen.queryByLabelText('API Key')).toBeNull()
-  expect(screen.queryByLabelText('Base URL')).toBeNull()
+  fireEvent.change(screen.getByLabelText('API Key'), { target: { value: 'legacy-secret' } })
   fireEvent.click(screen.getByRole('button', { name: '保存' }))
-  await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({ service_type: 'image', provider: 'company', api_key: '', base_url: '' })))
+  await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({ service_type: 'image', provider: 'openai', api_key: 'legacy-secret', base_url: 'https://old.example.com' })))
+})
+
+it('auto-provisions the company config from the catalog default and switches defaults on click', { timeout: 20_000 }, async () => {
+  const companyModels = vi.spyOn(aiConfigApi, 'companyModels').mockImplementation(async (kind?: string) =>
+    kind === 'image'
+      ? { models: [{ id: 'seedream-x', displayName: 'Seedream X' }, { id: 'kiki', displayName: 'Kiki' }], defaultModel: 'seedream-x' } as const
+      : { models: [], defaultModel: null })
+  vi.spyOn(aiConfigApi, 'list').mockResolvedValue([])
+  const create = vi.spyOn(aiConfigApi, 'create').mockResolvedValue({})
+  const update = vi.spyOn(aiConfigApi, 'update').mockResolvedValue(null)
+  const client = mountPanel()
+  // 目录就绪 → 按目录默认零接触建档
+  await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({ service_type: 'image', provider: 'company', model: ['seedream-x'] })))
+  expect(companyModels).toHaveBeenCalledWith('image', expect.anything())
+  // 建档后刷新列表 → 点击 kiki 切换默认
+  vi.mocked(aiConfigApi.list).mockResolvedValue([{ ...config(31, 'seedream-x'), serviceType: 'image', provider: 'company', models: ['seedream-x'], isActive: true }])
+  await client.invalidateQueries()
+  // 建档刷新后 chips 从 disabled 变为可点
+  await waitFor(() => expect((screen.getByRole('button', { name: /Kiki/ }) as HTMLButtonElement).disabled).toBe(false))
+  fireEvent.click(screen.getByRole('button', { name: /Kiki/ }))
+  await waitFor(() => expect(update).toHaveBeenCalledWith(31, expect.objectContaining({ model: ['kiki', 'seedream-x'] })))
 })
 
 it('restores and saves a ComfyUI workflow without replacing edits during refresh', async () => {
@@ -171,7 +186,7 @@ it('keeps invalid service JSON for correction and does not save it', async () =>
   vi.spyOn(aiConfigApi, 'list').mockResolvedValue([])
   const create = vi.spyOn(aiConfigApi, 'create').mockResolvedValue({})
   mountPanel()
-  fireEvent.click(screen.getByRole('button', { name: '文本' }))
+  fireEvent.click(screen.getByRole('button', { name: '添加口型同步服务' }))
   fireEvent.change(screen.getByLabelText('服务参数（JSON）'), { target: { value: '{unfinished' } })
   fireEvent.click(screen.getByRole('button', { name: '保存' }))
   await screen.findByRole('alert')

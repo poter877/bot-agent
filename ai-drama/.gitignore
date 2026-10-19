@@ -37,8 +37,6 @@ data/*.bak*
 data/static/
 data/storage/
 
-# Config
-configs/config.yaml
 
 # Misc
 tmp/

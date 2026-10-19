@@ -97,7 +97,9 @@ export function startTour(id: string, steps: TourStep[]): boolean {
     doneBtnText: t('tour.done'),
     onDestroyed: () => markTourSeen(id),
     steps: usable.map((s) => ({
-      element: s.element,
+      // '#root' 约定为居中弹窗：不传 element，让 driver.js 走 dummy 元素的
+      // centered('over') 分支；传真实 #root 会被当作全视口锚点贴到视口底部。
+      element: s.element === '#root' ? undefined : s.element,
       popover: {
         title: t(s.titleKey),
         description: t(s.descKey),

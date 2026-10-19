@@ -195,7 +195,7 @@ ComfyUI 的九个模型入口需要已部署的服务、对应模型/节点及 A
 | 变量 | 默认值 | 说明 |
 |---|---|---|
 | `SQLITE_PATH` | `<仓库根>/data/huobao.sqlite3` | SQLite 数据库文件位置 |
-| `PORT` | `5679` | 后端服务端口 |
+| `PORT` | `30171` | 后端服务端口 |
 | `STORAGE_PATH` | `<仓库根>/data/static` | 生成文件存储目录 |
 | `HUOBAO_DATA_DIR` | — | 桌面版由 Electron 主进程注入（userData 数据根） |
 | `WORKSPACE_PATH` | `backend/workspace` | Agent 技能/提示词目录（桌面版指向 userData 可写副本） |
@@ -237,8 +237,8 @@ cd frontend-react
 npm run dev
 ```
 
-- 前端地址: `http://localhost:3014`
-- 后端 API: `http://localhost:5679/api/v1`
+- 前端地址: `http://localhost:30170`
+- 后端 API: `http://localhost:30171/api/v1`
 - 前端自动代理 `/api` 和 `/static` 到后端
 
 #### 方式二：单服务模式
@@ -253,7 +253,7 @@ npm run build:frontend
 npm --prefix backend start
 ```
 
-访问: `http://localhost:5679`
+访问: `http://localhost:30171`
 
 ### 🗄️ 数据库
 
@@ -481,7 +481,7 @@ server {
     }
 
     location / {
-        proxy_pass http://localhost:5679;
+        proxy_pass http://localhost:30171;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -500,7 +500,7 @@ cp .env.example .env
 # 容器端口映射下浏览器请求来自非回环地址——.env 里必须设置 AI_DRAMA_API_TOKEN，
 # 否则所有 /api/v1 请求都会 401。
 docker compose up -d --build
-# 访问 http://localhost:5679
+# 访问 http://localhost:30171
 ```
 
 沿用 `huobao-data` 数据卷保存数据库、媒体和 workspace。更新时先更新本地源码，再执行 `docker compose up -d --build`。

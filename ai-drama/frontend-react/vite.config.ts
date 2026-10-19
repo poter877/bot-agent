@@ -4,9 +4,11 @@ import tailwindcss from '@tailwindcss/vite'
 import { fileURLToPath, URL } from 'node:url'
 
 // 开发与预览均将 API 和媒体请求代理到 Hono，保持与生产部署相同的请求路径。
+// 后端固定用高位端口 30171，避开 n8n(5678) 等常规占用；例外时可用 AI_DRAMA_BACKEND_ORIGIN 覆盖。
+const backendOrigin = process.env.AI_DRAMA_BACKEND_ORIGIN || 'http://localhost:30172'
 const backendProxy = {
-  '/api': { target: 'http://localhost:5679', changeOrigin: true },
-  '/static': { target: 'http://localhost:5679', changeOrigin: true },
+  '/api': { target: backendOrigin, changeOrigin: true },
+  '/static': { target: backendOrigin, changeOrigin: true },
 }
 
 export default defineConfig({
@@ -17,12 +19,12 @@ export default defineConfig({
     },
   },
   server: {
-    port: 3014,
+    port: 30170,
     strictPort: true,
     proxy: backendProxy,
   },
   preview: {
-    port: 3014,
+    port: 30170,
     strictPort: true,
     proxy: backendProxy,
   },

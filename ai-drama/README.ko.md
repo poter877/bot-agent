@@ -119,7 +119,7 @@ data/       — 생성된 에셋과 SQLite 데이터베이스
 | 변수 | 기본값 | 설명 |
 |---|---|---|
 | `SQLITE_PATH` | `<저장소>/data/huobao.sqlite3` | SQLite 데이터베이스 파일 위치 |
-| `PORT` | `5679` | 백엔드 서비스 포트 |
+| `PORT` | `30171` | 백엔드 서비스 포트 |
 | `STORAGE_PATH` | `<저장소>/data/static` | 생성 파일 저장 디렉터리 |
 | `HUOBAO_DATA_DIR` | — | 데스크톱 버전에서 Electron 메인 프로세스가 주입(userData 데이터 루트) |
 | `WORKSPACE_PATH` | `backend/workspace` | Agent 스킬/프롬프트 디렉터리(데스크톱 버전은 userData의 쓰기 가능한 복사본) |
@@ -161,8 +161,8 @@ cd frontend-react
 npm run dev
 ```
 
-- 프런트엔드 주소: `http://localhost:3014`
-- 백엔드 API: `http://localhost:5679/api/v1`
+- 프런트엔드 주소: `http://localhost:30170`
+- 백엔드 API: `http://localhost:30171/api/v1`
 - 프런트엔드가 `/api`와 `/static`을 백엔드로 자동 프록시
 
 #### 방법 2: 단일 서비스 모드
@@ -177,7 +177,7 @@ npm run build:frontend
 npm --prefix backend start
 ```
 
-접속: `http://localhost:5679`
+접속: `http://localhost:30171`
 
 ### 🗄️ 데이터베이스
 
@@ -401,7 +401,7 @@ server {
     }
 
     location / {
-        proxy_pass http://localhost:5679;
+        proxy_pass http://localhost:30171;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -420,7 +420,7 @@ cp .env.example .env
 # 컨테이너 포트 매핑에서는 브라우저 요청이 비루프백 주소로 도달하므로
 # .env의 AI_DRAMA_API_TOKEN을 반드시 설정하세요(미설정 시 /api/v1 요청이 모두 401).
 docker compose up -d --build
-# http://localhost:5679 접속
+# http://localhost:30171 접속
 ```
 
 기존 `huobao-data` 볼륨에 데이터베이스, 미디어 및 workspace를 보존합니다. 업데이트할 때 소스를 먼저 업데이트한 후 `docker compose up -d --build`를 다시 실행하세요.

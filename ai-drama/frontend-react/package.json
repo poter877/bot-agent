@@ -5,9 +5,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --port 3014",
+    "dev": "vite --port 30170",
     "build": "tsc -p tsconfig.build.json && vite build",
-    "preview": "vite preview --port 3014",
+    "preview": "vite preview --port 30170",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

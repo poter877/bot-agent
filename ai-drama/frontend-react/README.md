@@ -23,7 +23,7 @@ npm run dev:backend
 npm run dev:frontend
 ```
 
-页面地址为 `http://localhost:3014`。Vite 开发与预览均把 `/api`、`/static` 代理至 `http://localhost:5679`。
+页面地址为 `http://localhost:30170`。Vite 开发与预览均把 `/api`、`/static` 代理至 `http://localhost:30171`。
 
 ```bash
 npm run typecheck:frontend

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { creativeCatalogApi } from '@/entities/creative/catalog'
 import { filmStylesApi } from '@/entities/film/model'
-import { publicCreativeCatalog } from '../../../../backend/src/services/creative-catalog'
+import { publicCreativeCatalog } from '../../../../../bot-backend/src/drama/services/creative-catalog.js'
 import { useState } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'

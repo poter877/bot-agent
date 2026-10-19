@@ -9,7 +9,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { creativeApi } from '@/entities/creative/api'
 import { toCreativeDraft, type CreativeProject } from '@/entities/creative/model'
 import { initI18n } from '@/shared/config/i18n'
-import { publicCreativeCatalog } from '../../../../backend/src/services/creative-catalog'
+import { publicCreativeCatalog } from '../../../../../bot-backend/src/drama/services/creative-catalog.js'
 import { CreativeProductionPanel } from './CreativeProductionPanel'
 
 const project: CreativeProject = {

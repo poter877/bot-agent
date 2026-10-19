@@ -3,7 +3,7 @@
  * 手动配置 CRUD、模型标签编辑（首位即默认）、连通性测试。
  * API Key 仅存在于表单输入生命周期内，不进入任何缓存或持久化。
  */
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -35,15 +35,10 @@ const SETTINGS_TITLE = 'text-[22px] font-extrabold tracking-[-0.02em]'
 const SETTINGS_DESC = 'mt-1.5 text-[13px] text-content-muted'
 
 // 火宝快捷配置（quick-card 为引导锚点类，保留）
-const SETUP_TITLE = 'text-[15px] font-bold text-content'
-const SETUP_DESC = 'mb-3.5 text-[12.5px] text-content-muted'
 
 // 内容语言分段选择器（火宝节点选择同款）
 
 // 手动配置入口
-const SETUP_PANEL = 'mt-3.5 mb-4 px-5 py-[18px]'
-const SETUP_PANEL_HEAD = 'mb-3 flex items-start justify-between gap-4'
-const TEMPLATE_ROW = 'flex flex-wrap gap-2'
 const CHIP =
   'min-h-[30px] cursor-pointer rounded-pill border-none bg-button px-3.5 py-0 text-[12px] font-semibold leading-none text-content-secondary transition-all duration-[160ms] ease-app hover:bg-button-hover hover:text-content focus-visible:outline-none focus-visible:shadow-focus'
 
@@ -102,18 +97,93 @@ const TEST_RESULT_META = 'font-code text-[11px] text-content-muted break-all'
 const ICON_BTN_SM = 'h-[30px] min-h-[30px] w-[30px] min-w-[30px]'
 
 /** 厂商预设模板（配置名持久化进 DB：provider 英文 + 服务类型英文，不随界面语言漂移）。
- *  文本/图像/视频/语音/转写已收敛到公司后端：地址与密钥由服务端环境注入，模型走公司目录。 */
-const COMPANY_PRESET = { label: '公司模型服务', baseUrl: '', models: [] as string[] }
+ *  文本/图像/视频/语音/转写五类收敛到公司后端：不经预设弹窗，改由 CompanyCatalogPicker
+ *  直接展示运营台已启用目录（见下）；此处仅保留直连工具类服务的预设。 */
 const PROVIDER_PRESETS: Record<ServiceType, Record<string, { label: string; baseUrl: string; models: string[]; requiresApiKey?: boolean }>> = {
-  speech: { company: { ...COMPANY_PRESET } },
-  transcription: { company: { ...COMPANY_PRESET } },
+  speech: {},
+  transcription: {},
   lipsync: { sync: { label: 'Sync 口型同步', baseUrl: 'https://api.sync.so', models: ['lipsync-2', 'lipsync-2-pro', 'sync-3'] } },
   rigging: { meshy: { label: 'Meshy 骨骼绑定', baseUrl: 'https://api.meshy.ai', models: ['rigging'] } },
   research: { tavily: { label: 'Tavily 联网资料', baseUrl: 'https://api.tavily.com', models: ['search'] } },
   stock: { pexels: { label: 'Pexels 联网素材', baseUrl: 'https://api.pexels.com', models: ['search'] } },
-  text: { company: { ...COMPANY_PRESET } },
-  image: { company: { ...COMPANY_PRESET } },
-  video: { company: { ...COMPANY_PRESET } },
+  text: {},
+  image: {},
+  video: {},
+}
+
+/** 由公司后端（bot-backend）承载的五类核心服务：模型清单来自运营台目录，不走配置弹窗。 */
+const COMPANY_TYPES = new Set(['text', 'image', 'video', 'speech', 'transcription'])
+
+/** 公司服务的模型直选分区：列出运营台已启用的模型，点击即设为该服务的默认模型；
+ *  目录就绪而公司配置缺失时按目录默认自动建档（零接触开通）。 */
+function CompanyCatalogPicker({ type, cfgs, onChanged }: { type: ServiceType; cfgs: AiConfig[]; onChanged: () => void }) {
+  const ensured = useRef(false)
+  const companyCfg = cfgs.find((c) => c.provider === 'company') ?? null
+  const catalog = useQuery({
+    queryKey: qk.companyModels(type),
+    queryFn: ({ signal }) => aiConfigApi.companyModels(type as CompanyModelKind, signal),
+    staleTime: 5 * 60_000,
+  })
+  const entries = catalog.data?.models ?? []
+  const defaultModel = companyCfg?.isActive ? (companyCfg.models[0] ?? null) : null
+
+  useEffect(() => {
+    if (ensured.current || companyCfg || !entries.length) return
+    ensured.current = true
+    const seed = catalog.data?.defaultModel ?? entries[0]!.id
+    aiConfigApi
+      .create({ service_type: type, provider: 'company', name: `company-${type}`, api_key: '', base_url: '', model: [seed] })
+      .then(onChanged)
+      .catch(() => { ensured.current = false })
+  }, [companyCfg, entries.length, catalog.data?.defaultModel, type, onChanged])
+
+  const pickMutation = useMutation({
+    mutationFn: (m: string) => {
+      if (!companyCfg) return Promise.resolve()
+      const payload: Record<string, unknown> = { model: [m, ...companyCfg.models.filter((x) => x !== m)] }
+      if (!companyCfg.isActive) payload.is_active = true
+      return aiConfigApi.update(companyCfg.id, payload)
+    },
+    onSuccess: (_data, m) => {
+      toast.success(`已切换默认模型：${m}`)
+      onChanged()
+    },
+    onError: (err) => toastError(err),
+  })
+
+  return (
+    <div className="flex flex-col gap-2 px-5 py-4">
+      {catalog.isPending && <p role="status" className="text-xs text-content-subtle">正在加载可用模型…</p>}
+      {catalog.isError && (
+        <div role="alert" className="flex flex-wrap items-center gap-2 text-xs text-danger">
+          <span>公司目录加载失败：{catalog.error instanceof Error && catalog.error.message ? catalog.error.message : '请确认公司后端（bot-backend）已启动'}</span>
+          <Button size="sm" variant="ghost" onClick={() => void catalog.refetch()}>重试</Button>
+        </div>
+      )}
+      {catalog.data && !entries.length && (
+        <p className="text-xs text-content-subtle">暂无已启用模型 — 请先在运营管理台（bot-backend /console）启用模型并配置密钥</p>
+      )}
+      {entries.length > 0 && (
+        <div className={MODEL_CHIPS}>
+          {entries.map((entry) => (
+            <button
+              key={entry.id}
+              type="button"
+              disabled={!companyCfg || pickMutation.isPending}
+              className={cn('font-code', CFG_MODEL_CHIP_COMMON, defaultModel === entry.id ? CFG_MODEL_CHIP_DEFAULT : CFG_MODEL_CHIP_IDLE)}
+              title={defaultModel === entry.id ? '当前默认模型' : '点击设为此服务的默认模型'}
+              onClick={() => pickMutation.mutate(entry.id)}
+            >
+              {defaultModel === entry.id && <Star size={9} className={CFG_MODEL_STAR} />}
+              {entry.displayName}
+              {entry.id === catalog.data?.defaultModel && entry.id !== defaultModel && <em className={MODEL_EM}>目录默认</em>}
+            </button>
+          ))}
+        </div>
+      )}
+      <p className="text-micro leading-relaxed text-content-subtle">模型清单由运营管理台维护（已启用且配有密钥）；点击模型设为此服务的默认模型，制作时可随时换用清单中的其他模型。</p>
+    </div>
+  )
 }
 
 const CFG_FORM_SCHEMA = z.object({
@@ -186,7 +256,6 @@ export function AiConfigsPanel() {
   }
 
   // ===== 配置 CRUD =====
-  const isCompanyProvider = (type: ServiceType, provider: string) => provider === 'company' && ['text', 'image', 'video', 'speech', 'transcription'].includes(type)
   const byType = (type: ServiceType) => cfgs.filter((c) => c.serviceType === type)
   const countActive = (type: ServiceType) => byType(type).filter((c) => c.isActive).length
 
@@ -249,17 +318,8 @@ export function AiConfigsPanel() {
     defaultValues: { name: '', provider: '', priority: 0, api_key: '', base_url: '', temperature: '' },
   })
 
-  const currentProvider = form.watch('provider')
-  const companyMode = isCompanyProvider(dialogType, currentProvider)
-
-  // 公司后端连接数据由服务端环境注入；五类核心服务的模型列表拉公司目录（经后端代理）
-  // （companyMode 守卫下 dialogType 必为五类之一，收窄交给运行时开关）
-  const companyModelsQuery = useQuery({
-    queryKey: qk.companyModels(dialogType),
-    queryFn: ({ signal }) => aiConfigApi.companyModels(dialogType as CompanyModelKind, signal),
-    enabled: dialogOpen && companyMode,
-    staleTime: 5 * 60_000,
-  })
+  // 弹窗只服务直连工具类服务（公司五类由 CompanyCatalogPicker 直选，不经弹窗）
+  const dialogPresets = presetsByType(dialogType).filter(preset => !editId || preset.provider === form.getValues('provider'))
 
   function presetsByType(type: ServiceType) {
     const group = providerPresets[type] || {}
@@ -431,23 +491,6 @@ export function AiConfigsPanel() {
         <p className={SETTINGS_DESC}>短剧与创意视频共用这些模型和服务。每类服务按优先级选用默认配置，也可在制作时指定模型。</p>
       </div>
 
-      {/* 手动配置入口 */}
-      <section className={cn(cardVariants(), CONTENT_W, SETUP_PANEL)}>
-        <div className={SETUP_PANEL_HEAD}>
-          <div>
-            <div className={SETUP_TITLE}>{t('settings.ai.manualTitle')}</div>
-            <div className={SETUP_DESC}>{t('settings.ai.manualDesc')}</div>
-          </div>
-        </div>
-        <div className={TEMPLATE_ROW}>
-          {serviceTypes.map((st) => (
-            <button key={st.type} type="button" className={CHIP} onClick={() => startAddCfg(st.type)}>
-              {st.label}
-            </button>
-          ))}
-        </div>
-      </section>
-
       <div className={SECTIONS}>
         {serviceTypes.map((st) => (
           <section key={st.type} className={cn(cardVariants(), SVC_GROUP)}>
@@ -456,14 +499,20 @@ export function AiConfigsPanel() {
                 <span className={SVC_GROUP_TITLE}>{st.label}</span>
                 <div className={SVC_GROUP_SUB}>{serviceMeta[st.type].desc}</div>
               </div>
-              {countActive(st.type) > 0 && (
+              {!COMPANY_TYPES.has(st.type) && countActive(st.type) > 0 && (
                 <Badge tone="brand">{t('settings.ai.activeCount', { n: countActive(st.type) })}</Badge>
               )}
-              <Button variant="ghost" size="sm" className="ml-auto" onClick={() => startAddCfg(st.type)}>
-                <Plus size={13} /> {t('common.add')}
-              </Button>
+              {/* 公司五类默认不提供“添加服务”（模型来自目录直选）；仅当目录工具带该类型预设时开放直连工具入口 */}
+              {(!COMPANY_TYPES.has(st.type) || presetsByType(st.type).length > 0) && (
+                <Button variant="ghost" size="sm" className="ml-auto" aria-label={`添加${st.label}服务`} onClick={() => startAddCfg(st.type)}>
+                  <Plus size={13} /> {t('common.add')}
+                </Button>
+              )}
             </div>
-            {byType(st.type).map((c, i) => (
+            {COMPANY_TYPES.has(st.type) && (
+              <CompanyCatalogPicker type={st.type} cfgs={byType(st.type)} onChanged={invalidate} />
+            )}
+            {!COMPANY_TYPES.has(st.type) && byType(st.type).map((c, i) => (
               <div key={c.id} className={cn(CONFIG_ROW, i > 0 && 'border-t border-outline')}>
                 <div
                   className={cn(
@@ -487,15 +536,7 @@ export function AiConfigsPanel() {
                     {!c.isActive && <Badge>{t('settings.common.disabled')}</Badge>}
                   </div>
                   <div className={CONFIG_MODELS}>
-                    {isCompanyProvider(st.type, c.provider) ? (
-                      // company 行的默认模型由公司目录指定：模型 chips 只作展示，不再是"设为默认"入口
-                      c.models.map((m) => (
-                        <span key={m} className={cn('font-code', CFG_MODEL_CHIP_COMMON, 'cursor-default border-outline bg-transparent text-content-muted')}>
-                          {m}
-                        </span>
-                      ))
-                    ) : (
-                      c.models.map((m) => (
+                    {c.models.map((m) => (
                         <button
                           key={m}
                           type="button"
@@ -508,10 +549,9 @@ export function AiConfigsPanel() {
                           onClick={() => setDefaultModelMutation.mutate({ c, m, type: st.type })}
                         >
                           {isDefaultModel(st.type, c, m) && <Star size={9} className={CFG_MODEL_STAR} />}
-                          {m}
-                        </button>
-                      ))
-                    )}
+                        {m}
+                      </button>
+                    ))}
                   </div>
                   <div className={`font-code truncate ${CONFIG_SUB}`}>{c.baseUrl || t('settings.ai.noBaseUrl')}</div>
                 </div>
@@ -532,7 +572,7 @@ export function AiConfigsPanel() {
                 </Button>
               </div>
             ))}
-            {!byType(st.type).length && <p className={CONFIG_EMPTY}>{t('settings.common.empty')}</p>}
+            {!COMPANY_TYPES.has(st.type) && !byType(st.type).length && <p className={CONFIG_EMPTY}>{t('settings.common.empty')}</p>}
           </section>
         ))}
       </div>
@@ -561,18 +601,20 @@ export function AiConfigsPanel() {
         }
       >
         <form id="ai-config-form" className={CONFIG_DIALOG_BODY} onSubmit={form.handleSubmit(onSave)}>
-          <div className={PRESET_PICKER}>
-            {presetsByType(dialogType).filter(preset => !editId || preset.provider === form.getValues('provider')).map((preset) => (
-              <button
-                key={`${dialogType}-${preset.provider}`}
-                type="button"
-                className={CHIP}
-                onClick={() => applyProviderPreset(dialogType, preset.provider)}
-              >
-                {preset.label}
-              </button>
-            ))}
-          </div>
+          {dialogPresets.length > 0 && (
+            <div className={PRESET_PICKER}>
+              {dialogPresets.map((preset) => (
+                <button
+                  key={`${dialogType}-${preset.provider}`}
+                  type="button"
+                  className={CHIP}
+                  onClick={() => applyProviderPreset(dialogType, preset.provider)}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          )}
           <label className="flex flex-col gap-1.5">
             <span className="text-xs font-[550] text-content-secondary">{t('settings.cfg.name')}</span>
             <Input {...form.register('name')} placeholder={t('settings.cfg.namePlaceholder')} />
@@ -593,25 +635,19 @@ export function AiConfigsPanel() {
             <Input {...form.register('priority')} type="number" min={0} max={999} />
             <span className="text-micro leading-[1.5] text-content-subtle">{t('settings.cfg.priorityHint')}</span>
           </label>
-          {companyMode ? (
-            <p className="text-xs leading-relaxed text-content-muted">公司服务的地址与密钥由服务端环境注入，无需填写；模型从公司目录选择。</p>
-          ) : (
-            <>
-              <label className="flex flex-col gap-1.5">
-                <span className="text-xs font-[550] text-content-secondary">API Key</span>
-                <Input {...form.register('api_key')} type="password" disabled={clearKey} placeholder={providerPresets[dialogType]?.[form.watch('provider')]?.requiresApiKey === false ? '可选，此服务无需密钥' : editId ? '留空保留已保存密钥' : '请输入 API Key'} autoComplete="off" />
-                {providerPresets[dialogType]?.[form.watch('provider')]?.requiresApiKey === false && <span className="text-xs text-content-muted">此服务无需密钥，仍需保存服务地址{form.watch('provider') === 'comfyui' ? '和 API 工作流' : ''}配置。</span>}
-              </label>
-              {editId && <label className="flex items-center gap-2 text-xs text-content-muted">
-                <input type="checkbox" checked={clearKey} onChange={event => setClearKey(event.target.checked)} />
-                清除已保存密钥并停用此配置
-              </label>}
-              <label className="flex flex-col gap-1.5">
-                <span className="text-xs font-[550] text-content-secondary">Base URL</span>
-                <Input {...form.register('base_url')} placeholder="https://..." readOnly={['lipsync', 'rigging', 'research', 'stock'].includes(dialogType)} />
-              </label>
-            </>
-          )}
+          <label className="flex flex-col gap-1.5">
+            <span className="text-xs font-[550] text-content-secondary">API Key</span>
+            <Input {...form.register('api_key')} type="password" disabled={clearKey} placeholder={providerPresets[dialogType]?.[form.watch('provider')]?.requiresApiKey === false ? '可选，此服务无需密钥' : editId ? '留空保留已保存密钥' : '请输入 API Key'} autoComplete="off" />
+            {providerPresets[dialogType]?.[form.watch('provider')]?.requiresApiKey === false && <span className="text-xs text-content-muted">此服务无需密钥，仍需保存服务地址{form.watch('provider') === 'comfyui' ? '和 API 工作流' : ''}配置。</span>}
+          </label>
+          {editId && <label className="flex items-center gap-2 text-xs text-content-muted">
+            <input type="checkbox" checked={clearKey} onChange={event => setClearKey(event.target.checked)} />
+            清除已保存密钥并停用此配置
+          </label>}
+          <label className="flex flex-col gap-1.5">
+            <span className="text-xs font-[550] text-content-secondary">Base URL</span>
+            <Input {...form.register('base_url')} placeholder="https://..." readOnly={['lipsync', 'rigging', 'research', 'stock'].includes(dialogType)} />
+          </label>
           <div className="flex flex-col gap-1.5">
             <span className="text-xs font-[550] text-content-secondary">{t('settings.cfg.models')}</span>
             {models.length > 0 && (
@@ -640,31 +676,12 @@ export function AiConfigsPanel() {
                 ))}
               </div>
             )}
-            {companyMode && (
-              <div className={MODEL_CHIPS}>
-                {(companyModelsQuery.data?.models ?? []).map((entry) => (
-                  <button
-                    key={entry.id}
-                    type="button"
-                    className={cn(MODEL_CHIP_COMMON, models.includes(entry.id) ? MODEL_CHIP_DEFAULT : MODEL_CHIP_IDLE)}
-                    title={entry.displayName !== entry.id ? entry.id : undefined}
-                    onClick={() => setModels((prev) => (prev.includes(entry.id) ? prev.filter((x) => x !== entry.id) : [entry.id, ...prev.filter((x) => x !== entry.id)]))}
-                  >
-                    {entry.displayName}
-                    {entry.id === companyModelsQuery.data?.defaultModel && <em className={MODEL_EM}>{t('common.catalogDefault')}</em>}
-                  </button>
-                ))}
-                {companyModelsQuery.data && !companyModelsQuery.data.models.length && (
-                  <span className="text-[11px] text-content-subtle">公司目录暂无可用模型</span>
-                )}
-              </div>
-            )}
             <div className={MODEL_ADD_ROW}>
               <Input
                 value={modelInput}
                 onChange={(e) => setModelInput(e.target.value)}
                 className="flex-1"
-                placeholder={companyMode ? '自定义目录 id（目录暂未展示时手动输入）' : t('settings.cfg.modelPlaceholder')}
+                placeholder={t('settings.cfg.modelPlaceholder')}
                 onKeyDown={(e) => {
                   if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return
                   if (e.key === 'Enter') {
@@ -678,11 +695,7 @@ export function AiConfigsPanel() {
                 {t('common.add')}
               </Button>
             </div>
-            <span className="text-micro leading-[1.5] text-content-subtle">
-              {companyMode
-                ? '模型清单来自公司目录（公司后台维护）；此处勾选只作常用收藏，制作时的模型选择与目录默认优先生效。'
-                : t('settings.cfg.modelsHint')}
-            </span>
+            <span className="text-micro leading-[1.5] text-content-subtle">{t('settings.cfg.modelsHint')}</span>
           </div>
           <label className="flex flex-col gap-1.5">
             <span className="text-xs font-[550] text-content-secondary">服务参数（JSON）</span>

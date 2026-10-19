@@ -2,7 +2,7 @@
 import { toolboxApi } from '@/entities/creative/toolbox'
 import { pipelineApi } from '@/entities/creative/pipeline'
 import { creativeCatalogApi } from '@/entities/creative/catalog'
-import { publicCreativeCatalog } from '../../../../backend/src/services/creative-catalog'
+import { publicCreativeCatalog } from '../../../../../bot-backend/src/drama/services/creative-catalog.js'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'

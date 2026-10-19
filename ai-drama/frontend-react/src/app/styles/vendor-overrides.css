@@ -41,10 +41,8 @@
   background: var(--hb-brand-gradient) !important;
   color: var(--hb-on-accent) !important;
 }
-.driver-overlay {
-  background: var(--hb-scrim) !important;
-  backdrop-filter: blur(2px);
-}
+/* driver.js 自己用 SVG 路径填充调暗页面并在锚点处挖孔；不要给 .driver-overlay
+   加 background/backdrop-filter——那会盖住孔洞区域，让高亮按钮也被蒙黑一层。 */
 .driver-active-element .driver-popover-arrow svg path,
 .driver-active-element .driver-popover-arrow svg polygon {
   fill: var(--hb-brand) !important;

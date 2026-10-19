@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { creativeCatalogApi } from '@/entities/creative/catalog'
-import { publicCreativeCatalog } from '../../../../backend/src/services/creative-catalog'
+import { publicCreativeCatalog } from '../../../../../bot-backend/src/drama/services/creative-catalog.js'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'

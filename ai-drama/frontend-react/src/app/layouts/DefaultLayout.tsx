@@ -6,8 +6,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, Outlet, useLocation } from 'react-router'
 import { useTranslation } from 'react-i18next'
-import { Github, LayoutGrid, Settings as SettingsIcon, TriangleAlert } from 'lucide-react'
+import { Github, LayoutGrid, LogOut, Settings as SettingsIcon, TriangleAlert } from 'lucide-react'
 import { aiConfigApi } from '@/entities/ai-config/model'
+import { probeSession } from '@/shared/api/session'
 import { useUiLocale } from '@/shared/config/use-locale'
 import { ThemeToggle } from '@/shared/ui/ThemeToggle'
 import { LocaleSwitcher } from '@/shared/ui/LocaleSwitcher'
@@ -31,6 +32,7 @@ export function DefaultLayout() {
   const location = useLocation()
   const [showBrandImage, setShowBrandImage] = useState(true)
   const [missingConfigLabels, setMissingConfigLabels] = useState<string[]>([])
+  const [me, setMe] = useState<{ email: string } | null>(null)
 
   const checkAiConfigs = useCallback(async () => {
     try {
@@ -47,6 +49,10 @@ export function DefaultLayout() {
   useEffect(() => {
     void checkAiConfigs()
   }, [checkAiConfigs, location.pathname, locale])
+
+  useEffect(() => {
+    probeSession().then(({ mode, user }) => setMe(mode === 'login' ? user : null)).catch(() => setMe(null))
+  }, [])
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-app">
@@ -99,6 +105,23 @@ export function DefaultLayout() {
           </a>
           <ThemeToggle />
           <LocaleSwitcher />
+          {me && (
+            <div className="ml-1 flex items-center gap-1.5 border-l border-outline pl-3">
+              <span className="max-w-[180px] truncate text-[12px] text-content-muted" title={me.email}>{me.email}</span>
+              <button
+                type="button"
+                aria-label="退出登录"
+                title="退出登录"
+                className="flex size-8 items-center justify-center rounded-pill text-content-muted transition-all duration-150 ease-app hover:bg-hover-overlay hover:text-content focus-visible:outline-none focus-visible:shadow-focus"
+                onClick={() => {
+                  void fetch('/api/auth/sign-out', { method: 'POST', credentials: 'include' }).catch(() => null)
+                    .finally(() => { window.location.assign('/login') })
+                }}
+              >
+                <LogOut size={15} strokeWidth={1.8} />
+              </button>
+            </div>
+          )}
         </div>
       </header>
 

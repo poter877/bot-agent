@@ -117,7 +117,7 @@ No config files — everything is set via environment variables (all have defaul
 | Variable | Default | Description |
 |---|---|---|
 | `SQLITE_PATH` | `<repo>/data/huobao.sqlite3` | SQLite database file location |
-| `PORT` | `5679` | Backend service port |
+| `PORT` | `30171` | Backend service port |
 | `STORAGE_PATH` | `<repo>/data/static` | Generated-file storage directory |
 | `HUOBAO_DATA_DIR` | — | Injected by the Electron main process (userData data root) |
 | `WORKSPACE_PATH` | `backend/workspace` | Agent skills/prompts directory (desktop: writable copy under userData) |
@@ -159,8 +159,8 @@ cd frontend-react
 npm run dev
 ```
 
-- Frontend: `http://localhost:3014`
-- Backend API: `http://localhost:5679/api/v1`
+- Frontend: `http://localhost:30170`
+- Backend API: `http://localhost:30171/api/v1`
 - The frontend automatically proxies `/api` and `/static` to the backend
 
 #### Option 2: Single-service mode
@@ -175,7 +175,7 @@ npm run build:frontend
 npm --prefix backend start
 ```
 
-Visit: `http://localhost:5679`
+Visit: `http://localhost:30171`
 
 ### 🗄️ Database
 
@@ -402,7 +402,7 @@ server {
     }
 
     location / {
-        proxy_pass http://localhost:5679;
+        proxy_pass http://localhost:30171;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -421,7 +421,7 @@ cp .env.example .env
 # Container port mapping means browser requests reach the app from a non-loopback
 # address — set AI_DRAMA_API_TOKEN in .env or every API call will get 401.
 docker compose up -d --build
-# Open http://localhost:5679
+# Open http://localhost:30171
 ```
 
 The existing `huobao-data` volume keeps the database, media and workspace files. To update, update this checkout and run `docker compose up -d --build` again.

@@ -3,7 +3,7 @@
 # 使用：
 #   1. 复制 .env.example 为 .env
 #   2. docker compose up -d
-#   3. 访问 http://localhost:5679 ，设置页「关于更新」可检查/一键更新
+#   3. 访问 http://localhost:30171 ，设置页「关于更新」可检查/一键更新
 #
 # 数据持久化在命名卷 huobao-data（SQLite + 生成的图片/视频 + 可在线编辑的 workspace/skills）。
 
@@ -17,7 +17,7 @@ services:
         # 构建时注入版本号（发布镜像时务必指定，如 HUOBAO_VERSION=1.2.0）
         HUOBAO_VERSION: ${HUOBAO_VERSION:-dev}
     ports:
-      - "5679:5679"
+      - "30171:30171"
     environment:
       # HTTP API 共享令牌：容器端口映射下浏览器请求来自非回环地址，
       # 不配置则所有 /api/v1 请求 401（后端默认仅放行回环来源）。浏览器首次访问弹窗输入一次。

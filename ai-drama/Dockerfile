@@ -29,7 +29,7 @@ LABEL org.opencontainers.image.title="视频工厂" \
 ARG HUOBAO_VERSION=dev
 ENV NODE_ENV=production \
     HUOBAO_VERSION=${HUOBAO_VERSION} \
-    PORT=5679 \
+    PORT=30171 \
     FFMPEG_BIN=/usr/bin/ffmpeg \
     FFPROBE_BIN=/usr/bin/ffprobe \
     HUOBAO_DATA_DIR=/app/data \
@@ -56,9 +56,9 @@ RUN chmod +x ./entrypoint.sh && mkdir -p /app/data
 
 # 数据卷：SQLite + 生成的静态文件 + 可编辑 workspace
 VOLUME ["/app/data"]
-EXPOSE 5679
+EXPOSE 30171
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s \
-  CMD node -e "fetch('http://localhost:'+(process.env.PORT||5679)+'/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD node -e "fetch('http://localhost:'+(process.env.PORT||30171)+'/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 ENTRYPOINT ["./entrypoint.sh"]

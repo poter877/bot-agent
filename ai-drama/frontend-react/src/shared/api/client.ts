@@ -10,6 +10,7 @@
  * - 统一带共享令牌 Authorization 头（shared/api/token.ts，401 时广播给 ApiTokenGate）
  */
 import { authHeaders, notifyUnauthorized } from '@/shared/api/token'
+import { sessionMode } from '@/shared/api/session'
 
 export class ApiError extends Error {
   /** 后端业务码（envelope.code），如 400/404/500 */
@@ -102,7 +103,14 @@ async function request<T>(method: string, path: string, body?: unknown, opts: Re
   try {
     const resp = await fetch(`${BASE}${path}`, init)
     const ms = Math.round(performance.now() - start)
-    if (resp.status === 401) notifyUnauthorized()
+    if (resp.status === 401 && !path.startsWith('/auth') && !window.location.pathname.startsWith('/login')) {
+      // 登录模式跳登录页；旧模式（共享令牌）广播给 ApiTokenGate 弹令牌输入
+      if (sessionMode() === 'login' && !window.location.pathname.startsWith('/login')) {
+        window.location.assign('/login')
+      } else {
+        notifyUnauthorized()
+      }
+    }
     const envelope = await parseEnvelope(resp)
 
     if (!resp.ok || envelope.code >= 400) {
@@ -136,7 +144,14 @@ async function requestForm<T>(path: string, file: File, opts: RequestOptions = {
   try {
     const resp = await fetch(`${BASE}${path}`, { method: 'POST', body: fd, signal, headers: authHeaders() })
     const ms = Math.round(performance.now() - start)
-    if (resp.status === 401) notifyUnauthorized()
+    if (resp.status === 401 && !path.startsWith('/auth') && !window.location.pathname.startsWith('/login')) {
+      // 登录模式跳登录页；旧模式（共享令牌）广播给 ApiTokenGate 弹令牌输入
+      if (sessionMode() === 'login' && !window.location.pathname.startsWith('/login')) {
+        window.location.assign('/login')
+      } else {
+        notifyUnauthorized()
+      }
+    }
     const envelope = await parseEnvelope(resp)
     if (!resp.ok || envelope.code >= 400) {
       log('POST', path, String(resp.status), ms, true)
