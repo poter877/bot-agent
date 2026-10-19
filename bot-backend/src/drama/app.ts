@@ -47,12 +47,13 @@ const repoRoot = path.resolve(__dirname, '../../..')
 export const DRAMA_DATA_ROOT = process.env.AI_DRAMA_DATA_ROOT || path.join(repoRoot, 'ai-drama', 'data')
 
 /** 会话门：Better Auth 会话（进程内校验）或 Bearer 服务令牌；豁免 health。 */
-function sessionGate(auth: Auth): MiddlewareHandler {
+function sessionGate(auth: Auth | null): MiddlewareHandler {
   return async (c, next) => {
     if (c.req.path === '/api/v1/health') return next()
     const expected = process.env.AI_DRAMA_API_TOKEN?.trim()
     const header = c.req.header('authorization')
     if (expected && header === `Bearer ${expected}`) return next()
+    if (!auth) return c.json({ code: 401, message: '未登录或会话已过期，请先登录', login: true }, 401)
     try {
       const session = (await auth.api.getSession({ headers: c.req.raw.headers })) as unknown as { user?: { id?: string } } | null
       if (session?.user?.id) return next()
@@ -63,7 +64,7 @@ function sessionGate(auth: Auth): MiddlewareHandler {
   }
 }
 
-export function createDramaApp(auth: Auth): Hono {
+export function createDramaApp(auth: Auth | null): Hono {
   const app = new Hono()
 
   app.get('/api/v1/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }))
@@ -107,6 +108,16 @@ export function createDramaApp(auth: Auth): Hono {
     }
   })
   app.use('/static/*', serveStatic({ root: DRAMA_DATA_ROOT }))
+
+  // 前端静态托管（生产/单容器部署）：FRONTEND_DIST 注入（桌面版主进程），
+  // 缺省锚定仓库 ai-drama/frontend-react/dist —— SPA 回退到 index.html。
+  const frontendDist = process.env.FRONTEND_DIST || path.join(repoRoot, 'ai-drama', 'frontend-react', 'dist')
+  app.use('*', serveStatic({ root: frontendDist }))
+  // SPA 回退仅服务浏览器导航（Accept: text/html）；JSON/API 探测保持 404 语义。
+  app.get('*', async (c, next) => {
+    if (!(c.req.header('accept') ?? '').includes('text/html')) return next()
+    return serveStatic({ root: frontendDist, path: 'index.html' })(c, next)
+  })
 
   return app
 }

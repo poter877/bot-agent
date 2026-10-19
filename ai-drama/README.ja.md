@@ -119,7 +119,7 @@ data/       — 生成アセットと SQLite データベース
 | 変数 | デフォルト値 | 説明 |
 |---|---|---|
 | `SQLITE_PATH` | `<リポジトリ>/data/huobao.sqlite3` | SQLite データベースファイルの場所 |
-| `PORT` | `30171` | バックエンドサービスのポート |
+| `PORT` | `30172` | バックエンドサービスのポート |
 | `STORAGE_PATH` | `<リポジトリ>/data/static` | 生成ファイルの保存ディレクトリ |
 | `HUOBAO_DATA_DIR` | — | デスクトップ版で Electron メインプロセスが注入（userData データルート） |
 | `WORKSPACE_PATH` | `backend/workspace` | Agent スキル/プロンプトディレクトリ（デスクトップ版は userData の書き込み可能なコピー） |
@@ -139,7 +139,6 @@ git clone https://github.com/chatfire-AI/huobao-drama.git
 cd huobao-drama
 
 # バックエンドの依存をインストール
-cd backend && npm install
 
 # フロントエンドの依存をインストール
 cd ../frontend-react && npm install
@@ -152,17 +151,16 @@ cd ../frontend-react && npm install
 フロントエンドとバックエンドを分離し、ホットリロード対応：
 
 ```bash
-# ターミナル 1：バックエンド
-cd backend
-npm run dev
+# ターミナル1（統一バックエンド）
+cd ../bot-backend && set -a && source .env && set +a && npm run dev
 
-# ターミナル 2：フロントエンド
+# ターミナル2：フロントエンド
 cd frontend-react
 npm run dev
 ```
 
 - フロントエンド：`http://localhost:30170`
-- バックエンド API：`http://localhost:30171/api/v1`
+- バックエンド API：`http://localhost:30172/api/v1`
 - フロントエンドは `/api` と `/static` をバックエンドへ自動プロキシ
 
 #### 方法 2：シングルサービスモード
@@ -177,7 +175,7 @@ npm run build:frontend
 npm --prefix backend start
 ```
 
-アクセス：`http://localhost:30171`
+アクセス：`http://localhost:30172`
 
 ### 🗄️ データベース
 
@@ -189,7 +187,7 @@ SQLite 内蔵（`better-sqlite3` + WAL モード）。初回起動時にテー�
 
 ```bash
 # 手動実行も可能（対象 DB が空でない場合は --force が必要、書き込み前に自動バックアップ）
-cd backend && npx tsx scripts/import-mysql-to-sqlite.ts
+(retired — data layer is now PostgreSQL inside bot-backend)
 ```
 
 > 移行はデータベースの行のみをカバーします。旧デプロイの `data/static/` 配下の画像・動画などのメディアファイルは手動でコピーしてください。コピーしないと過去の素材にアクセスできません。
@@ -401,7 +399,7 @@ server {
     }
 
     location / {
-        proxy_pass http://localhost:30171;
+        proxy_pass http://localhost:30172;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -420,7 +418,7 @@ cp .env.example .env
 # コンテナのポートマッピングではブラウザー要求が非ループバック扱いになるため、
 # .env の AI_DRAMA_API_TOKEN を必ず設定してください（未設定だと /api/v1 がすべて 401）。
 docker compose up -d --build
-# http://localhost:30171 を開く
+# http://localhost:30172 を開く
 ```
 
 既存の `huobao-data` ボリュームにデータベース、メディア、workspace を保存します。更新時はソースを更新してから `docker compose up -d --build` を再実行してください。
@@ -466,7 +464,7 @@ A: `~/Library/Application Support/HuobaoDrama/data/`（SQLite データベース
 
 ### Q: 旧 MySQL データを SQLite に移行するには？
 
-A: MySQL に接続できる状態（環境変数または `backend/.env`）を保ち、`cd backend && npx tsx scripts/import-mysql-to-sqlite.ts` を実行。スクリプトが自動でテーブルを作成し、テーブルごとにインポートして行数を検証します（対象 DB が空でない場合は `--force` が必要。書き込み前に自動バックアップ）。
+A: MySQL に接続できる状態（環境変数または `backend/.env`）を保ち、`(retired — data layer is now PostgreSQL inside bot-backend)` を実行。スクリプトが自動でテーブルを作成し、テーブルごとにインポートして行数を検証します（対象 DB が空でない場合は `--force` が必要。書き込み前に自動バックアップ）。
 
 ### Q: FFmpeg が未インストール/見つからない？
 
@@ -594,7 +592,7 @@ Issue と Pull Request を歓迎します！
 よく使うチェックコマンド：
 
 ```bash
-cd backend && npm run typecheck
+cd ../bot-backend && npx tsc -p tsconfig.drama.json --noEmit
 cd ../frontend-react && npm run build
 ```
 

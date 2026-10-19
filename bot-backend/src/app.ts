@@ -311,15 +311,17 @@ export async function createApp(deps: AppDeps): Promise<App> {
   app.route('/admin', createAdminRoutes({ config, db, redis: redis.commands, logger, auth, catalogStore, mediaCatalogStore, credentialStore }))
 
   // 管理台 SPA（bot-backend/admin 的构建产物）：生产同源挂在 /console，
-  // 开发时由 vite dev server（30177）代理到本服务。根路径直达管理台。
-  app.get('/', (c) => c.redirect('/console'))
+  // 开发时由 vite dev server（30177）代理到本服务。根路径留给视频工厂 SPA（drama 兜底）。
   app.use('/console/*', serveStatic({ root: './admin/dist', rewriteRequestPath: (p) => p.replace(/^\/console/, '') || '/' }))
   app.get('/console/*', serveStatic({ root: './admin/dist', rewriteRequestPath: () => '/index.html' }))
   app.get('/console', serveStatic({ root: './admin/dist', path: '/index.html' }))
 
+
+  app.route('/', createHealthRoutes(database, redis.commands))
   // 视频工厂子应用（/api/v1、/mcp、/static）— 与宿主同会话；本地作业（ffmpeg/sharp）与
   // 媒体落盘（DRAMA_DATA_ROOT → ai-drama/data）跟随本进程所在机器。drama 子树由
   // tsconfig.drama.json 按原严格度独立编译，此处仅运行时挂载（顶层 await 动态导入）。
+  // 必须挂在宿主全部路由之后：drama 的 SPA 兜底 get('*') 不得抢 /admin、/api、/console。
   // 非字面量 specifier：TS 不追踪该动态导入（drama 子树独立编译），Node 运行时照常解析
   const dramaAppModule = './drama/app.js' as string
   const drama = (await import(dramaAppModule)) as unknown as {
@@ -329,7 +331,6 @@ export async function createApp(deps: AppDeps): Promise<App> {
   app.route('/', drama.createDramaApp(auth))
   void drama.recoverDrama().catch((err) => logger.warn({ err }, 'drama recovery failed'))
 
-  app.route('/', createHealthRoutes(database, redis.commands))
 
   return { hono: app, auth, cloudComputers }
 }

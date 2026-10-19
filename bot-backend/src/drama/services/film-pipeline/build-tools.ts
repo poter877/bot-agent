@@ -17,7 +17,9 @@ import { filmProjectDir } from './render.js'
 
 const execFileAsync = promisify(execFile)
 
-const FILM_CORE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../film-core')
+const FILM_CORE = process.env.FILM_CORE_PATH
+  ? path.resolve(process.env.FILM_CORE_PATH)
+  : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../film-core')
 const BACKEND_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..')
 
 /** MCP 工具结果内容部件：JSON 文本或内联图片（对齐 SDK 的 text/image content） */

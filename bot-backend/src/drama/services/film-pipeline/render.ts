@@ -14,7 +14,9 @@ import { eq } from 'drizzle-orm'
 import { STORAGE_ROOT } from '../../utils/paths.js'
 import { now } from './runs.js'
 
-const FILM_CORE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../film-core')
+const FILM_CORE = process.env.FILM_CORE_PATH
+  ? path.resolve(process.env.FILM_CORE_PATH)
+  : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../film-core')
 const BACKEND_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..')
 
 export function filmProjectDir(projectId: number) {

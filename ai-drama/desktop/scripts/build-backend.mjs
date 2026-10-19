@@ -15,7 +15,7 @@ import { fileURLToPath } from 'url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 await build({
-  entryPoints: [path.resolve(__dirname, '../../backend/src/index.ts')],
+  entryPoints: [path.resolve(__dirname, 'backend-entry.ts')],
   outfile: path.resolve(__dirname, '../build/backend.mjs'),
   bundle: true,
   format: 'esm',

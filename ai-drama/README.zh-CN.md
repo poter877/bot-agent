@@ -195,7 +195,7 @@ ComfyUI 的九个模型入口需要已部署的服务、对应模型/节点及 A
 | 变量 | 默认值 | 说明 |
 |---|---|---|
 | `SQLITE_PATH` | `<仓库根>/data/huobao.sqlite3` | SQLite 数据库文件位置 |
-| `PORT` | `30171` | 后端服务端口 |
+| `—` | — | 后端环境变量已并入 bot-backend（见 bot-backend/.env.example） |
 | `STORAGE_PATH` | `<仓库根>/data/static` | 生成文件存储目录 |
 | `HUOBAO_DATA_DIR` | — | 桌面版由 Electron 主进程注入（userData 数据根） |
 | `WORKSPACE_PATH` | `backend/workspace` | Agent 技能/提示词目录（桌面版指向 userData 可写副本） |
@@ -215,7 +215,6 @@ git clone https://github.com/chatfire-AI/huobao-drama.git
 cd huobao-drama
 
 # 安装后端依赖
-cd backend && npm install
 
 # 安装前端依赖
 cd ../frontend-react && npm install
@@ -228,9 +227,8 @@ cd ../frontend-react && npm install
 前后端分离，支持热重载：
 
 ```bash
-# 终端1：启动后端
-cd backend
-npm run dev
+# 终端1：统一后端（bot-backend 承载视频工厂 /api/v1）
+cd ../bot-backend && set -a && source .env && set +a && npm run dev
 
 # 终端2：启动前端
 cd frontend-react
@@ -238,7 +236,7 @@ npm run dev
 ```
 
 - 前端地址: `http://localhost:30170`
-- 后端 API: `http://localhost:30171/api/v1`
+- 后端 API: `http://localhost:30172（登录复用 bot-backend 账号）`
 - 前端自动代理 `/api` 和 `/static` 到后端
 
 #### 方式二：单服务模式
@@ -253,7 +251,7 @@ npm run build:frontend
 npm --prefix backend start
 ```
 
-访问: `http://localhost:30171`
+访问: `http://localhost:30172`
 
 ### 🗄️ 数据库
 
@@ -265,7 +263,7 @@ npm --prefix backend start
 
 ```bash
 # 也可手动执行（目标库非空需加 --force，写入前自动备份）
-cd backend && npx tsx scripts/import-mysql-to-sqlite.ts
+(retired — data layer is now PostgreSQL inside bot-backend)
 ```
 
 > 迁移只覆盖数据库行；旧部署 `data/static/` 下的图片/视频等媒体文件需手动拷贝，否则历史素材无法访问。
@@ -481,7 +479,7 @@ server {
     }
 
     location / {
-        proxy_pass http://localhost:30171;
+        proxy_pass http://localhost:30172;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -500,7 +498,7 @@ cp .env.example .env
 # 容器端口映射下浏览器请求来自非回环地址——.env 里必须设置 AI_DRAMA_API_TOKEN，
 # 否则所有 /api/v1 请求都会 401。
 docker compose up -d --build
-# 访问 http://localhost:30171
+# 访问 http://localhost:30172
 ```
 
 沿用 `huobao-data` 数据卷保存数据库、媒体和 workspace。更新时先更新本地源码，再执行 `docker compose up -d --build`。
@@ -546,7 +544,7 @@ A: `~/Library/Application Support/HuobaoDrama/data/`（SQLite 数据库 + 生成
 
 ### Q: 旧版 MySQL 数据怎么迁移到 SQLite？
 
-A: 保持 MySQL 可连接（环境变量或 `backend/.env`），执行 `cd backend && npx tsx scripts/import-mysql-to-sqlite.ts`，脚本会自动建表、逐表导入并校验行数（目标库非空需加 `--force`，写入前自动备份）。
+A: 保持 MySQL 可连接（环境变量或 `backend/.env`），执行 `(retired — data layer is now PostgreSQL inside bot-backend)`，脚本会自动建表、逐表导入并校验行数（目标库非空需加 `--force`，写入前自动备份）。
 
 ### Q: FFmpeg 未安装或找不到？
 
@@ -673,7 +671,7 @@ A: 后端会在首次启动时自动创建所有表，检查日志确认初始�
 常用检查命令：
 
 ```bash
-cd backend && npm run typecheck
+cd ../bot-backend && npx tsc -p tsconfig.drama.json --noEmit
 cd ../frontend-react && npm run build
 ```
 

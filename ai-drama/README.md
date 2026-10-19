@@ -117,7 +117,7 @@ No config files — everything is set via environment variables (all have defaul
 | Variable | Default | Description |
 |---|---|---|
 | `SQLITE_PATH` | `<repo>/data/huobao.sqlite3` | SQLite database file location |
-| `PORT` | `30171` | Backend service port |
+| `—` | — | backend envs live on bot-backend now (see bot-backend/.env.example) |
 | `STORAGE_PATH` | `<repo>/data/static` | Generated-file storage directory |
 | `HUOBAO_DATA_DIR` | — | Injected by the Electron main process (userData data root) |
 | `WORKSPACE_PATH` | `backend/workspace` | Agent skills/prompts directory (desktop: writable copy under userData) |
@@ -137,7 +137,6 @@ git clone https://github.com/chatfire-AI/huobao-drama.git
 cd huobao-drama
 
 # Install backend dependencies
-cd backend && npm install
 
 # Install frontend dependencies
 cd ../frontend-react && npm install
@@ -150,9 +149,8 @@ cd ../frontend-react && npm install
 Frontend and backend run separately with hot reload:
 
 ```bash
-# Terminal 1: backend
-cd backend
-npm run dev
+# Terminal 1: unified backend (bot-backend hosts the drama app at /api/v1, /mcp, /static)
+cd ../bot-backend && set -a && source .env && set +a && npm run dev
 
 # Terminal 2: frontend
 cd frontend-react
@@ -160,7 +158,8 @@ npm run dev
 ```
 
 - Frontend: `http://localhost:30170`
-- Backend API: `http://localhost:30171/api/v1`
+- Backend: `http://localhost:30172` (login reuses the bot-backend account;
+  the drama API rides the same session)
 - The frontend automatically proxies `/api` and `/static` to the backend
 
 #### Option 2: Single-service mode
@@ -175,7 +174,7 @@ npm run build:frontend
 npm --prefix backend start
 ```
 
-Visit: `http://localhost:30171`
+Visit: `http://localhost:30172`
 
 ### 🗄️ Database
 
@@ -187,7 +186,7 @@ Migrating data from a legacy MySQL deployment:
 
 ```bash
 # Or run manually (non-empty target requires --force; automatic backup before writing)
-cd backend && npx tsx scripts/import-mysql-to-sqlite.ts
+(retired — data layer is now PostgreSQL inside bot-backend)
 ```
 
 > Migration covers database rows only; media files (images/videos) under the old deployment's `data/static/` must be copied manually, or historical assets won't load.
@@ -402,7 +401,7 @@ server {
     }
 
     location / {
-        proxy_pass http://localhost:30171;
+        proxy_pass http://localhost:30172;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -421,7 +420,7 @@ cp .env.example .env
 # Container port mapping means browser requests reach the app from a non-loopback
 # address — set AI_DRAMA_API_TOKEN in .env or every API call will get 401.
 docker compose up -d --build
-# Open http://localhost:30171
+# Open http://localhost:30172
 ```
 
 The existing `huobao-data` volume keeps the database, media and workspace files. To update, update this checkout and run `docker compose up -d --build` again.
@@ -467,7 +466,7 @@ A: `~/Library/Application Support/HuobaoDrama/data/` (SQLite database + generate
 
 ### Q: How do I migrate legacy MySQL data to SQLite?
 
-A: Keep MySQL reachable (environment variables or `backend/.env`), then run `cd backend && npx tsx scripts/import-mysql-to-sqlite.ts`. The script creates tables automatically, imports table-by-table, and validates row counts (non-empty targets require `--force`; a backup is made before writing).
+A: Keep MySQL reachable (environment variables or `backend/.env`), then run `(retired — data layer is now PostgreSQL inside bot-backend)`. The script creates tables automatically, imports table-by-table, and validates row counts (non-empty targets require `--force`; a backup is made before writing).
 
 ### Q: FFmpeg not installed or not found?
 
@@ -594,7 +593,7 @@ Issues and Pull Requests are welcome!
 Common checks:
 
 ```bash
-cd backend && npm run typecheck
+cd ../bot-backend && npx tsc -p tsconfig.drama.json --noEmit
 cd ../frontend-react && npm run build
 ```
 

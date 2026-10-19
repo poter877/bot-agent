@@ -177,7 +177,8 @@ function startBackend(): void {
     HUOBAO_DESKTOP: '1',
     // 数据目录单一来源：重启/迁移后只需改 currentDataDir
     HUOBAO_DATA_DIR: currentDataDir,
-    SQLITE_PATH: path.join(currentDataDir, 'huobao.sqlite3'),
+    // 数据层已并入 bot-backend（PostgreSQL）：桌面版需提供可达的 DATABASE_URL
+    // DATABASE_URL: 'postgres://…',
     WORKSPACE_PATH: currentWorkspaceDir,
     FRONTEND_DIST: currentFrontendDist,
   }
