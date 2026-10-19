@@ -2,11 +2,11 @@ import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-const root = new URL('..', import.meta.url)
+const root = new URL('../../', import.meta.url)
 const read = (path) => readFileSync(new URL(path, root), 'utf8')
 
 test('video generation service resolves reference media and persists new fields', () => {
-  const service = read('src/services/generation.ts')
+  const service = read('src/drama/services/generation.ts')
 
   assert.match(service, /PUBLIC_BASE_URL/)
   assert.match(service, /resolvePublicMediaUrl/)
@@ -20,9 +20,9 @@ test('video generation service resolves reference media and persists new fields'
 })
 
 test('video resolution is fixed per episode, editable, and locked into video tasks', () => {
-  const episodes = read('src/routes/episodes.ts')
-  const tasks = read('src/routes/tasks.ts')
-  const service = read('src/services/generation.ts')
+  const episodes = read('src/drama/routes/episodes.ts')
+  const tasks = read('src/drama/routes/tasks.ts')
+  const service = read('src/drama/services/generation.ts')
 
   // 创建集时固定（默认 720p，仅接受 480p/720p）
   assert.match(episodes, /\['480p', '720p', '1080p'\]\.includes\(body\.resolution\)/)
@@ -38,7 +38,7 @@ test('video resolution is fixed per episode, editable, and locked into video tas
 })
 
 test('upload route exposes validated video and audio endpoints', () => {
-  const route = read('src/routes/upload.ts')
+  const route = read('src/drama/routes/upload.ts')
 
   assert.match(route, /app\.post\('\/video'/)
   assert.match(route, /app\.post\('\/audio'/)
@@ -49,7 +49,7 @@ test('upload route exposes validated video and audio endpoints', () => {
 })
 
 test('tasks route validates reference-mode requirements for video tasks', () => {
-  const route = read('src/routes/tasks.ts')
+  const route = read('src/drama/routes/tasks.ts')
 
   // 统一任务入口：type 分派 image/video
   assert.match(route, /type 必须为 image 或 video/)
@@ -73,9 +73,9 @@ test('tasks route validates reference-mode requirements for video tasks', () => 
 })
 
 test('image/video generation tasks are unified into a single sys_task table', () => {
-  const schema = read('src/db/schema.ts')
-  const sqliteSchema = read('src/db/sqlite-schema.ts')
-  const mysqlImport = read('src/db/mysql-import.ts')
+  const schema = read('src/drama/db/schema.ts')
+  const sqliteSchema = read('src/drama/db/sqlite-schema.ts')
+  const mysqlImport = read('src/drama/db/mysql-import.ts')
   const envExample = read('.env.example')
 
   // sys_task：type 区分 image/video，生成参数收进 params(JSON)
@@ -103,8 +103,8 @@ test('image/video generation tasks are unified into a single sys_task table', ()
   assert.match(sqliteSchema, /result_url TEXT/)
 
   // 路由与服务只操作 sys_task（统一 /tasks 入口，type 过滤）
-  const tasksRoute = read('src/routes/tasks.ts')
-  const service = read('src/services/generation.ts')
+  const tasksRoute = read('src/drama/routes/tasks.ts')
+  const service = read('src/drama/services/generation.ts')
   assert.match(tasksRoute, /schema\.sysTask/)
   assert.match(tasksRoute, /r\.type === type/)
   assert.match(service, /db\.insert\(schema\.sysTask\)/)

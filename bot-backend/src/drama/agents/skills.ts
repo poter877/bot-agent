@@ -12,10 +12,10 @@ import { fileURLToPath } from 'url'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
-// 桌面版由 Electron 主进程注入 WORKSPACE_PATH（userData 下的可写副本）；dev 锚定 backend/workspace
+// 桌面版由 Electron 主进程注入 WORKSPACE_PATH（userData 下的可写副本）；dev 锚定 bot-backend/workspace
 const WORKSPACE_DIR = process.env.WORKSPACE_PATH
   ? path.resolve(process.env.WORKSPACE_PATH)
-  : path.resolve(__dirname, '../../workspace')
+  : path.resolve(__dirname, '../../../workspace')
 const SKILLS_DIR = path.join(WORKSPACE_DIR, 'skills')
 
 // 启动时确保工作目录存在（技能/提示词文件的 jail 根）

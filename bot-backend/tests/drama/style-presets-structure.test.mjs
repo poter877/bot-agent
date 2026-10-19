@@ -5,11 +5,11 @@ import path from 'node:path'
 import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
 
-const root = new URL('..', import.meta.url)
+const root = new URL('../../', import.meta.url)
 const read = (path) => readFileSync(new URL(path, root), 'utf8')
 
 test('drama creation no longer pre-creates episodes from total_episodes', () => {
-  const dramas = read('src/routes/dramas.ts')
+  const dramas = read('src/drama/routes/dramas.ts')
 
   assert.doesNotMatch(dramas, /total_episodes \|\| 1/)
   assert.doesNotMatch(dramas, /第\$\{i\}集/)
@@ -46,8 +46,8 @@ test('drama creation records a fixed aspect ratio for video generation', async (
 })
 
 test('style presets route is mounted and implements CRUD', () => {
-  const entry = read('src/index.ts')
-  const route = read('src/routes/stylePresets.ts')
+  const entry = read('src/drama/app.ts')
+  const route = read('src/drama/routes/stylePresets.ts')
 
   assert.match(entry, /api\.route\('\/style-presets', stylePresets\)/)
   assert.match(route, /app\.get\('\/'/)
@@ -63,10 +63,10 @@ test('style presets route is mounted and implements CRUD', () => {
 })
 
 test('drama style prompt is injected into image prompt composition', () => {
-  const service = read('src/services/style-preset.ts')
-  const gridTools = read('src/agents/tools/image-prompt-tools.ts')
-  const characters = read('src/routes/characters.ts')
-  const scenes = read('src/routes/scenes.ts')
+  const service = read('src/drama/services/style-preset.ts')
+  const gridTools = read('src/drama/agents/tools/image-prompt-tools.ts')
+  const characters = read('src/drama/routes/characters.ts')
+  const scenes = read('src/drama/routes/scenes.ts')
 
   assert.match(service, /getDramaStylePrompt/)
   assert.match(service, /stylePresets\.value, drama\.style/)
@@ -79,7 +79,7 @@ test('drama style prompt is injected into image prompt composition', () => {
 })
 
 test('agent default prompts no longer hardcode consistent art style', () => {
-  const agents = read('src/agents/index.ts')
+  const agents = read('src/drama/agents/index.ts')
 
   assert.doesNotMatch(agents, /必须包含 "consistent art style"/)
   assert.match(agents, /视觉风格描述会由工具/)

@@ -6,7 +6,7 @@ import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { and, eq } from 'drizzle-orm'
 
-const root = new URL('..', import.meta.url)
+const root = new URL('../../', import.meta.url)
 const read = (path) => readFileSync(new URL(path, root), 'utf8')
 
 // 行为测试经真实路由 + 临时 SQLite 库（env 先于动态导入设置）
@@ -31,7 +31,7 @@ async function request(app, url, method = 'GET', body) {
 test('characters route supports manual create and soft delete', async () => {
   const dramaId = makeDrama()
   const episodeId = makeEpisode(dramaId)
-  const source = read('src/routes/characters.ts')
+  const source = read('src/drama/routes/characters.ts')
 
   // 手动新增校验：drama_id 与 name 必填（名称必填）
   assert.equal((await request(characters, '/', 'POST', { name: '缺剧集' })).status, 400)
@@ -60,7 +60,7 @@ test('characters route supports manual create and soft delete', async () => {
 test('scenes route links new scenes to episode and soft deletes', async () => {
   const dramaId = makeDrama()
   const episodeId = makeEpisode(dramaId)
-  const source = read('src/routes/scenes.ts')
+  const source = read('src/drama/routes/scenes.ts')
 
   // 手动新增校验：drama_id 与地点必填
   assert.equal((await request(scenes, '/', 'POST', { location: '缺剧集' })).status, 400)
@@ -88,7 +88,7 @@ test('scenes route links new scenes to episode and soft deletes', async () => {
 test('props route supports manual create and soft delete', async () => {
   const dramaId = makeDrama()
   const episodeId = makeEpisode(dramaId)
-  const source = read('src/routes/props.ts')
+  const source = read('src/drama/routes/props.ts')
 
   // 手动新增校验：drama_id 与 name 必填（名称必填）
   assert.equal((await request(props, '/', 'POST', { name: '缺剧集' })).status, 400)

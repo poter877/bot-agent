@@ -2,24 +2,24 @@ import { existsSync, readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-const root = new URL('..', import.meta.url)
+const root = new URL('../../', import.meta.url)
 const read = (path) => readFileSync(new URL(path, root), 'utf8')
 const exists = (path) => existsSync(new URL(path, root))
 
 test('backend no longer exposes the grid image API or split service', () => {
-  const index = read('src/index.ts')
+  const index = read('src/drama/app.ts')
 
   assert.doesNotMatch(index, /routes\/grid/)
   assert.doesNotMatch(index, /api\.route\('\/grid'/)
-  assert.equal(exists('src/routes/grid.ts'), false)
-  assert.equal(exists('src/services/grid-split.ts'), false)
+  assert.equal(exists('src/drama/routes/grid.ts'), false)
+  assert.equal(exists('src/drama/services/grid-split.ts'), false)
 })
 
 test('image prompt agent keeps role and scene prompts but removes grid prompt mode', () => {
-  const agents = read('src/agents/index.ts')
-  const skills = read('src/agents/skills.ts')
-  const imagePromptTools = read('src/agents/tools/image-prompt-tools.ts')
-  const storyboardTools = read('src/agents/tools/storyboard-tools.ts')
+  const agents = read('src/drama/agents/index.ts')
+  const skills = read('src/drama/agents/skills.ts')
+  const imagePromptTools = read('src/drama/agents/tools/image-prompt-tools.ts')
+  const storyboardTools = read('src/drama/agents/tools/storyboard-tools.ts')
   const skill = read('workspace/skills/prompt-generator/prop-prompt/SKILL.md')
 
   assert.match(agents, /prompt_generator/)

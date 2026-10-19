@@ -13,14 +13,14 @@ import fs from 'node:fs'
 import path from 'node:path'
 import ts from 'typescript'
 
-const ROOT = path.resolve(process.cwd(), 'src/drama')
+const ROOT = path.resolve(process.cwd(), process.argv[3] ? 'tests/drama' : 'src/drama')
 
 function collectTsFiles(dir) {
   const out = []
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, e.name)
     if (e.isDirectory()) out.push(...collectTsFiles(full))
-    else if (e.name.endsWith('.ts')) out.push(full)
+    else if (e.name.endsWith('.ts') || e.name.endsWith('.mjs')) out.push(full)
   }
   return out
 }

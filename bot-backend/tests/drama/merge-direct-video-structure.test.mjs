@@ -4,8 +4,8 @@ import assert from 'node:assert/strict'
 
 const mergeService = readFileSync(new URL('../../src/drama/services/ffmpeg-merge.ts', import.meta.url), 'utf8')
 const episodesRoute = readFileSync(new URL('../../src/drama/routes/episodes.ts', import.meta.url), 'utf8')
-const backendIndex = readFileSync(new URL('../../src/drama/index.ts', import.meta.url), 'utf8')
-const useApi = readFileSync(new URL('../../frontend-react/src/entities/generation-task/api.ts', import.meta.url), 'utf8')
+const backendIndex = readFileSync(new URL('../../src/drama/app.ts', import.meta.url), 'utf8')
+const useApi = readFileSync(new URL('../../../ai-drama/frontend-react/src/entities/generation-task/api.ts', import.meta.url), 'utf8')
 const composeRoutePath = new URL('../../src/drama/routes/compose.ts', import.meta.url)
 const composeServicePath = new URL('../../src/drama/services/ffmpeg-compose.ts', import.meta.url)
 

@@ -2,11 +2,11 @@ import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-const root = new URL('..', import.meta.url)
+const root = new URL('../../', import.meta.url)
 const read = (path) => readFileSync(new URL(path, root), 'utf8')
 
 test('video prompt batch service runs per-shot async agent loop', () => {
-  const svc = read('src/services/video-prompts.ts')
+  const svc = read('src/drama/services/video-prompts.ts')
 
   // 默认只处理缺少 video_prompt 的分镜；指定 storyboardIds 时只处理所选（已有提示词也重新生成）
   assert.match(svc, /filter\(sb => !\(sb\.videoPrompt \|\| ''\)\.trim\(\)\)/)
@@ -25,7 +25,7 @@ test('video prompt batch service runs per-shot async agent loop', () => {
 })
 
 test('episodes route exposes video prompt batch endpoints', () => {
-  const route = read('src/routes/episodes.ts')
+  const route = read('src/drama/routes/episodes.ts')
 
   assert.match(route, /app\.post\('\/:id\/generate-video-prompts'/)
   assert.match(route, /app\.get\('\/:id\/video-prompts-status'/)

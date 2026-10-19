@@ -6,7 +6,7 @@ import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { eq } from 'drizzle-orm'
 
-const root = new URL('..', import.meta.url)
+const root = new URL('../../', import.meta.url)
 const read = (path) => readFileSync(new URL(path, root), 'utf8')
 
 // 行为测试共用一个临时 SQLite 库（模块缓存的 db 实例只绑定首个 SQLITE_PATH，
@@ -20,8 +20,8 @@ const { db, schema, getInsertId } = await import('../../src/drama/db/index.js')
 after(async () => { await fs.rm(directory, { recursive: true, force: true }) })
 
 test('characters and scenes tables store the agent-written final prompt', () => {
-  const schema = read('src/db/schema.ts')
-  const sqliteSchema = read('src/db/sqlite-schema.ts')
+  const schema = read('src/drama/db/schema.ts')
+  const sqliteSchema = read('src/drama/db/sqlite-schema.ts')
 
   // Drizzle 表定义（MySQL→SQLite 迁移后由 sqliteTable 承接；道具同族字段一并锁定）
   assert.match(schema, /export const characters = sqliteTable\('characters'[\s\S]*?finalPrompt: text\('final_prompt'\)/)
@@ -35,7 +35,7 @@ test('characters and scenes tables store the agent-written final prompt', () => 
 })
 
 test('grid prompt agent tools save agent-written final prompts with style injection', () => {
-  const tools = read('src/agents/tools/image-prompt-tools.ts')
+  const tools = read('src/drama/agents/tools/image-prompt-tools.ts')
 
   assert.match(tools, /save_character_final_prompt/)
   assert.match(tools, /save_scene_final_prompt/)
@@ -88,7 +88,7 @@ test('prompt agent instructions are assembled per request from the workspace pro
   assert.equal(messages[1].content, '生成测试消息')
 
   // 代码默认值兜底同契约（workspace/prompts 文件缺失时的回退源不再丢保存工具约定）
-  const agents = read('src/agents/index.ts')
+  const agents = read('src/drama/agents/index.ts')
   assert.match(agents, /save_character_final_prompt/)
   assert.match(agents, /save_scene_final_prompt/)
   assert.match(agents, /角色三视图/)
@@ -137,7 +137,7 @@ test('image generation prefers the stored final prompt with agent generation and
   }
 
   // 服务形状：经 prompt_generator Agent，force 缺省 false；场景/角色各有保存工具指令
-  const service = read('src/services/final-prompt.ts')
+  const service = read('src/drama/services/final-prompt.ts')
   assert.match(service, /export async function ensureCharacterFinalPrompt/)
   assert.match(service, /export async function ensureSceneFinalPrompt/)
   assert.match(service, /getAgent\('prompt_generator'/)
@@ -145,8 +145,8 @@ test('image generation prefers the stored final prompt with agent generation and
   assert.match(service, /调用 save_scene_final_prompt 保存/)
 
   // 路由回退链：生图优先最终提示词，缺失回退本地拼接；文本模型覆盖（text_model/text_config_id）透传
-  const characters = read('src/routes/characters.ts')
-  const scenes = read('src/routes/scenes.ts')
+  const characters = read('src/drama/routes/characters.ts')
+  const scenes = read('src/drama/routes/scenes.ts')
   assert.match(characters, /ensureCharacterFinalPrompt\(char, ep\.id, /)
   assert.match(characters, /model: body\.text_model, configId: body\.text_config_id/)
   assert.match(characters, /finalPrompt \|\| characterImagePrompt\(char, stylePrompt\)/)

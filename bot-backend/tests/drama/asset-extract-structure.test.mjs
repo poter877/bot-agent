@@ -2,11 +2,11 @@ import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-const root = new URL('..', import.meta.url)
+const root = new URL('../../', import.meta.url)
 const read = (path) => readFileSync(new URL(path, root), 'utf8')
 
 test('extraction service runs per-target async tasks', () => {
-  const svc = read('src/services/extraction.ts')
+  const svc = read('src/drama/services/extraction.ts')
 
   // 三类资产目标
   assert.match(svc, /'characters' \| 'scenes' \| 'props'/)
@@ -32,7 +32,7 @@ test('extraction service runs per-target async tasks', () => {
 })
 
 test('extraction tools dedupe by normalized name so near-names reuse existing assets', () => {
-  const tools = read('src/agents/tools/extract-tools.ts')
+  const tools = read('src/drama/agents/tools/extract-tools.ts')
 
   // 归一化：括号定位/别名后缀去除 + 空白/大小写统一
   assert.match(tools, /normalizeName\(name: string\)/)
@@ -55,13 +55,13 @@ test('extraction tools dedupe by normalized name so near-names reuse existing as
 })
 
 test('episodes route exposes async extract endpoints', () => {
-  const route = read('src/routes/episodes.ts')
+  const route = read('src/drama/routes/episodes.ts')
 
   assert.match(route, /app\.post\('\/:id\/extract'/)
   assert.match(route, /app\.get\('\/:id\/extract-status'/)
   assert.match(route, /target 必须是 characters \/ scenes \/ props/)
   assert.match(route, /startExtraction\(ep\.id, ep\.dramaId, target, \{ model: body\.model/)
   // 顶栏文本模型覆盖透传到提取 Agent
-  assert.match(read('src/services/extraction.ts'), /modelOverride: opts\.model/)
+  assert.match(read('src/drama/services/extraction.ts'), /modelOverride: opts\.model/)
   assert.match(route, /getExtractionStatus\(id\)/)
 })

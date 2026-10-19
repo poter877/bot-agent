@@ -2,7 +2,7 @@ import { readFileSync, existsSync, readdirSync } from 'node:fs'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-const root = new URL('..', import.meta.url)
+const root = new URL('../../', import.meta.url)
 const read = (path) => readFileSync(new URL(path, root), 'utf8')
 
 const routeBlock = (source, route) => {
@@ -13,8 +13,8 @@ const routeBlock = (source, route) => {
 }
 
 test('direct vendor adapters are removed; the company backend is the only adapter path', () => {
-  const registry = read('src/services/adapters/registry.ts')
-  const ai = read('src/services/ai.ts')
+  const registry = read('src/drama/services/adapters/registry.ts')
+  const ai = read('src/drama/services/ai.ts')
 
   for (const vendor of ['openai-image', 'gemini-image', 'volcengine-image', 'volcengine-video', 'minimax-video', 'aliyun-wan-video']) {
     assert.doesNotMatch(registry, new RegExp(vendor, 'i'))
@@ -24,7 +24,7 @@ test('direct vendor adapters are removed; the company backend is the only adapte
 })
 
 test('core service types collapse to the company provider with tool rows exempt', () => {
-  const registrySource = read('src/services/ai-registry.ts')
+  const registrySource = read('src/drama/services/ai-registry.ts')
 
   assert.match(registrySource, /text:\s*\[\s*'company'\s*\]/)
   assert.match(registrySource, /image:\s*\[\s*'company'\s*\]/)
@@ -33,13 +33,13 @@ test('core service types collapse to the company provider with tool rows exempt'
   assert.doesNotMatch(registrySource, /text:\s*\[\s*'openai'/)
   // 工具行（fal/sync 等逻辑名）只换连接数据，仍经预设并集进入白名单
   assert.match(registrySource, /providerPresets\(\)/)
-  assert.match(read('src/services/ai.ts'), /isOfficialProvider/)
-  assert.match(read('src/services/ai.ts'), /resolveServiceRow\(serviceType\)/)
-  assert.match(read('src/services/ai.ts'), /isOfficialProvider\(row\.serviceType as ServiceType,\s*row\.provider\)/)
+  assert.match(read('src/drama/services/ai.ts'), /isOfficialProvider/)
+  assert.match(read('src/drama/services/ai.ts'), /resolveServiceRow\(serviceType\)/)
+  assert.match(read('src/drama/services/ai.ts'), /isOfficialProvider\(row\.serviceType as ServiceType,\s*row\.provider\)/)
 })
 
 test('company migration switches active rows and keeps the one-time marker', () => {
-  const registrySource = read('src/services/ai-registry.ts')
+  const registrySource = read('src/drama/services/ai-registry.ts')
 
   // v2：fal 队列在公司后端内化，标记更名让已迁移部署把 fal 行再迁一次
   assert.match(registrySource, /company_backend_registry_v2/)
@@ -49,7 +49,7 @@ test('company migration switches active rows and keeps the one-time marker', () 
 })
 
 test('AI config routes reject unsupported service/provider pairs in create, test, and update paths', () => {
-  const route = read('src/routes/aiConfigs.ts')
+  const route = read('src/drama/routes/aiConfigs.ts')
   const createRoute = routeBlock(route, "app.post('/',")
   const testRoute = routeBlock(route, "app.post('/test',")
   const updateRoute = routeBlock(route, "app.put('/:id',")
@@ -71,7 +71,7 @@ test('AI config routes reject unsupported service/provider pairs in create, test
 })
 
 test('AI config update route rejects changing an existing capability or provider', () => {
-  const route = read('src/routes/aiConfigs.ts')
+  const route = read('src/drama/routes/aiConfigs.ts')
   const updateRoute = routeBlock(route, "app.put('/:id',")
 
   assert.match(updateRoute, /const updates: Record<string, any> = \{ updatedAt: now\(\) \}/)
@@ -79,7 +79,7 @@ test('AI config update route rejects changing an existing capability or provider
 })
 
 test('company connection data is server-owned: probe hits the model catalog, client values are ignored', () => {
-  const route = read('src/routes/aiConfigs.ts')
+  const route = read('src/drama/routes/aiConfigs.ts')
 
   assert.match(route, /function companyConnection/)
   assert.match(route, /companyBaseUrl\(body\.service_type\)/)
@@ -91,7 +91,7 @@ test('company connection data is server-owned: probe hits the model catalog, cli
 })
 
 test('adapter registry fails closed for unsupported providers', () => {
-  const registry = read('src/services/adapters/registry.ts')
+  const registry = read('src/drama/services/adapters/registry.ts')
 
   assert.match(registry, /Unsupported image provider/)
   assert.match(registry, /Unsupported video provider/)
@@ -102,13 +102,13 @@ test('adapter registry fails closed for unsupported providers', () => {
 
 test('agent orchestration moved to the hermes gateway; zero local tool loops remain', () => {
   for (const file of [
-    'src/agents/index.ts',
-    'src/services/creative-planner.ts',
-    'src/services/creative-chat.ts',
-    'src/services/creative-pipeline/text.ts',
-    'src/services/film-pipeline/text.ts',
-    'src/services/film-pipeline/build-agent.ts',
-    'src/services/production-tools/auxiliary.ts',
+    'src/drama/agents/index.ts',
+    'src/drama/services/creative-planner.ts',
+    'src/drama/services/creative-chat.ts',
+    'src/drama/services/creative-pipeline/text.ts',
+    'src/drama/services/film-pipeline/text.ts',
+    'src/drama/services/film-pipeline/build-agent.ts',
+    'src/drama/services/production-tools/auxiliary.ts',
   ]) {
     const source = read(file)
     assert.match(source, /runHermesAgent/, `${file} 应经 hermes gateway 编排`)
@@ -121,10 +121,10 @@ test('agent orchestration moved to the hermes gateway; zero local tool loops rem
   for (const file of walk('src')) {
     assert.doesNotMatch(read(file), /ToolLoopAgent|getTextModel/, `${file} 不应再持有本地工具循环/本地模型`)
   }
-  assert.ok(!existsSync(new URL('src/services/ai-text.ts', root)), 'ai-text.ts 已删除')
-  assert.ok(!existsSync(new URL('src/services/company-llm-model.ts', root)), 'company-llm-model.ts 已删除')
+  assert.ok(!existsSync(new URL('src/drama/services/ai-text.ts', root)), 'ai-text.ts 已删除')
+  assert.ok(!existsSync(new URL('src/drama/services/company-llm-model.ts', root)), 'company-llm-model.ts 已删除')
   // build 预算对齐原本地循环的 30 分钟超时，且超时确实下发到 gateway 请求
-  const build = read('src/services/film-pipeline/build-agent.ts')
+  const build = read('src/drama/services/film-pipeline/build-agent.ts')
   assert.match(build, /export const BUILD_AGENT_TIMEOUT_MS = 30 \* 60_000/)
   assert.match(build, /timeoutMs: BUILD_AGENT_TIMEOUT_MS/)
 })
