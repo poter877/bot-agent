@@ -9,9 +9,16 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends build-essential python3 && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
 RUN npm ci
-COPY tsconfig.json ./
+COPY tsconfig.json tsconfig.drama.json ./
 COPY src ./src
-RUN npx tsc -p tsconfig.json
+# 主工程 + drama 子工程（独立严格度）双编译，输出合并到 dist/（app.js 动态
+# import ./drama/app.js）。drama 的 rootDir 收窄到 src 使产物落在 dist/drama/。
+RUN npx tsc -p tsconfig.json  && npx tsc -p tsconfig.drama.json --noEmit false --outDir dist --rootDir src
+# admin SPA（/console）构建产物
+COPY admin/package.json admin/package-lock.json ./admin/
+RUN cd admin && npm ci --no-audit --no-fund && cd ..
+COPY admin ./admin
+RUN cd admin && npx vite build
 # Prod-only node_modules, pruned in place after the compile: devDependencies
 # the lockfile dev-marks (typescript, redis-memory-server, ...) leave; a few
 # dev tools survive because they satisfy optional peers of PRODUCTION
@@ -31,6 +38,9 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
+# tsc 不搬运 JSON 资产：registry 快照随 dist 补齐（import.meta.url 相对定位）
+COPY --from=build /app/src/modules/llm/models-registry.json ./dist/modules/llm/models-registry.json
+COPY --from=build /app/admin/dist ./admin/dist
 COPY drizzle ./drizzle
 USER node
 EXPOSE 30172

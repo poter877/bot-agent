@@ -21,10 +21,6 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hermes}
       POSTGRES_DB: bot_backend
     volumes:
-      - trio-drama-media:/data/drama-media
-      - ../../ai-drama/frontend-react/dist:/app/frontend-dist:ro
-      - ../..//bot-backend/workspace:/app/workspace:ro
-      - ../..//bot-backend/film-core:/app/film-core:ro
       - trio-postgres:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U hermes -d bot_backend"]
@@ -51,7 +47,12 @@ services:
       redis:
         condition: service_healthy
     ports:
-      - "30172:30172"
+      - "${BOT_BACKEND_HOST_PORT:-30172}:30172"
+    volumes:
+      - trio-drama-media:/data/drama-media
+      - ../../ai-drama/frontend-react/dist:/app/frontend-dist:ro
+      - ../../bot-backend/workspace:/app/workspace:ro
+      - ../../bot-backend/film-core:/app/film-core:ro
     environment:
       DATABASE_URL: postgres://hermes:${POSTGRES_PASSWORD:-hermes}@postgres:5432/bot_backend
       REDIS_URL: redis://redis:6379/0
@@ -100,9 +101,8 @@ services:
       dockerfile: Dockerfile
     depends_on:
       - bot-backend
-      - ai-drama
     ports:
-      - "30175:30175"
+      - "${GATEWAY_HOST_PORT:-30175}:30175"
     environment:
       HERMES_HOME: /data/drama-home
       API_SERVER_KEY: ${API_SERVER_KEY:?}

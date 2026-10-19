@@ -40,6 +40,11 @@ ai-drama 前端 ──HTTP──→ ai-drama 后端（领域服务 + 任务队�
 在 drama profile 的 `config.yaml` 中注册 ai-drama 的 MCP 工具服务：
 
 ```yaml
+# 公司模式默认模型（model 段的 provider 必须是 hono/company-backend，否则
+# gateway 回落 config 里的厂商默认并在公司目录中找不到）：
+model:
+  provider: "hono"
+  model: "<目录里的模型别名>"
 mcp_servers:
   ai_drama:
     url: http://bot-backend:30172/mcp   # drama 子应用挂在 bot-backend 上 + /mcp

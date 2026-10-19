@@ -36,7 +36,7 @@ echo "OK  bot-backend model catalog (service token)"
 
 # ── 2. ai-drama MCP ─────────────────────────────────────────────────────────
 mcp=$(curl -fsS -X POST "$DRAMA_BASE/mcp" \
-  -H "Authorization: Bearer $MCP_TOKEN" \
+  -H "Authorization: Bearer $AI_DRAMA_MCP_TOKEN" \
   -H 'Content-Type: application/json' \
   -H 'Accept: application/json, text/event-stream' \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}') \
