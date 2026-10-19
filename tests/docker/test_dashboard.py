@@ -56,7 +56,7 @@ def _http_probe(
     *,
     deadline_s: float = 60.0,
 ) -> tuple[int, str]:
-    """Poll ``http://127.0.0.1:9119<path>`` from inside the container.
+    """Poll ``http://127.0.0.1:30176<path>`` from inside the container.
 
     Returns ``(status_code, body)`` as soon as the dashboard answers any
     HTTP response — 200, 401, 503, anything. The image doesn't ship
@@ -77,7 +77,7 @@ def _http_probe(
     """
     py_program = f"""\
 import urllib.request, urllib.error
-req = urllib.request.Request("http://127.0.0.1:9119{path}")
+req = urllib.request.Request("http://127.0.0.1:30176{path}")
 try:
     r = urllib.request.urlopen(req, timeout=5)
     print(r.status)
@@ -217,7 +217,7 @@ def test_dashboard_insecure_env_var_no_longer_bypasses_gate(
     # start_server raised SystemExit before binding.
     ok, _ = poll_container(
         container_name,
-        "curl -fsS -m 2 http://127.0.0.1:9119/api/status >/dev/null 2>&1",
+        "curl -fsS -m 2 http://127.0.0.1:30176/api/status >/dev/null 2>&1",
         deadline_s=12.0,
     )
     assert not ok, (

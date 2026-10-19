@@ -141,7 +141,7 @@ deployments:
    the job's profile, then **forwards** the fire to hop 2 on loopback with the
    NAS bearer preserved — it does NOT execute the job itself.
 2. **Gateway `APIServerAdapter`** (`gateway/platforms/api_server.py`, loopback
-   bind, default port 8642) — re-verifies the JWT (defense in depth) and runs
+   bind, default port 30175) — re-verifies the JWT (defense in depth) and runs
    the job with the gateway's **live platform adapters**, which is what makes
    delivery work for relay-fronted logical platforms and E2EE rooms (the
    standalone send path can serve neither). Self-host API-server deployments

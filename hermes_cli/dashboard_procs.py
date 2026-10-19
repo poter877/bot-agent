@@ -773,7 +773,7 @@ def _detect_concurrent_hermes_instances(
 def _is_desktop_local_serve_cmdline(command: str) -> bool:
     """True for the Desktop-local shape ``hermes serve [--isolated] --host 127.0.0.1 --port 0``.
 
-    Long-lived headless serves (``--host <tailscale-ip> --port 9119``) must never match —
+    Long-lived headless serves (``--host <tailscale-ip> --port 30176``) must never match —
     those are operator-managed remote backends that legitimately run with ppid 1.
     """
     from hermes_cli.update_cmd_windows import _hermes_holder_subcommand

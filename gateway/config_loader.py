@@ -143,7 +143,7 @@ def merge_platform_sections(yaml_cfg: dict, gateway_cfg: Any, gw_data: dict, *, 
     ``gateway.platforms.*`` → top-level ``platforms.*`` → ``gateway.<platform>`` subsections (nested
     first so top-level config keeps precedence, matching the gateway.streaming fallback). An
     ``enabled`` key in any block sets the ``_enabled_explicit`` marker consumed by the env pass.
-    Top-level adapter keys (``gateway.api_server.port: 8642``) reach ``extra`` in
+    Top-level adapter keys (``gateway.api_server.port: 30175``) reach ``extra`` in
     ``PlatformConfig.from_dict``. *also* names platforms whose ``gateway.<platform>`` shorthand counts
     even while no adapter is registered (a platform that left core, read before its plugin loads).
     """

@@ -2,7 +2,7 @@
 
 Serves /v1/chat/completions, /v1/responses, /v1/models, /v1/capabilities, /api/sessions,
 /v1/runs, /api/jobs and /health* (full table: ``APIServerAdapter._http_route_table``); any
-OpenAI-compatible frontend connects at http://localhost:8642/v1 with API_SERVER_KEY. Under
+OpenAI-compatible frontend connects at http://localhost:30175/v1 with API_SERVER_KEY. Under
 ``gateway.multiplex_profiles`` secondary profiles live at ``/p/<profile>/...``.
 """
 
@@ -215,7 +215,7 @@ def _hermes_version() -> str:
 
 # Default settings
 DEFAULT_HOST = "127.0.0.1"
-DEFAULT_PORT = 8642
+DEFAULT_PORT = 30175
 _BIND_ATTEMPTS = 5  # EADDRINUSE retries while a restart's predecessor releases the port (#91547)
 
 

@@ -571,7 +571,7 @@ def _listener_url(default_cfg, platform_value: str, profile: str) -> str:
     extra = {}
     with contextlib.suppress(Exception):
         extra = (default_cfg.platforms.get(Platform(platform_value)) or SimpleNamespace(extra={})).extra or {}
-    defaults = {"api_server": ("127.0.0.1", 8642), "webhook": ("0.0.0.0", 8644)}
+    defaults = {"api_server": ("127.0.0.1", 30175), "webhook": ("0.0.0.0", 8644)}
     host, port = defaults.get(platform_value, ("<host>", "<port>"))
     host = extra.get("host") or host
     port = extra.get("port") or port

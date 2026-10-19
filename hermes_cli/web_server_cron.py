@@ -328,7 +328,7 @@ def _gateway_fire_endpoint(profile: str, home: Path) -> str:
 
     Port resolution mirrors gateway/config.py's api_server load order for the LISTENER-OWNER
     profile: ``platforms.api_server.extra.port`` in its config.yaml, then ``API_SERVER_PORT``
-    (process env for the active profile, the profile's own .env otherwise), then 8642. Loopback
+    (process env for the active profile, the profile's own .env otherwise), then 30175. Loopback
     is safe: dashboard and gateway share a network namespace in every supported deployment.
 
     In multiplex mode only the DEFAULT profile's api_server is bound and exposes per-profile
@@ -379,7 +379,7 @@ def _gateway_fire_endpoint(profile: str, home: Path) -> str:
             port = int(raw) if raw else 0
         except ValueError:
             port = 0
-    port = port or 8642
+    port = port or 30175
     if multiplex and profile != "default":
         return f"http://127.0.0.1:{port}/p/{profile}/api/cron/fire"
     return f"http://127.0.0.1:{port}/api/cron/fire"

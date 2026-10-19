@@ -36,16 +36,16 @@ hermes gateway
 You'll see:
 
 ```
-[API Server] API server listening on http://127.0.0.1:8642
+[API Server] API server listening on http://127.0.0.1:30175
 ```
 
 ### 3. Connect a frontend
 
-Point any OpenAI-compatible client at `http://localhost:8642/v1`:
+Point any OpenAI-compatible client at `http://localhost:30175/v1`:
 
 ```bash
 # Test with curl
-curl http://localhost:8642/v1/chat/completions \
+curl http://localhost:30175/v1/chat/completions \
   -H "Authorization: Bearer change-me-local-dev" \
   -H "Content-Type: application/json" \
   -d '{"model": "hermes-agent", "messages": [{"role": "user", "content": "Hello!"}]}'
@@ -227,7 +227,7 @@ metadata that do not belong in the OpenAI-compatible `/v1/models` response:
 ```bash
 curl \
   -H "Authorization: Bearer $API_SERVER_KEY" \
-  "http://127.0.0.1:8642/api/model/options"
+  "http://127.0.0.1:30175/api/model/options"
 ```
 
 That payload is the same substrate the dashboard Models page and the TUI
@@ -242,7 +242,7 @@ and busts the provider model cache:
 ```bash
 curl \
   -H "Authorization: Bearer $API_SERVER_KEY" \
-  "http://127.0.0.1:8642/api/model/options?refresh=1"
+  "http://127.0.0.1:30175/api/model/options?refresh=1"
 ```
 
 Use `/v1/models` when an OpenAI-compatible client only needs a model name to
@@ -620,12 +620,12 @@ External UIs can manage Hermes sessions over REST without standing up the dashbo
 
 ```bash
 # fork a session and run one turn
-curl -X POST http://localhost:8642/api/sessions/$ID/fork \
+curl -X POST http://localhost:30175/api/sessions/$ID/fork \
   -H "Authorization: Bearer $API_SERVER_KEY" \
   -d '{"title": "explore alt path"}'
 
 # stream a turn over SSE
-curl -N -X POST http://localhost:8642/api/sessions/$ID/chat/stream \
+curl -N -X POST http://localhost:30175/api/sessions/$ID/chat/stream \
   -H "Authorization: Bearer $API_SERVER_KEY" \
   -d '{"input": "what files changed in the last hour?"}'
 ```
@@ -635,11 +635,11 @@ curl -N -X POST http://localhost:8642/api/sessions/$ID/chat/stream \
 `GET /v1/skills` and `GET /v1/toolsets` let external clients enumerate the agent's capabilities deterministically over REST instead of asking the model. Both are read-only and gated by `API_SERVER_KEY`.
 
 ```bash
-curl http://localhost:8642/v1/skills \
+curl http://localhost:30175/v1/skills \
   -H "Authorization: Bearer $API_SERVER_KEY"
 # → [{"name": "github-pr-workflow", "description": "...", "category": "..."}, ...]
 
-curl http://localhost:8642/v1/toolsets \
+curl http://localhost:30175/v1/toolsets \
   -H "Authorization: Bearer $API_SERVER_KEY"
 # → [{"name": "core", "label": "...", "description": "...", "enabled": true,
 #     "configured": true, "tools": ["read_file", "write_file", ...]}, ...]
@@ -716,7 +716,7 @@ The API server gives full access to hermes-agent's toolset, **including terminal
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `API_SERVER_ENABLED` | `false` | Enable the API server |
-| `API_SERVER_PORT` | `8642` | HTTP server port |
+| `API_SERVER_PORT` | `30175` | HTTP server port |
 | `API_SERVER_HOST` | `127.0.0.1` | Bind address (localhost only by default) |
 | `API_SERVER_KEY` | _(required)_ | Bearer token for auth |
 | `API_SERVER_CORS_ORIGINS` | _(none)_ | Comma-separated allowed browser origins |
@@ -730,7 +730,7 @@ The same settings can live in `~/.hermes/config.yaml` under a nested `gateway.ap
 gateway:
   api_server:
     enabled: true
-    port: 8642
+    port: 30175
     host: 127.0.0.1
     key: your-secret-key
     cors_origins: http://localhost:3000
@@ -788,7 +788,7 @@ Any frontend that supports the OpenAI API format works. Tested/documented integr
 | Jan | 26k | Remote model config |
 | HF Chat-UI | 8k | OPENAI_BASE_URL |
 | big-AGI | 7k | Custom endpoint |
-| OpenAI Python SDK | — | `OpenAI(base_url="http://localhost:8642/v1")` |
+| OpenAI Python SDK | — | `OpenAI(base_url="http://localhost:30175/v1")` |
 | curl | — | Direct HTTP requests |
 
 ## Multi-User Setup with Profiles

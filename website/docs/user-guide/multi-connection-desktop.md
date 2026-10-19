@@ -120,7 +120,7 @@ authentication; manage sign-in from the registered connection controls.
      instance appears (placeholder: `Homelab`). Max 64 characters.
    - *Remote gateway only:*
      - **Gateway URL** — the base URL of a running `hermes serve` backend,
-       e.g. `http://homelab.lan:9119`. Reverse-proxy path prefixes work.
+       e.g. `http://homelab.lan:30176`. Reverse-proxy path prefixes work.
      - **Authentication** — choose **Session token** or **OAuth**:
        - **Session token** — paste the dashboard session token from the
          remote gateway. When editing, *"Leave blank to keep the saved

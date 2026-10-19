@@ -210,7 +210,7 @@ async def _self_post_chat_completion(adapter: Any, *, text: str, session_id: str
     host = str(getattr(adapter, "_host", "") or "127.0.0.1")
     if host in ("0.0.0.0", "::", "*"):
         host = "127.0.0.1"  # wildcard bind — connect over loopback
-    port = int(getattr(adapter, "_port", 0) or 8642)
+    port = int(getattr(adapter, "_port", 0) or 30175)
     api_key = str(getattr(adapter, "_api_key", "") or "")
     if not api_key:
         raise RuntimeError("wake self-post requires API_SERVER_KEY: session continuation via "

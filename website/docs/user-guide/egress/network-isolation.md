@@ -92,7 +92,7 @@ services:
       - internal
       - egress              # needs outbound for Telegram, LLM APIs
     ports:
-      - "127.0.0.1:9119:9119"   # dashboard proxy, localhost only
+      - "127.0.0.1:30176:30176"   # dashboard proxy, localhost only
 
   dashboard:
     network_mode: ""
@@ -169,7 +169,7 @@ docker compose exec gateway \
 
 # From the agent container: this should SUCCEED (internal network)
 docker compose exec gateway \
-  curl -sf --max-time 5 http://hermes-dashboard:9119/health && echo "OK: internal reachable" || echo "FAIL"
+  curl -sf --max-time 5 http://hermes-dashboard:30176/health && echo "OK: internal reachable" || echo "FAIL"
 
 # If using egress proxy: this should SUCCEED (allowlisted)
 docker compose exec gateway \

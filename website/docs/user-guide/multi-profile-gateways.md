@@ -502,7 +502,7 @@ startup:
 
 ```
 [sms] profile 'coder' is served on the default profile's shared listener:
-http://127.0.0.1:8642/p/coder/webhooks/twilio (point the vendor's callback URL at this path ...)
+http://127.0.0.1:30175/p/coder/webhooks/twilio (point the vendor's callback URL at this path ...)
 ```
 
 and every status surface repeats it, so you know what to paste into the vendor
@@ -514,8 +514,8 @@ $ hermes -p coder gateway status
   Manage it from the default profile: hermes gateway status
 
 Inbound callback URLs on the shared listener:
-  line: http://127.0.0.1:8642/p/coder/line/webhook
-  sms: http://127.0.0.1:8642/p/coder/webhooks/twilio
+  line: http://127.0.0.1:30175/p/coder/line/webhook
+  sms: http://127.0.0.1:30175/p/coder/webhooks/twilio
 ```
 
 `hermes gateway status` and `hermes status` on the default profile list the same
@@ -523,7 +523,7 @@ URLs per served profile, and the dashboard's Channels page and the Desktop
 Messaging page show them as each platform's `ingress_url` when viewing that
 profile. The default's own `api_server` and `webhook` are reported the same way
 for a served profile — as **connected** with `ingress_url`
-`http://127.0.0.1:8642/p/coder/v1` (respectively `.../p/coder/webhooks/<route>`) —
+`http://127.0.0.1:30175/p/coder/v1` (respectively `.../p/coder/webhooks/<route>`) —
 since the profile has no adapter of its own for them; it is the default's listener
 answering under the `/p/coder/` prefix. A per-profile
 `SMS_WEBHOOK_PORT`, `LINE_PORT`, `TEAMS_PORT`, … in a secondary's `.env` is
@@ -1228,7 +1228,7 @@ for example:
 
 ```
 Profile 'coder': api_server moves onto the default listener at
-http://127.0.0.1:8642/p/coder/v1/... (its key/secret is unchanged; update
+http://127.0.0.1:30175/p/coder/v1/... (its key/secret is unchanged; update
 clients that call the old per-profile port).
 ```
 

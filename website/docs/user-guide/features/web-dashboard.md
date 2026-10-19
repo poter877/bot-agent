@@ -18,13 +18,13 @@ Hosted-mode auth uses Nous Portal OAuth; if you also want the dashboard to talk 
 hermes dashboard
 ```
 
-This starts a local web server and opens `http://127.0.0.1:9119` in your browser. The dashboard runs entirely on your machine — no data leaves localhost.
+This starts a local web server and opens `http://127.0.0.1:30176` in your browser. The dashboard runs entirely on your machine — no data leaves localhost.
 
 ### Options
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--port` | `9119` | Port to run the web server on |
+| `--port` | `30176` | Port to run the web server on |
 | `--host` | `127.0.0.1` | Bind address |
 | `--no-open` | — | Don't auto-open the browser |
 | `--insecure` | off | **Deprecated / no-op.** Formerly bypassed auth on a non-loopback bind; it no longer disables authentication — a public bind always requires an auth provider (password or OAuth) |
@@ -52,7 +52,7 @@ the dashboard's own is selected, an amber banner names the managed profile
 so the write target is never ambiguous.
 
 The selection lives in the URL (`?profile=<name>`), so deep links like
-`http://127.0.0.1:9119/skills?profile=worker` land with the switcher
+`http://127.0.0.1:30176/skills?profile=worker` land with the switcher
 preselected and survive refresh.
 
 Launching the dashboard from a profile alias routes to the machine
@@ -187,7 +187,7 @@ Set a username and password, then run the dashboard bound to a reachable address
 [Service]
 EnvironmentFile=%h/.hermes/.env
 ExecStart=/path/to/venv/bin/python -m hermes_cli.main dashboard \
-    --host 0.0.0.0 --port 9119 --no-open
+    --host 0.0.0.0 --port 30176 --no-open
 Restart=always
 RestartSec=10
 # Exit 78 (EX_CONFIG) is a deliberate refusal ("this host is already served by PID … on
@@ -208,13 +208,13 @@ HERMES_DASHBOARD_BASIC_AUTH_PASSWORD=choose-a-strong-password
 HERMES_DASHBOARD_BASIC_AUTH_SECRET=<32+ random bytes; openssl rand -base64 32>
 ```
 
-Then in Desktop enter the **Remote URL** (e.g. `http://VM_IP:9119`) and **Sign in** with that username and password. See the [username/password provider](#usernamepassword-provider-no-oauth-idp) section for the full configuration surface.
+Then in Desktop enter the **Remote URL** (e.g. `http://VM_IP:30176`) and **Sign in** with that username and password. See the [username/password provider](#usernamepassword-provider-no-oauth-idp) section for the full configuration surface.
 
 :::tip Verify the gate is on before retrying Desktop
 From any machine, check that the dashboard advertises the username/password provider:
 
 ```bash
-curl -s http://VM_IP:9119/api/status | jq '.auth_required, .auth_providers'
+curl -s http://VM_IP:30176/api/status | jq '.auth_required, .auth_providers'
 # true
 # ["basic"]
 ```
@@ -739,13 +739,13 @@ hermes dashboard register
 **2. Run the dashboard on a reachable address.** A non-loopback bind engages the OAuth gate, and the `client_id` just written activates the `nous` provider:
 
 ```bash
-hermes dashboard --host 0.0.0.0 --port 9119 --no-open
+hermes dashboard --host 0.0.0.0 --port 30176 --no-open
 ```
 
-**3. Log in.** Open `http://<host>:9119/`, you'll be bounced to `/login`. Click **Sign in with Nous Research** → authenticate at the Portal → land back on the authenticated dashboard. Verify the gate from any machine:
+**3. Log in.** Open `http://<host>:30176/`, you'll be bounced to `/login`. Click **Sign in with Nous Research** → authenticate at the Portal → land back on the authenticated dashboard. Verify the gate from any machine:
 
 ```bash
-curl -s http://<host>:9119/api/status | jq '.auth_required, .auth_providers'
+curl -s http://<host>:30176/api/status | jq '.auth_required, .auth_providers'
 # true
 # ["nous"]
 ```
@@ -818,13 +818,13 @@ chmod 600 ~/.hermes/.env
 **2. Run the dashboard on a reachable address.** A non-loopback bind engages the gate, and the username + hash activate the `basic` provider:
 
 ```bash
-hermes dashboard --host 0.0.0.0 --port 9119 --no-open
+hermes dashboard --host 0.0.0.0 --port 30176 --no-open
 ```
 
-**3. Log in.** Open `http://<host>:9119/`, you'll be bounced to `/login` — a **credential form** (not a "Sign in with X" button). Enter `admin` / your password → land on the authenticated dashboard. Verify the gate from any machine:
+**3. Log in.** Open `http://<host>:30176/`, you'll be bounced to `/login` — a **credential form** (not a "Sign in with X" button). Enter `admin` / your password → land on the authenticated dashboard. Verify the gate from any machine:
 
 ```bash
-curl -s http://<host>:9119/api/status | jq '.auth_required, .auth_providers'
+curl -s http://<host>:30176/api/status | jq '.auth_required, .auth_providers'
 # true
 # ["basic"]
 ```
@@ -903,8 +903,8 @@ The ID token is what establishes identity — the access token is treated as opa
       "publicClient": true,
       "standardFlowEnabled": true,
       "protocol": "openid-connect",
-      "redirectUris": ["http://localhost:9119/auth/callback"],
-      "webOrigins": ["http://localhost:9119"],
+      "redirectUris": ["http://localhost:30176/auth/callback"],
+      "webOrigins": ["http://localhost:30176"],
       "attributes": { "pkce.code.challenge.method": "S256" }
     }
   ],
@@ -945,16 +945,16 @@ Once it's up, the realm advertises standard OIDC discovery at
 ```bash
 export HERMES_DASHBOARD_OIDC_ISSUER="http://localhost:8080/realms/hermes"
 export HERMES_DASHBOARD_OIDC_CLIENT_ID="hermes-dashboard"
-export HERMES_DASHBOARD_PUBLIC_URL="http://localhost:9119"
-hermes dashboard --host 0.0.0.0 --port 9119 --no-open
+export HERMES_DASHBOARD_PUBLIC_URL="http://localhost:30176"
+hermes dashboard --host 0.0.0.0 --port 30176 --no-open
 ```
 
 `HERMES_DASHBOARD_PUBLIC_URL` tells the dashboard its OAuth callback is
-`http://localhost:9119/auth/callback` — the redirect URI the realm registered
+`http://localhost:30176/auth/callback` — the redirect URI the realm registered
 above. Binding to `0.0.0.0` (a non-loopback bind) is what
 engages the OAuth gate.
 
-**3. Log in.** Open `http://localhost:9119/`, you'll be bounced to `/login`. Click **Sign in with Self-Hosted OIDC** → authenticate at Keycloak as `testuser` / `testpassword` → land back on the authenticated dashboard. The sidebar shows `Logged in as Test User via self-hosted`, and `GET /api/auth/me` returns the verified session (`provider: self-hosted`, `email: testuser@example.com`).
+**3. Log in.** Open `http://localhost:30176/`, you'll be bounced to `/login`. Click **Sign in with Self-Hosted OIDC** → authenticate at Keycloak as `testuser` / `testpassword` → land back on the authenticated dashboard. The sidebar shows `Logged in as Test User via self-hosted`, and `GET /api/auth/me` returns the verified session (`provider: self-hosted`, `email: testuser@example.com`).
 
 > If you bind or browse on a different host/port, add that origin's
 > `…/auth/callback` to the client's **Valid redirect URIs** in the Keycloak
@@ -1010,10 +1010,10 @@ events record the proxy's address.
 
 ```bash
 # Backend remains reachable only on this machine.
-hermes dashboard --host 127.0.0.1 --port 9119 --no-open
+hermes dashboard --host 127.0.0.1 --port 30176 --no-open
 ```
 
-Point the TLS reverse proxy at `http://127.0.0.1:9119` and use
+Point the TLS reverse proxy at `http://127.0.0.1:30176` and use
 the same external origin in `dashboard.public_url`.
 
 Tailscale Serve is one example of this deployment shape: it can terminate
@@ -1115,7 +1115,7 @@ HERMES_DASHBOARD_OAUTH_CLIENT_ID=agent:test \
 hermes dashboard --host 0.0.0.0
 
 # Hit /api/status to see the gate state:
-curl -s http://127.0.0.1:9119/api/status | jq '.auth_required, .auth_providers'
+curl -s http://127.0.0.1:30176/api/status | jq '.auth_required, .auth_providers'
 # true
 # ["nous"]
 ```
@@ -1144,7 +1144,7 @@ chmod 600 ~/.hermes/.env
 
 # 2. Run the dashboard bound to a reachable address. The non-loopback bind
 #    engages the auth gate; the username/password provider handles login.
-hermes dashboard --no-open --host 0.0.0.0 --port 9119
+hermes dashboard --no-open --host 0.0.0.0 --port 30176
 ```
 
 Prefer no plaintext at rest? Use `HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH` with a scrypt hash instead — see [Username/password provider](#usernamepassword-provider-no-oauth-idp) for the full surface.
@@ -1152,14 +1152,14 @@ Prefer no plaintext at rest? Use `HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH` wit
 If you run the dashboard as a systemd service, `~/.hermes/.env` is picked up automatically when the unit has `EnvironmentFile=%h/.hermes/.env`, so the credentials are in the environment at boot.
 
 :::warning
-The dashboard reads and writes your `.env` (API keys, secrets) and can run agent commands. The **username/password** setup shown here is for a trusted network — never expose a password-protected dashboard directly to the open internet. Put it behind a VPN. [Tailscale](https://tailscale.com/) is the clean option: bind to the machine's tailscale IP (`--host <tailscale-ip>`) and use `http://<tailscale-ip>:9119` as the Remote URL. Only devices on your tailnet can reach it. To reach a backend over the public internet, use the **OAuth (Nous Portal)** provider instead.
+The dashboard reads and writes your `.env` (API keys, secrets) and can run agent commands. The **username/password** setup shown here is for a trusted network — never expose a password-protected dashboard directly to the open internet. Put it behind a VPN. [Tailscale](https://tailscale.com/) is the clean option: bind to the machine's tailscale IP (`--host <tailscale-ip>`) and use `http://<tailscale-ip>:30176` as the Remote URL. Only devices on your tailnet can reach it. To reach a backend over the public internet, use the **OAuth (Nous Portal)** provider instead.
 :::
 
 ### In Hermes Desktop
 
 **Settings → Gateways → Remote gateway:**
 
-- **Remote URL** — `http://<backend-host>:9119` (path prefixes like `/hermes` are supported if you front it with a reverse proxy)
+- **Remote URL** — `http://<backend-host>:30176` (path prefixes like `/hermes` are supported if you front it with a reverse proxy)
 - **Sign in** — the app detects the username/password gateway and shows a **Sign in** button; click it and enter the credentials from step 1
 - **Save and reconnect** — switches the desktop shell onto the remote backend
 
@@ -1171,12 +1171,12 @@ Instead of the in-app setting, you can point the desktop at a backend with an en
 
 | Env var | Value |
 |---------|-------|
-| `HERMES_DESKTOP_REMOTE_URL` | `http://<backend-host>:9119` |
+| `HERMES_DESKTOP_REMOTE_URL` | `http://<backend-host>:30176` |
 
 ### Troubleshooting
 
 - **"Remote gateway incomplete"** — you haven't entered a remote URL.
-- **Sign-in fails with 401 / "Invalid credentials"** — the username or password doesn't match the backend's `HERMES_DASHBOARD_BASIC_AUTH_USERNAME` / `HERMES_DASHBOARD_BASIC_AUTH_PASSWORD`. The backend returns the same generic error for unknown user and wrong password, so check both. Confirm the gate with `curl -s http://<host>:9119/api/status | jq '.auth_required, .auth_providers'` — it should report `true` and include `"basic"`.
+- **Sign-in fails with 401 / "Invalid credentials"** — the username or password doesn't match the backend's `HERMES_DASHBOARD_BASIC_AUTH_USERNAME` / `HERMES_DASHBOARD_BASIC_AUTH_PASSWORD`. The backend returns the same generic error for unknown user and wrong password, so check both. Confirm the gate with `curl -s http://<host>:30176/api/status | jq '.auth_required, .auth_providers'` — it should report `true` and include `"basic"`.
 - **No "Sign in" button — it asks for a session token instead** — the username/password provider isn't active (`/api/status` won't list `"basic"`). Make sure the username and a password (or password hash) are set and the dashboard process loaded them.
 - **Signed out on every restart** — set `HERMES_DASHBOARD_BASIC_AUTH_SECRET` to a stable value; otherwise the signing key is regenerated per boot.
 - **Connection refused / times out** — the backend bound to `127.0.0.1` (the default) instead of a reachable address, or a firewall/VPN is blocking the port. Bind to `0.0.0.0` or the tailscale IP and open the port to your trusted network.
@@ -1185,7 +1185,7 @@ Instead of the in-app setting, you can point the desktop at a backend with an en
 
 The web server restricts CORS to localhost origins only:
 
-- `http://localhost:9119` / `http://127.0.0.1:9119` (production)
+- `http://localhost:30176` / `http://127.0.0.1:30176` (production)
 - `http://localhost:3000` / `http://127.0.0.1:3000`
 - `http://localhost:5173` / `http://127.0.0.1:5173` (Vite dev server)
 
@@ -1205,7 +1205,7 @@ npm install
 npm run dev
 ```
 
-The Vite dev server at `http://localhost:5173` proxies `/api` requests to the FastAPI backend at `http://127.0.0.1:9119`.
+The Vite dev server at `http://localhost:5173` proxies `/api` requests to the FastAPI backend at `http://127.0.0.1:30176`.
 
 The frontend is built with React 19, TypeScript, Tailwind CSS v4, and shadcn/ui-style components. Production builds output to `hermes_cli/web_dist/` which the FastAPI server serves as a static SPA.
 

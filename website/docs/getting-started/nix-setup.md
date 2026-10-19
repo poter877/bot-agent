@@ -684,8 +684,8 @@ macOS has no equivalent option. A `launchd` agent with `RunAtLoad` starts at log
   services.hermes-agent = {
     enable = true;
     gateway.enable = true;      # messaging platforms
-    backend.mode = "dashboard"; # + the browser dashboard on 127.0.0.1:9119
-    backend.port = 9119;
+    backend.mode = "dashboard"; # + the browser dashboard on 127.0.0.1:30176
+    backend.port = 30176;
   };
 }
 ```
@@ -1041,7 +1041,7 @@ This option runs the process that Hermes Desktop and the web dashboard connect t
 |---|---|---|---|
 | `backend.mode` | `enum ["none" "serve" "dashboard"]` | `"none"` | `serve` runs without a user interface and gives `/api/ws` and `/api/pty`. `dashboard` also serves the browser panel. |
 | `backend.host` | `str` | `"127.0.0.1"` | The address to bind to. Each address other than loopback starts the authentication gate. |
-| `backend.port` | `port` | `9119` | The port to bind to |
+| `backend.port` | `port` | `30176` | The port to bind to |
 | `backend.extraArgs` | `listOf str` | `[]` | More arguments for the backend command |
 
 ### Home Manager only

@@ -13,7 +13,7 @@ description: "Connect Open WebUI to Hermes Agent via the OpenAI-compatible API s
 ```mermaid
 flowchart LR
     A["Open WebUI<br/>browser UI<br/>port 3000"]
-    B["hermes-agent<br/>gateway API server<br/>port 8642"]
+    B["hermes-agent<br/>gateway API server<br/>port 30175"]
     A -->|POST /v1/chat/completions| B
     B -->|SSE streaming response| A
 ```
@@ -52,16 +52,16 @@ hermes gateway
 You should see:
 
 ```
-[API Server] API server listening on http://127.0.0.1:8642
+[API Server] API server listening on http://127.0.0.1:30175
 ```
 
 ### 3. Verify the API server is reachable
 
 ```bash
-curl -s http://127.0.0.1:8642/health
+curl -s http://127.0.0.1:30175/health
 # {"status": "ok", ...}
 
-curl -s -H "Authorization: Bearer your-secret-key" http://127.0.0.1:8642/v1/models
+curl -s -H "Authorization: Bearer your-secret-key" http://127.0.0.1:30175/v1/models
 # {"object":"list","data":[{"id":"hermes-agent", ...}]}
 ```
 
@@ -71,7 +71,7 @@ If `/health` fails, the gateway didn't pick up `API_SERVER_ENABLED=true` — res
 
 ```bash
 docker run -d -p 3000:8080 \
-  -e OPENAI_API_BASE_URL=http://host.docker.internal:8642/v1 \
+  -e OPENAI_API_BASE_URL=http://host.docker.internal:30175/v1 \
   -e OPENAI_API_KEY=your-secret-key \
   -e ENABLE_OLLAMA_API=false \
   --add-host=host.docker.internal:host-gateway \
@@ -102,7 +102,7 @@ services:
     volumes:
       - open-webui:/app/backend/data
     environment:
-      - OPENAI_API_BASE_URL=http://host.docker.internal:8642/v1
+      - OPENAI_API_BASE_URL=http://host.docker.internal:30175/v1
       - OPENAI_API_KEY=your-secret-key
       - ENABLE_OLLAMA_API=false
     extra_hosts:
@@ -129,7 +129,7 @@ If you prefer to configure the connection through the UI instead of environment 
 4. Under **OpenAI API**, click the **wrench icon** (Manage)
 5. Click **+ Add New Connection**
 6. Enter:
-   - **URL**: `http://host.docker.internal:8642/v1`
+   - **URL**: `http://host.docker.internal:30175/v1`
    - **API Key**: the exact same value as `API_SERVER_KEY` in Hermes
 7. Click the **checkmark** to verify the connection
 8. **Save**
@@ -194,7 +194,7 @@ With streaming enabled (the default), you'll see brief inline indicators as tool
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `API_SERVER_ENABLED` | `false` | Enable the API server |
-| `API_SERVER_PORT` | `8642` | HTTP server port |
+| `API_SERVER_PORT` | `30175` | HTTP server port |
 | `API_SERVER_HOST` | `127.0.0.1` | Bind address |
 | `API_SERVER_KEY` | _(required)_ | Bearer token for auth. Match `OPENAI_API_KEY`. |
 
@@ -209,9 +209,9 @@ With streaming enabled (the default), you'll see brief inline indicators as tool
 
 ### No models appear in the dropdown
 
-- **Check the URL has `/v1` suffix**: `http://host.docker.internal:8642/v1` (not just `:8642`)
-- **Verify the gateway is running**: `curl http://localhost:8642/health` should return `{"status": "ok"}`
-- **Check model listing**: `curl -H "Authorization: Bearer your-secret-key" http://localhost:8642/v1/models` should return a list with `hermes-agent`
+- **Check the URL has `/v1` suffix**: `http://host.docker.internal:30175/v1` (not just `:30175`)
+- **Verify the gateway is running**: `curl http://localhost:30175/health` should return `{"status": "ok"}`
+- **Check model listing**: `curl -H "Authorization: Bearer your-secret-key" http://localhost:30175/v1/models` should return a list with `hermes-agent`
 - **Docker networking**: From inside Docker, `localhost` means the container, not your host. Use `host.docker.internal` or `--network=host`.
 - **Empty Ollama backend shadowing the picker**: If you omitted `ENABLE_OLLAMA_API=false`, Open WebUI shows an empty Ollama section above your Hermes models. Restart the container with `-e ENABLE_OLLAMA_API=false` or disable Ollama in **Admin Settings → Connections**.
 
@@ -289,8 +289,8 @@ On Linux without Docker Desktop, `host.docker.internal` doesn't resolve by defau
 docker run --add-host=host.docker.internal:host-gateway ...
 
 # Option 2: Use host networking
-docker run --network=host -e OPENAI_API_BASE_URL=http://localhost:8642/v1 ...
+docker run --network=host -e OPENAI_API_BASE_URL=http://localhost:30175/v1 ...
 
 # Option 3: Use Docker bridge IP
-docker run -e OPENAI_API_BASE_URL=http://172.17.0.1:8642/v1 ...
+docker run -e OPENAI_API_BASE_URL=http://172.17.0.1:30175/v1 ...
 ```

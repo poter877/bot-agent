@@ -426,14 +426,14 @@ class S6ServiceManager:
         privilege drop so root's HOME does not leak, activates the venv, drops to hermes.
         ``profile == "default"`` emits NO ``-p`` flag: it is the sentinel for the root HERMES_HOME
         profile and ``-p default`` would look up ``profiles/default/``. Port comes from the
-        profile's own env (``API_SERVER_PORT``, default 8642); two profiles that both leave it
+        profile's own env (``API_SERVER_PORT``, default 30175); two profiles that both leave it
         unset collide.
 
         Port selection: the gateway binds the port resolved by ``gateway/config.py`` from the profile's own
         environment — ``API_SERVER_PORT`` (or ``platforms.api_server.extra.port`` in that profile's
-        ``config.yaml``), defaulting to 8642. There is no ``[gateway] port`` key and no Python-side
+        ``config.yaml``), defaulting to 30175. There is no ``[gateway] port`` key and no Python-side
         allocator: because each supervised profile gateway loads its own ``HERMES_HOME``, two profiles that
-        both leave the port unset will both try to bind 8642 — give each profile a distinct
+        both leave the port unset will both try to bind 30175 — give each profile a distinct
         ``API_SERVER_PORT`` in its ``.env``. Previously this method took a ``port`` parameter that was
         passed in but never substituted into the rendered script (carried for "API parity" with a
         deterministic SHA-256 allocator in ``hermes_cli.profiles._allocate_gateway_port``). PR #30136 review

@@ -68,11 +68,11 @@ docker run -d \
   --name hermes \
   --restart unless-stopped \
   -v ~/.hermes:/opt/data \
-  -p 8642:8642 \
+  -p 30175:30175 \
   nousresearch/hermes-agent gateway run
 ```
 
-Port 8642 exposes the gateway's [OpenAI-compatible API server](./features/api-server.md) and health endpoint. It's optional if you only use chat platforms (Telegram, Discord, etc.), but required if you want the dashboard or external tools to reach the gateway.
+Port 30175 exposes the gateway's [OpenAI-compatible API server](./features/api-server.md) and health endpoint. It's optional if you only use chat platforms (Telegram, Discord, etc.), but required if you want the dashboard or external tools to reach the gateway.
 
 :::tip Gateway runs supervised
 Inside the official Docker image, `gateway run` is **automatically supervised by s6-overlay**: if the gateway process crashes it's restarted within a couple of seconds without losing the container, and the dashboard (when `HERMES_DASHBOARD=1` is set) is supervised alongside it. The `gateway run` CMD process itself is a `sleep infinity` heartbeat that keeps the container alive while s6 manages the actual gateway process — so `docker stop` still shuts everything down cleanly, but `docker logs` shows the supervised gateway's output.
@@ -102,7 +102,7 @@ docker run -d \
   --name hermes \
   --restart unless-stopped \
   -v ~/.hermes:/opt/data \
-  -p 8642:8642 \
+  -p 30175:30175 \
   -e API_SERVER_ENABLED=true \
   -e API_SERVER_HOST=0.0.0.0 \
   -e API_SERVER_KEY="$(openssl rand -hex 32)" \
@@ -121,8 +121,8 @@ docker run -d \
   --name hermes \
   --restart unless-stopped \
   -v ~/.hermes:/opt/data \
-  -p 8642:8642 \
-  -p 9119:9119 \
+  -p 30175:30175 \
+  -p 30176:30176 \
   -e HERMES_DASHBOARD=1 \
   nousresearch/hermes-agent gateway run
 ```
@@ -133,10 +133,10 @@ The dashboard is supervised by s6 — if it crashes, `s6-supervise` restarts it 
 |---------------------|-------------|---------|
 | `HERMES_DASHBOARD` | Set to `1` (or `true` / `yes`) to enable the supervised dashboard service | *(unset — service is registered but stays down)* |
 | `HERMES_DASHBOARD_HOST` | Bind address for the dashboard HTTP server | `0.0.0.0` |
-| `HERMES_DASHBOARD_PORT` | Port for the dashboard HTTP server | `9119` |
+| `HERMES_DASHBOARD_PORT` | Port for the dashboard HTTP server | `30176` |
 | `HERMES_DASHBOARD_INSECURE` | **Deprecated / no-op.** Formerly bypassed the auth gate; as of the June 2026 hardening it no longer disables authentication. A non-loopback bind always requires an auth provider | *(ignored — configure a provider instead)* |
 
-The dashboard inside the container defaults to binding `0.0.0.0` — without it, the published `-p 9119:9119` port would not be reachable from the host. To restrict the bind to container loopback (for sidecar / reverse-proxy setups), set `HERMES_DASHBOARD_HOST=127.0.0.1`.
+The dashboard inside the container defaults to binding `0.0.0.0` — without it, the published `-p 30176:30176` port would not be reachable from the host. To restrict the bind to container loopback (for sidecar / reverse-proxy setups), set `HERMES_DASHBOARD_HOST=127.0.0.1`.
 
 The dashboard's auth gate engages automatically when both of the following are true:
 
@@ -277,9 +277,9 @@ Under the hood, `hermes gateway start/stop/restart` inside the container is inte
 
 Two different surfaces reach a profile's gateway from outside, and they behave differently — don't conflate them:
 
-**Hermes Desktop (and the web dashboard).** The Desktop app's **Remote Gateway** connection talks to a `hermes dashboard` backend (default **port 9119**, enabled by `HERMES_DASHBOARD=1`) — *not* the OpenAI API server. One dashboard backend serves **every** co-located profile: the app's profile switcher sends the target profile with each request and the backend opens that profile's `HERMES_HOME` on disk. So you do **not** need a second port — or a second connection — per profile for Desktop; one `:9119` connection covers them all through the switcher.
+**Hermes Desktop (and the web dashboard).** The Desktop app's **Remote Gateway** connection talks to a `hermes dashboard` backend (default **port 30176**, enabled by `HERMES_DASHBOARD=1`) — *not* the OpenAI API server. One dashboard backend serves **every** co-located profile: the app's profile switcher sends the target profile with each request and the backend opens that profile's `HERMES_HOME` on disk. So you do **not** need a second port — or a second connection — per profile for Desktop; one `:30176` connection covers them all through the switcher.
 
-**OpenAI-compatible API clients (Open WebUI, LobeChat, `/v1/...`).** These talk to each profile's **API server**, which binds **port 8642 for every profile** (resolved from `API_SERVER_PORT` / `platforms.api_server.extra.port` — there is no auto-allocation and no `config.yaml`/`gateway.port` key). If you want a client to reach a *specific* second profile, give that profile a distinct `API_SERVER_PORT` in **its own** `.env`, otherwise its gateway tries to bind 8642 too and conflicts with the default profile:
+**OpenAI-compatible API clients (Open WebUI, LobeChat, `/v1/...`).** These talk to each profile's **API server**, which binds **port 30175 for every profile** (resolved from `API_SERVER_PORT` / `platforms.api_server.extra.port` — there is no auto-allocation and no `config.yaml`/`gateway.port` key). If you want a client to reach a *specific* second profile, give that profile a distinct `API_SERVER_PORT` in **its own** `.env`, otherwise its gateway tries to bind 30175 too and conflicts with the default profile:
 
 ```sh
 # Create the profile (registers its gateway-<name> s6 slot)
@@ -294,7 +294,7 @@ EOF
 docker exec hermes hermes -p work gateway restart
 ```
 
-Keep `API_SERVER_PORT` in each profile's **own** `.env`, never in the container-wide `environment:` block — a global value would force every profile onto the same port and they would collide. With bridge networking, publish the extra port in `docker-compose.yml` (`- "8643:8643"`); with `network_mode: host` it is already reachable on the host. The default profile's 8642 connection is untouched.
+Keep `API_SERVER_PORT` in each profile's **own** `.env`, never in the container-wide `environment:` block — a global value would force every profile onto the same port and they would collide. With bridge networking, publish the extra port in `docker-compose.yml` (`- "8643:8643"`); with `network_mode: host` it is already reachable on the host. The default profile's 30175 connection is untouched.
 
 ### Why one container with many profiles, not many containers
 
@@ -330,7 +330,7 @@ services:
     restart: unless-stopped
     command: gateway run
     ports:
-      - "8642:8642"
+      - "30175:30175"
     volumes:
       - ~/.hermes-work:/opt/data
 
@@ -340,7 +340,7 @@ services:
     restart: unless-stopped
     command: gateway run
     ports:
-      - "8643:8642"
+      - "8643:30175"
     volumes:
       - ~/.hermes-personal:/opt/data
 ```
@@ -393,8 +393,8 @@ services:
     restart: unless-stopped
     command: gateway run
     ports:
-      - "8642:8642"   # gateway API
-      - "9119:9119"   # dashboard (only reached when HERMES_DASHBOARD=1)
+      - "30175:30175"   # gateway API
+      - "30176:30176"   # dashboard (only reached when HERMES_DASHBOARD=1)
     volumes:
       - ~/.hermes:/opt/data
     environment:
@@ -587,7 +587,7 @@ services:
     image: nousresearch/hermes-agent:latest
     init: true                                      # docker-init becomes PID 1 and reaps orphans
     entrypoint: ["/opt/hermes/.venv/bin/hermes"]
-    command: ["dashboard", "--host", "0.0.0.0", "--port", "9119", "--no-open", "--skip-build"]
+    command: ["dashboard", "--host", "0.0.0.0", "--port", "30176", "--no-open", "--skip-build"]
 ```
 
 (`docker run --init …` is the equivalent flag.) This fixes the zombie accumulation only — with `/init` out of the chain, the s6 supervision tree is still gone: the dashboard, `hermes gateway run` and per-profile gateways are unsupervised, exactly as the dispatcher's own non-PID-1 warning says. Keep the default `ENTRYPOINT` whenever you can.
@@ -694,7 +694,7 @@ docker run -d \
   --name hermes \
   --restart unless-stopped \
   -v ~/.hermes:/opt/data \
-  -p 8642:8642 \
+  -p 30175:30175 \
   my-hermes:latest gateway run
 ```
 
@@ -712,7 +712,7 @@ services:
     restart: unless-stopped
     command: gateway run
     ports:
-      - "8642:8642"
+      - "30175:30175"
     volumes:
       - ~/.hermes:/opt/data
     networks:
@@ -770,7 +770,7 @@ services:
     restart: unless-stopped
     command: gateway run
     ports:
-      - "8642:8642"
+      - "30175:30175"
     volumes:
       - ~/.hermes:/opt/data
     networks:
@@ -808,7 +808,7 @@ If your inference server runs directly on the host (not in Docker), use `host.do
 docker run -d \
   --name hermes \
   -v ~/.hermes:/opt/data \
-  -p 8642:8642 \
+  -p 30175:30175 \
   nousresearch/hermes-agent gateway run
 ```
 

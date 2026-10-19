@@ -3086,7 +3086,7 @@ OPTIONAL_ENV_VARS = {
         "Bearer token for API server authentication. Required whenever the API server is "
         "enabled; server refuses to start without it.", "API server auth key", None, password=True,
         advanced=True),
-    "API_SERVER_PORT": _msg("Port for the API server (default: 8642).", "API server port", None,
+    "API_SERVER_PORT": _msg("Port for the API server (default: 30175).", "API server port", None,
         advanced=True),
     "API_SERVER_HOST": _msg(
         "Host/bind address for the API server (default: 127.0.0.1). API_SERVER_KEY is still "
@@ -3100,7 +3100,7 @@ OPTIONAL_ENV_VARS = {
         "gateway handles platform I/O only — all agent work is delegated to the remote server. "
         "Use for Docker E2EE containers that relay to a host agent. Also configurable via "
         "gateway.proxy_url in config.yaml.",
-        "Remote Hermes API server URL (e.g. http://192.168.1.100:8642)", None, advanced=True),
+        "Remote Hermes API server URL (e.g. http://192.168.1.100:30175)", None, advanced=True),
     "GATEWAY_PROXY_KEY": _msg(
         "Bearer token for authenticating with the remote Hermes API server (proxy mode). Must "
         "match the API_SERVER_KEY on the remote host.", "Remote API server auth key", None,

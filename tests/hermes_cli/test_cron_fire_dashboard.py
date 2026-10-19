@@ -207,7 +207,7 @@ def test_fire_endpoint_default_port(tmp_path, monkeypatch):
     monkeypatch.delenv("GATEWAY_MULTIPLEX_PROFILES", raising=False)
     monkeypatch.setattr(_cfg_mod, "load_config", dict)
     url = _web_server_cron._gateway_fire_endpoint("default", tmp_path)
-    assert url == "http://127.0.0.1:8642/api/cron/fire"
+    assert url == "http://127.0.0.1:30175/api/cron/fire"
 
     # Resolution reads config/.env (and multiplex state) — it must run off the dashboard loop.
     import asyncio
@@ -220,7 +220,7 @@ def test_fire_endpoint_default_port(tmp_path, monkeypatch):
 
     def _blocking_endpoint(_profile, _home):
         released.wait(3)
-        return "http://127.0.0.1:8642/api/cron/fire"
+        return "http://127.0.0.1:30175/api/cron/fire"
 
     class _RefusingClient:  # gateway down without a real socket dial: forward returns None
         def __init__(self, *a, **kw):
@@ -286,7 +286,7 @@ def test_fire_endpoint_multiplex_profile_prefix(tmp_path, monkeypatch):
     monkeypatch.setenv("GATEWAY_MULTIPLEX_PROFILES", "1")
     monkeypatch.setattr(_cfg_mod, "load_config", dict)
     url = _web_server_cron._gateway_fire_endpoint("worker_alpha", tmp_path)
-    assert url == "http://127.0.0.1:8642/p/worker_alpha/api/cron/fire"
+    assert url == "http://127.0.0.1:30175/p/worker_alpha/api/cron/fire"
 
 
 def test_fire_endpoint_multiplex_reads_port_from_default_listener(tmp_path, monkeypatch):
