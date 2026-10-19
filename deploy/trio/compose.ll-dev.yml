@@ -1,5 +1,5 @@
-# ll-dev 本机覆盖：3000 被既有容器占用，bot-backend 映到 23000。
+# ll-dev 本机覆盖：30172 被占用时的逃生口，bot-backend 映到 23000。
 services:
   bot-backend:
     ports: !override
-      - "23000:3000"
+      - "23000:30172"

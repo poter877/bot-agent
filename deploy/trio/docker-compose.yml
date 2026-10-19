@@ -1,4 +1,4 @@
-# 联调编排：bot-backend + ai-drama + hermes gateway（drama profile）
+# 联调编排：bot-backend（含视频工厂 drama 子应用）+ hermes gateway
 #
 # 用法（在有 Docker 的机器上，从本目录执行）：
 #   cp ../../ai-drama/.env.example .env   # 或按下述变量自行填写
@@ -21,6 +21,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hermes}
       POSTGRES_DB: bot_backend
     volumes:
+      - trio-drama-media:/data/drama-media
       - trio-postgres:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U hermes -d bot_backend"]
@@ -47,13 +48,18 @@ services:
       redis:
         condition: service_healthy
     ports:
-      - "3000:3000"
+      - "30172:30172"
     environment:
       DATABASE_URL: postgres://hermes:${POSTGRES_PASSWORD:-hermes}@postgres:5432/bot_backend
       REDIS_URL: redis://redis:6379/0
-      # 浏览器同源基准：本机访问用 http://localhost:3000；服务间调用走
+      # 浏览器同源基准：本机访问用 http://localhost:30172；服务间调用走
       # INTERNAL_SERVICE_TOKEN，不受同源约束。
-      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:30172}
+      # 内网互访 origin 信任名单
+      BETTER_AUTH_TRUSTED_ORIGINS: ${BETTER_AUTH_TRUSTED_ORIGINS:-http://bot-backend:30172}
+      # 视频工厂子应用：本地作业（ffmpeg/sharp）与媒体落盘
+      AI_DRAMA_DATA_ROOT: /data/drama-media
+      AI_DRAMA_MCP_TOKEN: ${AI_DRAMA_MCP_TOKEN:?set a token for hermes<->ai-drama}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set a 32+ char secret}
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:?set a 24+ char token}
       BOT_BACKEND_ADMIN_EMAILS: ${BOT_BACKEND_ADMIN_EMAILS:-}
@@ -74,21 +80,6 @@ services:
       RATE_LIMIT_LLM_STREAM_MAX: ${RATE_LIMIT_LLM_STREAM_MAX:-240}
       RATE_LIMIT_LLM_STREAM_WINDOW_SECONDS: ${RATE_LIMIT_LLM_STREAM_WINDOW_SECONDS:-60}
 
-  ai-drama:
-    build:
-      context: ../../ai-drama
-    depends_on:
-      - bot-backend
-    ports:
-      - "5679:5679"
-    environment:
-      COMPANY_BACKEND_URL: http://bot-backend:3000
-      COMPANY_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:?}
-      HERMES_AGENT_URL: http://hermes-gateway:8642
-      HERMES_AGENT_KEY: ${API_SERVER_KEY:?}
-      AI_DRAMA_MCP_TOKEN: ${AI_DRAMA_MCP_TOKEN:?set a token for hermes<->ai-drama}
-      # 容器部署 fail-closed：浏览器访问 5679 需在弹窗输入此令牌。
-      AI_DRAMA_API_TOKEN: ${AI_DRAMA_API_TOKEN:?set the ai-drama UI token}
 
   hermes-gateway:
     profiles: ["hermes"]
@@ -99,18 +90,19 @@ services:
       - bot-backend
       - ai-drama
     ports:
-      - "8642:8642"
+      - "30175:30175"
     environment:
       HERMES_HOME: /data/drama-home
       API_SERVER_KEY: ${API_SERVER_KEY:?}
       # 容器内默认绑 127.0.0.1，端口映射会连不通；对外服务必须绑全网卡。
       API_SERVER_HOST: 0.0.0.0
-      HERMES_BOT_BACKEND_URL: http://bot-backend:3000
+      HERMES_BOT_BACKEND_URL: http://bot-backend:30172
     command: ["hermes", "gateway"]
     volumes:
       - trio-drama-home:/data/drama-home
 
 volumes:
+  trio-drama-media:
   trio-postgres:
   trio-redis:
   trio-drama-home:

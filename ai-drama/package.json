@@ -2,12 +2,11 @@
   "name": "video-factory",
   "version": "1.0.0",
   "private": true,
-  "description": "视频工厂 — AI 视频制作工具（桌面版编排入口）",
+  "description": "\u89c6\u9891\u5de5\u5382 \u2014 AI \u89c6\u9891\u5236\u4f5c\u5de5\u5177\uff08\u684c\u9762\u7248\u7f16\u6392\u5165\u53e3\uff09",
   "license": "MIT",
   "scripts": {
-    "dev:backend": "cd backend && npm run dev",
+    "dev:backend": "cd ../bot-backend && set -a && source .env 2>/dev/null; set +a; npm run dev",
     "dev:frontend": "npm --prefix frontend-react run dev",
-    "dev:frontend-react": "npm run dev:frontend",
     "dev:desktop": "cd desktop && npm run dev",
     "build:frontend": "npm --prefix frontend-react run build",
     "build:frontend-react": "npm run build:frontend",
@@ -16,6 +15,7 @@
     "test:frontend-react": "npm run test:frontend",
     "lint:frontend": "npm --prefix frontend-react run lint",
     "dist": "cd desktop && npm run dist",
-    "dist:win": "cd desktop && npm run dist:win"
+    "dist:win": "cd desktop && npm run dist:win",
+    "dev:frontend-react": "npm run dev:frontend"
   }
 }

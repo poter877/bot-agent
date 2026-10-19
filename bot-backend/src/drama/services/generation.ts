@@ -1,0 +1,525 @@
+/**
+ * 统一生成任务服务 — 图片/视频生成共用 sys_task 表与同一条生命周期：
+ * 创建(processing) → 适配器构建请求 → 同步完成或异步轮询 → 下载落盘 → 回写业务表
+ */
+import { db, getInsertId, schema } from '../db/index.js'
+import { eq } from 'drizzle-orm'
+import { getActiveConfig, getConfigById } from './ai.js'
+import { now } from '../utils/response.js'
+import { downloadFile, fetchImageAsCompressedDataUrl, generateImageThumb, readImageAsCompressedDataUrl, readImageAsDataUrl, saveBase64Image } from '../utils/storage.js'
+import { extractVideoPoster } from '../utils/video-poster.js'
+import fs from 'node:fs/promises'
+import path from 'node:path'
+import { STORAGE_ROOT } from '../utils/paths.js'
+import { getImageAdapter, getVideoAdapter, imageAdapters, videoAdapters } from './adapters/registry.js'
+import { defaultCompanyModel } from './company-model-catalog.js'
+import type { AIConfig } from './ai.js'
+import { logTaskError, logTaskPayload, logTaskProgress, logTaskStart, logTaskSuccess, logTaskWarn, redactUrl } from '../utils/task-logger.js'
+
+type TaskType = 'image' | 'video'
+
+const taskLabel = (type: TaskType) => (type === 'image' ? 'ImageTask' : 'VideoTask')
+
+/**
+ * 任务模型解析链：请求显式指定 → 公司目录默认（仅 company 行；配置行 model 不再是
+ * 真相源）→ 空（适配器自身的 'default' 兜底）。目录一跳失败不拦任务创建，
+ * 返回空让既有兜底继续。
+ */
+async function resolveTaskModel(explicit: string | undefined, config: AIConfig, kind: TaskType): Promise<string> {
+  if (explicit) return explicit
+  if (config.provider === 'company') return (await defaultCompanyModel(kind)) ?? ''
+  return config.model
+}
+
+interface GenerateImageParams {
+  storyboardId?: number
+  dramaId?: number
+  sceneId?: number
+  characterId?: number
+  propId?: number
+  prompt: string
+  model?: string
+  size?: string
+  referenceImages?: string[]
+  frameType?: string
+  configId?: number
+}
+
+interface GenerateVideoParams {
+  storyboardId?: number
+  dramaId?: number
+  prompt: string
+  model?: string
+  referenceMode?: string
+  imageUrl?: string
+  firstFrameUrl?: string
+  lastFrameUrl?: string
+  referenceImageUrls?: string[]
+  referenceVideoUrls?: string[]
+  referenceAudioUrls?: string[]
+  referenceFileUrl?: string
+  referenceLinkUrl?: string
+  generateAudio?: boolean
+  duration?: number
+  aspectRatio?: string
+  resolution?: string
+  seed?: number
+  promptExtend?: boolean
+  watermark?: boolean
+  configId?: number
+}
+
+export async function generateImage(params: GenerateImageParams): Promise<number> {
+  // 指定配置（集锁定）可能已停用/删除/厂商收敛，失效时回退到当前启用配置，避免生成被旧引用卡死
+  const config = params.configId
+    ? (await getConfigById(params.configId, 'image')) ?? await getActiveConfig('image')
+    : await getActiveConfig('image')
+  if (!config) throw new Error('未配置图片模型，请先到「设置」页添加并启用 AI 服务')
+
+  const model = await resolveTaskModel(params.model, config, 'image')
+  const id = await createTask('image', config, {
+    storyboardId: params.storyboardId,
+    dramaId: params.dramaId,
+    sceneId: params.sceneId,
+    characterId: params.characterId,
+    propId: params.propId,
+    prompt: params.prompt,
+    model,
+  }, {
+    size: params.size || '1920x1080',
+    frameType: params.frameType,
+    referenceImages: params.referenceImages,
+  })
+
+  logTaskStart('ImageTask', 'enqueue', {
+    id,
+    provider: config.provider,
+    storyboardId: params.storyboardId,
+    sceneId: params.sceneId,
+    characterId: params.characterId,
+    frameType: params.frameType,
+    model,
+  })
+  logTaskPayload('ImageTask', 'enqueue params', {
+    id,
+    config: { provider: config.provider, model: config.model, baseUrl: config.baseUrl },
+    params,
+  })
+  return id
+}
+
+export async function generateVideo(params: GenerateVideoParams): Promise<number> {
+  // 指定配置（集锁定）可能已停用/删除/厂商收敛，失效时回退到当前启用配置
+  const config = params.configId
+    ? (await getConfigById(params.configId, 'video')) ?? await getActiveConfig('video')
+    : await getActiveConfig('video')
+  if (!config) throw new Error('未配置视频模型，请先到「设置」页添加并启用 AI 服务')
+
+  const model = await resolveTaskModel(params.model, config, 'video')
+  const id = await createTask('video', config, {
+    storyboardId: params.storyboardId,
+    dramaId: params.dramaId,
+    prompt: params.prompt,
+    model,
+  }, {
+    referenceMode: params.referenceMode || 'reference',
+    imageUrl: params.imageUrl,
+    firstFrameUrl: params.firstFrameUrl,
+    lastFrameUrl: params.lastFrameUrl,
+    referenceImageUrls: params.referenceImageUrls,
+    referenceVideoUrls: params.referenceVideoUrls,
+    referenceAudioUrls: params.referenceAudioUrls,
+    referenceFileUrl: params.referenceFileUrl,
+    referenceLinkUrl: params.referenceLinkUrl,
+    generateAudio: params.generateAudio === false ? 0 : 1,
+    duration: params.duration,
+    aspectRatio: params.aspectRatio,
+    // 统一存为项目内部格式，各适配器再转换为官方大小写与枚举。
+    resolution: normalizeStoredVideoResolution(params.resolution),
+    seed: params.seed,
+    promptExtend: params.promptExtend,
+    watermark: params.watermark,
+  })
+
+  logTaskStart('VideoTask', 'enqueue', {
+    id,
+    provider: config.provider,
+    storyboardId: params.storyboardId,
+    dramaId: params.dramaId,
+    referenceMode: params.referenceMode || 'reference',
+    duration: params.duration || 5,
+  })
+  logTaskPayload('VideoTask', 'enqueue params', {
+    id,
+    config: { provider: config.provider, model: config.model, baseUrl: config.baseUrl },
+    params,
+  })
+  return id
+}
+
+async function createTask(
+  type: TaskType,
+  config: AIConfig,
+  fields: {
+    storyboardId?: number
+    dramaId?: number
+    sceneId?: number
+    characterId?: number
+    propId?: number
+    prompt: string
+    model?: string | null
+  },
+  params: Record<string, unknown>,
+): Promise<number> {
+  const ts = now()
+  const res = await db.insert(schema.sysTask).values({
+    type,
+    ...fields,
+    provider: config.provider,
+    params: JSON.stringify({...params, snapshotConfigId:config.id}),
+    status: 'processing',
+    createdAt: ts,
+    updatedAt: ts,
+  }).returning()
+
+  const id = getInsertId(res)
+  processTask(id, config).catch(err => {
+    logTaskError(taskLabel(type), 'process', { id, error: err.message })
+    console.error(`${taskLabel(type)} ${id} failed:`, err)
+  })
+  return id
+}
+
+function parseTaskParams(raw: string | null | undefined): Record<string, any> {
+  if (!raw) return {}
+  try {
+    return JSON.parse(raw) || {}
+  } catch {
+    return {}
+  }
+}
+
+async function processTask(id: number, config: AIConfig) {
+  try {
+    const [record] = await db.select().from(schema.sysTask).where(eq(schema.sysTask.id, id))
+    if (!record) return
+    const type = record.type as TaskType
+    const label = taskLabel(type)
+    const params = parseTaskParams(record.params)
+    logTaskProgress(label, 'build-request', {
+      id,
+      provider: config.provider,
+      storyboardId: record.storyboardId,
+      sceneId: record.sceneId,
+      characterId: record.characterId,
+    })
+
+    if (!(type === 'image' ? imageAdapters[config.provider] : videoAdapters[config.provider])) {
+      await processExtendedProviderTask(record, config)
+      return
+    }
+
+    let url: string, method: string, headers: Record<string, string>, body: unknown
+
+    if (type === 'image') {
+      const adapter = getImageAdapter(config.provider)
+      const resolvedReferenceImages = await normalizeReferenceImages(params.referenceImages)
+      ;({ url, method, headers, body } = adapter.buildGenerateRequest(config, {
+        id: record.id,
+        model: record.model,
+        prompt: record.prompt,
+        size: params.size,
+        frameType: params.frameType,
+        referenceImages: resolvedReferenceImages.length ? JSON.stringify(resolvedReferenceImages) : null,
+      }))
+    } else {
+      const adapter = getVideoAdapter(config.provider)
+      const resolvedImageUrl = await normalizeVideoReferenceUrl(params.imageUrl)
+      const resolvedFirstFrameUrl = await normalizeVideoReferenceUrl(params.firstFrameUrl)
+      const resolvedLastFrameUrl = await normalizeVideoReferenceUrl(params.lastFrameUrl)
+      const resolvedReferenceImageUrls = await normalizeVideoReferenceUrls(params.referenceImageUrls)
+      // 参考视频/音频文件较大，不适合 dataURL 内联，需解析为公网可访问 URL
+      const resolvedReferenceVideoUrls = resolvePublicMediaUrls(params.referenceVideoUrls, 'video')
+      const resolvedReferenceAudioUrls = resolvePublicMediaUrls(params.referenceAudioUrls, 'audio')
+      const resolvedReferenceFileUrl = resolvePublicMediaUrl(params.referenceFileUrl, 'file')
+      ;({ url, method, headers, body } = adapter.buildGenerateRequest(config, {
+        id: record.id,
+        model: record.model,
+        prompt: record.prompt,
+        referenceMode: params.referenceMode,
+        imageUrl: resolvedImageUrl,
+        firstFrameUrl: resolvedFirstFrameUrl,
+        lastFrameUrl: resolvedLastFrameUrl,
+        referenceImageUrls: resolvedReferenceImageUrls.length ? JSON.stringify(resolvedReferenceImageUrls) : null,
+        referenceVideoUrls: resolvedReferenceVideoUrls.length ? JSON.stringify(resolvedReferenceVideoUrls) : null,
+        referenceAudioUrls: resolvedReferenceAudioUrls.length ? JSON.stringify(resolvedReferenceAudioUrls) : null,
+        referenceFileUrl: resolvedReferenceFileUrl,
+        referenceLinkUrl: params.referenceLinkUrl,
+        generateAudio: params.generateAudio,
+        duration: params.duration,
+        aspectRatio: params.aspectRatio,
+        resolution: params.resolution,
+        seed: params.seed,
+        promptExtend: params.promptExtend,
+        watermark: params.watermark,
+      }))
+    }
+
+    logTaskProgress(label, 'request', {
+      id,
+      provider: config.provider,
+      method,
+      url: redactUrl(url),
+      model: record.model,
+    })
+    logTaskPayload(label, 'request payload', { id, method, url, headers, body })
+
+    // 公司媒体接口是同步 JSON（内部化轮询），没有 multipart/异步任务形态
+    const resp = await fetch(url, {
+      method,
+      headers,
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(600_000),
+    })
+
+    if (!resp.ok) throw new Error(`API error ${resp.status}: ${await resp.text()}`)
+    const result = await resp.json() as any
+    logTaskPayload(label, 'response payload', { id, provider: config.provider, result })
+
+    if (type === 'image') {
+      const b64 = getImageAdapter(config.provider).extractImageBase64(result)
+      if (!b64) throw new Error('No base64 image data in response')
+      logTaskProgress(label, 'sync-base64-complete', { id, mimeType: b64.mimeType });
+      await handleImageCompleteBase64(record, b64.data, b64.mimeType)
+      return
+    }
+
+    const { videoUrl } = getVideoAdapter(config.provider).parseGenerateResponse(result)
+    if (!videoUrl) throw new Error('No video data in response')
+    logTaskProgress(label, 'sync-complete', { id });
+    await handleVideoComplete(record, videoUrl, params.duration)
+  } catch (err: any) {
+    await failTask(id, err.message)
+  }
+}
+
+async function failTask(id: number, message: string) {
+  logTaskError('SysTask', 'failed', { id, error: message });
+  await db.update(schema.sysTask)
+    .set({ status: 'failed', errorMsg: message, updatedAt: now() })
+    .where(eq(schema.sysTask.id, id))
+}
+
+type SysTaskRecord = typeof schema.sysTask.$inferSelect
+
+async function handleImageComplete(record: SysTaskRecord, imageUrl: string, existingLocalPath?: string) {
+  const localPath = existingLocalPath || await downloadFile(imageUrl, 'images')
+  // 列表页缩略图（前端按命名约定推导地址，失败不影响主流程）
+  await generateImageThumb(localPath)
+
+  await db.update(schema.sysTask)
+    .set({ resultUrl: imageUrl, localPath, status: 'completed', completedAt: now(), updatedAt: now() })
+    .where(eq(schema.sysTask.id, record.id))
+
+  logTaskSuccess('ImageTask', 'downloaded', { id: record.id, provider: record.provider, localPath })
+
+  await writeBackImageAssets(record, localPath)
+}
+
+async function handleImageCompleteBase64(record: SysTaskRecord, base64Data: string, mimeType: string) {
+  const localPath = await saveBase64Image(base64Data, mimeType, 'images');
+  await generateImageThumb(localPath)
+
+  await db.update(schema.sysTask)
+    .set({ localPath, status: 'completed', completedAt: now(), updatedAt: now() })
+    .where(eq(schema.sysTask.id, record.id))
+
+  logTaskSuccess('ImageTask', 'saved-base64', { id: record.id, provider: record.provider, mimeType, localPath })
+
+  await writeBackImageAssets(record, localPath)
+}
+
+// 图片完成后回写业务表：分镜(按 frameType)、角色、场景、道具
+async function writeBackImageAssets(record: SysTaskRecord, localPath: string) {
+  const params = parseTaskParams(record.params)
+  if (record.storyboardId) {
+    const sbUpdate: Record<string, any> = { updatedAt: now() }
+    if (params.frameType === 'first_frame') sbUpdate.firstFrameImage = localPath
+    else if (params.frameType === 'last_frame') sbUpdate.lastFrameImage = localPath
+    else sbUpdate.composedImage = localPath;
+    await db.update(schema.storyboards).set(sbUpdate).where(eq(schema.storyboards.id, record.storyboardId))
+  }
+  if (record.characterId) {
+    await db.update(schema.characters).set({ imageUrl: localPath, updatedAt: now() }).where(eq(schema.characters.id, record.characterId))
+  }
+  if (record.sceneId) {
+    await db.update(schema.scenes).set({ imageUrl: localPath, status: 'completed', updatedAt: now() }).where(eq(schema.scenes.id, record.sceneId))
+  }
+  if (record.propId) {
+    await db.update(schema.props).set({ imageUrl: localPath, updatedAt: now() }).where(eq(schema.props.id, record.propId))
+  }
+}
+
+async function handleVideoComplete(record: SysTaskRecord, videoUrl: string, duration: number | null | undefined, existingLocalPath?: string) {
+  const localPath = existingLocalPath || await downloadFile(videoUrl, 'videos')
+  // 海报帧供列表/封面展示，避免前端为显示首帧缓冲整个视频
+  await extractVideoPoster(localPath);
+  await db.update(schema.sysTask)
+    .set({ resultUrl: videoUrl, localPath, status: 'completed', completedAt: now(), updatedAt: now() })
+    .where(eq(schema.sysTask.id, record.id))
+
+  logTaskSuccess('VideoTask', 'downloaded', { id: record.id, localPath, storyboardId: record.storyboardId, duration })
+
+  if (record.storyboardId) {
+    await db.update(schema.storyboards)
+      .set({ videoUrl: localPath, duration: duration || undefined, updatedAt: now() })
+      .where(eq(schema.storyboards.id, record.storyboardId))
+  }
+}
+
+// ─── 参考素材归一化 ───────────────────────────────────────────────
+
+async function normalizeReferenceImages(refs: string[] | null | undefined): Promise<string[]> {
+  if (!Array.isArray(refs) || !refs.length) return []
+
+  const deduped = Array.from(
+    new Set(
+      refs
+        .map((item) => String(item || '').trim())
+        .filter(Boolean),
+    ),
+  )
+
+  const normalized = await Promise.all(deduped.map(async (value) => {
+    if (value.startsWith('data:image/')) return value
+    if (value.startsWith('static/') || value.startsWith('/static/')) {
+      const localPath = value.startsWith('/static/') ? value.slice(1) : value
+      try {
+        return await readImageAsCompressedDataUrl(localPath, {
+          maxWidth: 768,
+          maxHeight: 768,
+          quality: 68,
+        })
+      } catch (err) {
+        logTaskWarn('ImageTask', 'reference-read-failed', { path: localPath, error: (err as Error).message })
+        return null
+      }
+    }
+    // 远程 URL：下载压缩为 data URL，保证 multipart 上传（OpenAI edits）/ inline_data（Gemini）都可用
+    if (/^https?:\/\//.test(value)) {
+      try {
+        return await fetchImageAsCompressedDataUrl(value, {
+          maxWidth: 768,
+          maxHeight: 768,
+          quality: 68,
+        })
+      } catch (err) {
+        logTaskWarn('ImageTask', 'reference-fetch-failed', { url: value, error: (err as Error).message })
+        return null
+      }
+    }
+    return value
+  }))
+
+  return normalized.filter((item): item is string => !!item).slice(0, 6)
+}
+
+async function normalizeVideoReferenceUrl(value: string | null | undefined): Promise<string | null> {
+  const raw = String(value || '').trim()
+  if (!raw) return null
+  if (raw.startsWith('data:image/')) return raw
+  if (raw.startsWith('static/') || raw.startsWith('/static/')) {
+    const localPath = raw.startsWith('/static/') ? raw.slice(1) : raw
+    try {
+      // 视频参考图直接编码原文件，保留原始尺寸、格式、透明通道和画质。
+      return readImageAsDataUrl(localPath)
+    } catch (err) {
+      logTaskWarn('VideoTask', 'reference-read-failed', { path: localPath, error: (err as Error).message })
+      return null
+    }
+  }
+  return raw
+}
+
+async function normalizeVideoReferenceUrls(refs: string[] | null | undefined): Promise<string[]> {
+  if (!Array.isArray(refs) || !refs.length) return []
+  const normalized = await Promise.all(
+    Array.from(new Set(refs.map((item) => String(item || '').trim()).filter(Boolean))).map((item) => normalizeVideoReferenceUrl(item)),
+  )
+  return normalized.filter((item): item is string => !!item)
+}
+
+/**
+ * 将参考视频/音频解析为 Seedance API 可访问的 URL。
+ * http(s)/dataURL 直通；本地 static 路径需要 PUBLIC_BASE_URL 拼成公网地址，
+ * 未配置时抛出可操作的中文错误（落入 catch 写入 error_msg 供前端展示）。
+ */
+function resolvePublicMediaUrl(value: string | null | undefined, kind: 'video' | 'audio' | 'file'): string | null {
+  const raw = String(value || '').trim()
+  if (!raw) return null
+  if (raw.startsWith('http://') || raw.startsWith('https://') || raw.startsWith('data:')) return raw
+  if (raw.startsWith('static/') || raw.startsWith('/static/')) {
+    const base = (process.env.PUBLIC_BASE_URL || '').trim().replace(/\/+$/, '')
+    if (!base) {
+      const label = kind === 'video' ? '视频' : kind === 'audio' ? '音频' : '文件'
+      throw new Error(
+        `参考${label}为本地路径 ${raw}，但后端未配置 PUBLIC_BASE_URL，上游视频生成 API 无法访问内网地址。` +
+        `请在 backend/.env 配置 PUBLIC_BASE_URL（如 https://your-domain.com）后重试，或改用公网 URL。`,
+      )
+    }
+    const p = raw.startsWith('/') ? raw : `/${raw}`
+    return `${base}${p}`
+  }
+  return raw
+}
+
+function resolvePublicMediaUrls(refs: string[] | null | undefined, kind: 'video' | 'audio'): string[] {
+  if (!Array.isArray(refs) || !refs.length) return []
+  const items = Array.from(new Set(refs.map((item) => String(item || '').trim()).filter(Boolean)))
+  return items.map((item) => resolvePublicMediaUrl(item, kind)).filter((item): item is string => !!item)
+}
+
+function normalizeStoredVideoResolution(resolution: string | null | undefined): string | undefined {
+  const value = String(resolution || '').trim().toLowerCase()
+  if (value === '480p' || value === '720p' || value === '1080p') return value
+  if (value === '2k') return '2K'
+  return undefined
+}
+
+/** Extra providers use the same durable task and asset write-back as the original adapters. */
+async function processExtendedProviderTask(record: SysTaskRecord, config: AIConfig) {
+  const { providerToolSpecs, runProviderTool } = await import('./production-tools/providers.js')
+  const kind = record.type as 'image'|'video'
+  const model = record.model || config.model
+  const entry = Object.entries(providerToolSpecs).find(([,spec]) => spec.provider === config.provider && spec.serviceType === kind && spec.model === model)
+  if (!entry) throw new Error('当前模型没有对应的生成接口，请选择工具库提供的模型或检查服务参数')
+  const params = parseTaskParams(record.params)
+  const folder = path.join(STORAGE_ROOT,'production',String(record.id));
+  await fs.mkdir(folder,{recursive:true})
+  const state = params.providerState && typeof params.providerState === 'object' ? params.providerState : {}
+  const context = { projectId:record.dramaId || 0,toolId:entry[0],args:{...config.serviceOptions,...params,prompt:record.prompt || '',image_url:params.firstFrameUrl || params.imageUrl || params.referenceImages?.[0],aspect_ratio:params.aspectRatio},outputDir:folder,config:{...config,model},state,
+    signal:AbortSignal.timeout(6*60*60*1000),progress:(_value:number)=>{},
+    checkpoint:async (value:Record<string,unknown>)=>{ Object.assign(state,value);(await db.update(schema.sysTask).set({params:JSON.stringify({...params,providerState:state}),taskId:typeof state.remoteId==='string'?state.remoteId:undefined,updatedAt:now()}).where(eq(schema.sysTask.id,record.id))) }
+  }
+  const result = await runProviderTool(context)
+  const file = result.files.find(file=>file.kind===kind)
+  if(!file)throw new Error('模型没有返回所需类型的媒体')
+  const root=await fs.realpath(folder),real=await fs.realpath(file.path)
+  if(!real.startsWith(root+path.sep))throw new Error('生成文件超出任务目录')
+  const localPath='static/'+path.relative(await fs.realpath(STORAGE_ROOT),real).split(path.sep).join('/')
+  if(kind==='image')await handleImageComplete(record,'/'+localPath,localPath)
+  else await handleVideoComplete(record,'/'+localPath,params.duration,localPath)
+}
+
+/** Resume known remote work without another generation POST. */
+export async function resumeGenerationTask(id:number) {
+  const record=(await db.select().from(schema.sysTask).where(eq(schema.sysTask.id,id)))[0]
+  if(!record||record.status==='completed'||record.status==='processing')return
+  if(!record.taskId)throw new Error('原生成任务没有服务商编号，需核对原请求后明确重新提交')
+  const params=parseTaskParams(record.params),config=typeof params.snapshotConfigId==='number'?await getConfigById(params.snapshotConfigId,record.type):null
+  if(!config)throw new Error('请恢复原生成任务的模型配置后重试');
+  (await db.update(schema.sysTask).set({status:'processing',errorMsg:null,updatedAt:now()}).where(eq(schema.sysTask.id,id)))
+  // 公司接口同步返回、直连厂商已下线：恢复统一走任务重派——
+  // 扩展工具凭 state.remoteId 续查（不重复提交），公司任务只能明确重发
+  void processTask(id,config)
+}

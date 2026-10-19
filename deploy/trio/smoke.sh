@@ -11,9 +11,9 @@
 #      gateway 发起一次真实 agent 调用——模型经 bot-backend、工具可经 /mcp）。
 set -euo pipefail
 
-BOT_BASE="${BOT_BASE:-http://localhost:3000}"
-DRAMA_BASE="${DRAMA_BASE:-http://localhost:5679}"
-GATEWAY_BASE="${GATEWAY_BASE:-http://localhost:8642}"
+BOT_BASE="${BOT_BASE:-http://localhost:30172}"
+DRAMA_BASE="${DRAMA_BASE:-http://localhost:30172}"
+GATEWAY_BASE="${GATEWAY_BASE:-http://localhost:30175}"
 TOKEN="${INTERNAL_SERVICE_TOKEN:?INTERNAL_SERVICE_TOKEN must be set}"
 MCP_TOKEN="${AI_DRAMA_MCP_TOKEN:?AI_DRAMA_MCP_TOKEN must be set}"
 API_KEY="${API_SERVER_KEY:-}"
@@ -67,7 +67,7 @@ if [ -z "${DRAMA_ACCOUNT_EMAIL:-}" ] || [ -z "${DRAMA_ACCOUNT_PASSWORD:-}" ]; th
   exit 0
 fi
 
-# 登录必须在容器网络内、对 gateway 实际访问的源（bot-backend:3000）进行，且 jar
+# 登录必须在容器网络内、对 gateway 实际访问的源（bot-backend:30172）进行，且 jar
 # 要用 python 的 MozillaCookieJar 写：curl 格式对无点主机的域处理与 python 不一致
 # （python 会把无点主机规范化为 <host>.local），hermes 侧会静默不带 cookie 而 401。
 docker compose exec -T hermes-gateway /opt/hermes/.venv/bin/python - "$DRAMA_ACCOUNT_EMAIL" "$DRAMA_ACCOUNT_PASSWORD" <<'PYEOF2' || fail "account sign-in failed (register the account first)"
@@ -77,7 +77,7 @@ path = os.path.join(os.environ["HERMES_HOME"], "account-auth-cookies.txt")
 jar = http.cookiejar.MozillaCookieJar(path)
 opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
 req = urllib.request.Request(
-    "http://bot-backend:3000/api/auth/sign-in/email",
+    "http://bot-backend:30172/api/auth/sign-in/email",
     data=json.dumps({"email": email, "password": password}).encode(),
     headers={"Content-Type": "application/json"}, method="POST")
 with opener.open(req, timeout=10):

@@ -1,0 +1,756 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import fs from 'node:fs/promises'
+import path from 'node:path'
+import os from 'node:os'
+import sharp from 'sharp'
+import { execFileSync } from 'node:child_process'
+import { ffmpegPath } from '../../src/drama/utils/ffmpeg.js'
+// env 在动态导入前注入：fal 预设的 baseUrl 来自公司后端环境
+process.env.COMPANY_BACKEND_URL = 'https://company.invalid'
+process.env.COMPANY_SERVICE_TOKEN = 'company-token'
+const { runProviderTool, providerToolSpecs } = await import('../../src/drama/services/production-tools/providers.js')
+const { providerPresets } = await import('../../src/drama/services/production-tools/providers.js')
+const fixturesDir = await fs.mkdtemp(path.join(os.tmpdir(), 'vf-provider-fixtures-'))
+const png = await sharp({
+  create: { width: 8, height: 8, channels: 3, background: 'blue' },
+})
+  .png()
+  .toBuffer()
+const audioFile = path.join(fixturesDir, 'audio.wav'),
+  videoFile = path.join(fixturesDir, 'video.mp4')
+execFileSync(ffmpegPath!, [
+  '-v',
+  'error',
+  '-y',
+  '-f',
+  'lavfi',
+  '-i',
+  'sine=frequency=440',
+  '-t',
+  '0.2',
+  audioFile,
+])
+execFileSync(ffmpegPath!, [
+  '-v',
+  'error',
+  '-y',
+  '-f',
+  'lavfi',
+  '-i',
+  'color=c=blue:s=16x16:r=10',
+  '-t',
+  '0.2',
+  '-c:v',
+  'libx264',
+  '-pix_fmt',
+  'yuv420p',
+  videoFile,
+])
+const audio = await fs.readFile(audioFile),
+  video = await fs.readFile(videoFile)
+test.after(() => fs.rm(fixturesDir, { recursive: true, force: true }))
+import type { ProviderContext, ProviderDependencies } from '../../src/drama/services/production-tools/providers.js'
+const { responseBytes, serviceUrl, outputBytes } = await import('../../src/drama/services/production-tools/provider-runtime.js')
+const { tencentHeaders } = await import('../../src/drama/services/production-tools/provider-regional.js')
+const json = (data: unknown) =>
+  new Response(JSON.stringify(data), {
+    headers: { 'Content-Type': 'application/json' },
+  })
+async function fixture(id: string, args: Record<string, unknown> = {}) {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'vf-provider-'))
+  const spec = providerToolSpecs[id],
+    preset = providerPresets()[spec.serviceType][spec.provider]
+  const ctx: ProviderContext = {
+    projectId: 1,
+    toolId: id,
+    args,
+    outputDir: dir,
+    signal: new AbortController().signal,
+    progress: () => {},
+    config: {
+      id: 42,
+      provider: spec.provider,
+      baseUrl: preset.baseUrl,
+      apiKey: 'test-secret',
+      model: spec.model,
+    },
+    state: {},
+    checkpoint: () => {},
+  }
+  const calls: { url: string; init: RequestInit }[] = [],
+    queue: Response[] = []
+  const deps: Partial<ProviderDependencies> = {
+    fetch: (async (url, init = {}) => {
+      calls.push({ url: String(url), init })
+      const response = queue.shift()
+      if (!response) throw new Error('unexpected call')
+      return response
+    }) as typeof fetch,
+    sleep: async () => {},
+    download: async (url) =>
+      /\.(mp4|webm)(?:\?|$)/.test(url) ? video : /\.(mp3|wav|ogg)(?:\?|$)/.test(url) ? audio : png,
+    readMedia: async () => ({
+      name: 'upload.png',
+      mime: 'image/png',
+      bytes: Buffer.from('owned-input'),
+    }),
+  }
+  return {
+    ctx,
+    deps,
+    calls,
+    queue,
+    cleanup: () => fs.rm(dir, { recursive: true, force: true }),
+  }
+}
+async function withFixture(
+  id: string,
+  args: Record<string, unknown>,
+  run: (f: Awaited<ReturnType<typeof fixture>>) => Promise<void>,
+) {
+  const f = await fixture(id, args)
+  try {
+    await run(f)
+  } finally {
+    await f.cleanup()
+  }
+}
+
+test('Fal submits the directory model to the company queue and saves every returned asset', async () =>
+  withFixture('gemini_fal_image', { prompt: 'rainy street' }, async (f) => {
+    f.queue.push(
+      json({
+        ok: true,
+        request_id: 'r1',
+        assets: [
+          { media_type: 'image/png', base64: png.toString('base64') },
+          { media_type: 'image/png', base64: png.toString('base64') },
+        ],
+      }),
+    )
+    const result = await runProviderTool(f.ctx, f.deps)
+    assert.equal(result.files.length, 2)
+    assert.equal(result.files[0].kind, 'image')
+    assert.equal(f.calls.length, 1)
+    assert.match(f.calls[0]!.url, /\/api\/media\/queue$/)
+    assert.equal(new Headers(f.calls[0]!.init.headers).get('Authorization'), 'Bearer test-secret')
+    const body = JSON.parse(String(f.calls[0]!.init.body))
+    assert.equal(body.model, 'fal-ai/nano-banana')
+    assert.equal(body.input.prompt, 'rainy street')
+    assert.equal(f.ctx.state.remoteId, 'r1')
+    assert.equal(f.ctx.state.queueModel, 'fal-ai/nano-banana')
+    assert.deepEqual(await fs.readFile(result.files[0]!.path), png)
+  }))
+test('the configured service row model overrides the tool default on the queue call', async () =>
+  withFixture('gemini_fal_image', { prompt: 'street' }, async (f) => {
+    f.ctx.config!.model = 'fal-ai/flux/schnell'
+    f.queue.push(
+      json({ ok: true, request_id: 'r2', assets: [{ media_type: 'image/png', base64: png.toString('base64') }] }),
+    )
+    await runProviderTool(f.ctx, f.deps)
+    // 配置行模型即覆盖（executor 会把共享配置按工具解析为 spec.model，不会串模型）
+    assert.equal(JSON.parse(String(f.calls[0]!.init.body)).model, 'fal-ai/flux/schnell')
+  }))
+test('a recovered queue task snapshot keeps its original model', async () =>
+  withFixture('flux_image', { prompt: 'street' }, async (f) => {
+    f.ctx.state.queueModel = 'fal-ai/nano-banana'
+    f.queue.push(
+      json({ ok: true, request_id: 'r3', assets: [{ media_type: 'image/png', base64: png.toString('base64') }] }),
+    )
+    await runProviderTool(f.ctx, f.deps)
+    assert.equal(JSON.parse(String(f.calls[0]!.init.body)).model, 'fal-ai/nano-banana')
+  }))
+test('an uncertain async submission never gets silently resubmitted', async () =>
+  withFixture('flux_image', { prompt: 'street' }, async (f) => {
+    f.ctx.state.submissionStarted = true
+    await assert.rejects(runProviderTool(f.ctx, f.deps), /提交.*不确定/)
+    assert.equal(f.calls.length, 0)
+  }))
+test('provider mismatches and changed configuration IDs are rejected', async () =>
+  withFixture('flux_image', { prompt: 'street' }, async (f) => {
+    f.ctx.config!.provider = 'replicate'
+    await assert.rejects(runProviderTool(f.ctx, f.deps), /需要 fal/)
+    f.ctx.config!.provider = 'fal'
+    f.ctx.state.configId = 43
+    await assert.rejects(runProviderTool(f.ctx, f.deps), /原模型配置/)
+  }))
+test('a tampered queue model id is rejected before any request', async () =>
+  withFixture('flux_image', { prompt: 'street' }, async (f) => {
+    f.ctx.state.queueModel = '../../admin'
+    await assert.rejects(runProviderTool(f.ctx, f.deps), /模型 ID 无效/)
+    assert.equal(f.calls.length, 0)
+  }))
+test('Fal 3D reference is read through project media ownership boundary', async () =>
+  withFixture('fal_3d', { image: '/static/creative/2/stolen.png' }, async (f) => {
+    f.deps.readMedia = async () => {
+      throw new Error('只能使用当前项目素材')
+    }
+    await assert.rejects(runProviderTool(f.ctx, f.deps), /当前项目/)
+    assert.equal(f.calls.length, 0)
+    assert.equal(f.ctx.state.submissionStarted, undefined)
+  }))
+test('Replicate submits to model predictions and restores durable prediction', async () =>
+  withFixture('seedance_replicate', { prompt: 'walk' }, async (f) => {
+    f.queue.push(
+      json({ id: 'p1' }),
+      json({ status: 'succeeded', output: 'https://replicate.delivery/a.mp4' }),
+    )
+    const result = await runProviderTool(f.ctx, f.deps)
+    assert.match(f.calls[0].url, /v1\/models\/bytedance\/seedance-1-pro\/predictions$/)
+    assert.equal(f.ctx.state.remoteId, 'p1')
+    assert.equal(result.files[0].kind, 'video')
+  }))
+test('ComfyUI validates API workflow and installed nodes before submission', async () =>
+  withFixture(
+    'comfyui_image',
+    { workflow_json: { '1': { class_type: 'MissingModelNode', inputs: {} } } },
+    async (f) => {
+      f.queue.push(json({ SaveImage: {} }))
+      await assert.rejects(runProviderTool(f.ctx, f.deps), /缺少 MissingModelNode/)
+      assert.equal(f.calls.length, 1)
+      assert.equal(f.ctx.state.submissionStarted, undefined)
+    },
+  ))
+test('ComfyUI downloads only matching saved media after completion', async () =>
+  withFixture(
+    'comfyui_image',
+    { workflow_json: { '1': { class_type: 'SaveImage', inputs: {} } } },
+    async (f) => {
+      f.queue.push(
+        json({ SaveImage: {} }),
+        json({ prompt_id: 'pc' }),
+        json({
+          pc: {
+            status: { completed: true },
+            outputs: {
+              '1': {
+                images: [{ filename: 'result.png', type: 'output', subfolder: '' }],
+              },
+            },
+          },
+        }),
+        new Response(new Uint8Array(png), {
+          headers: { 'content-type': 'image/png' },
+        }),
+      )
+      const result = await runProviderTool(f.ctx, f.deps)
+      assert.equal(result.files.length, 1)
+      assert.equal(f.ctx.state.remoteId, 'pc')
+      assert.match(f.calls.at(-1)!.url, /\/view\?/)
+    },
+  ))
+test('ComfyUI UI workflow format is rejected with actionable guidance', async () =>
+  withFixture('comfyui_video', { workflow_json: { nodes: [] } }, async (f) => {
+    await assert.rejects(runProviderTool(f.ctx, f.deps), /API 格式/)
+    assert.equal(f.calls.length, 0)
+  }))
+test('company speech posts the OpenAI-compatible contract and decodes the base64 audio', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'vf-company-tts-'))
+  try {
+    const calls: { url: string; init: RequestInit }[] = []
+    const result = await runProviderTool(
+      {
+        projectId: 1,
+        toolId: 'company_tts',
+        args: { text: 'hello', voice: 'coral', response_format: 'wav', speed: 1 },
+        outputDir: dir,
+        signal: new AbortController().signal,
+        progress: () => {},
+        config: {
+          id: 7,
+          provider: 'company',
+          baseUrl: 'https://company.invalid',
+          apiKey: 'company-token',
+          model: 'catalog-tts',
+        },
+        state: {},
+        checkpoint: () => {},
+      },
+      {
+        ...({} as ProviderDependencies),
+        fetch: (async (url, init = {}) => {
+          calls.push({ url: String(url), init })
+          return json({ ok: true, audio: { media_type: 'audio/wav', base64: audio.toString('base64') } })
+        }) as typeof fetch,
+        sleep: async () => {},
+        download: async () => audio,
+        readMedia: async () => ({ name: 'x.png', mime: 'image/png', bytes: Buffer.alloc(0) }),
+      } as Partial<ProviderDependencies> as ProviderDependencies,
+    )
+    assert.match(calls[0].url, /\/api\/media\/speech$/)
+    assert.equal(new Headers(calls[0].init.headers).get('Authorization'), 'Bearer company-token')
+    const body = JSON.parse(String(calls[0].init.body))
+    assert.equal(body.model, 'catalog-tts')
+    assert.equal(body.input, 'hello')
+    assert.equal(body.voice, 'coral')
+    assert.equal(body.response_format, 'wav')
+    assert.deepEqual(await fs.readFile(result.files[0].path), audio)
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true })
+  }
+})
+test('Runway sends documented API version and polls task output', async () =>
+  withFixture('runway_video', { prompt: 'street' }, async (f) => {
+    f.queue.push(
+      json({ id: 'run1' }),
+      json({ status: 'SUCCEEDED', output: ['https://cdn.runwayml.com/v.mp4'] }),
+    )
+    await runProviderTool(f.ctx, f.deps)
+    assert.equal(new Headers(f.calls[0].init.headers).get('X-Runway-Version'), '2024-11-06')
+    assert.match(f.calls[1].url, /v1\/tasks\/run1$/)
+  }))
+test('LTX resumes image endpoint selected at submission', async () =>
+  withFixture('ltx_api_video', {}, async (f) => {
+    Object.assign(f.ctx.state, {
+      remoteId: 'ltx1',
+      endpoint: 'image-to-video',
+      submissionStarted: true,
+    })
+    f.queue.push(
+      json({
+        status: 'completed',
+        result: { video_url: 'https://storage.googleapis.com/a.mp4' },
+      }),
+    )
+    await runProviderTool(f.ctx, f.deps)
+    assert.match(f.calls[0].url, /v2\/image-to-video\/ltx1$/)
+  }))
+test('HeyGen uses v3 avatar contract and asset-safe local image input', async () =>
+  withFixture(
+    'heygen_avatar',
+    { script: 'hello', voice_id: 'voice', image: '/static/uploads/person.png' },
+    async (f) => {
+      f.queue.push(
+        json({ data: { video_id: 'hg1' } }),
+        json({
+          data: {
+            status: 'completed',
+            video_url: 'https://files.heygen.com/result.mp4',
+          },
+        }),
+      )
+      await runProviderTool(f.ctx, f.deps)
+      const body = JSON.parse(String(f.calls[0].init.body))
+      assert.equal(body.type, 'image')
+      assert.equal(body.image.type, 'base64')
+      assert.equal(body.voice_id, 'voice')
+      assert.match(f.calls[1].url, /v3\/videos\/hg1$/)
+    },
+  ))
+test('Ideogram async failures are terminal and not success results', async () =>
+  withFixture('ideogram_image', { prompt: 'street' }, async (f) => {
+    f.queue.push(json({ generation_id: 'ig1' }), json({ status: 'failed', failure_reason: 'policy' }))
+    await assert.rejects(runProviderTool(f.ctx, f.deps), /任务失败/)
+    assert.equal(f.ctx.state.remoteId, 'ig1')
+  }))
+test('Atlas Suno uses generateAudio and preserves both returned tracks', async () =>
+  withFixture('suno_music', { prompt: 'jazz' }, async (f) => {
+    f.queue.push(
+      json({ data: { id: 'a1' } }),
+      json({
+        data: {
+          status: 'completed',
+          outputs: ['https://cdn.atlascloud.ai/a.mp3', 'https://cdn.atlascloud.ai/b.mp3'],
+        },
+      }),
+    )
+    const result = await runProviderTool(f.ctx, f.deps)
+    assert.match(f.calls[0].url, /api\/v1\/model\/generateAudio$/)
+    assert.equal(JSON.parse(String(f.calls[0].init.body)).model, 'suno/chirp-v5')
+    assert.equal(result.files.length, 2)
+  }))
+test('Imagen legacy tool transparently records migration to supported Nano Banana API', async () =>
+  withFixture('google_imagen', { prompt: 'mountain' }, async (f) => {
+    f.queue.push(
+      json({
+        candidates: [
+          {
+            content: {
+              parts: [
+                {
+                  inlineData: {
+                    mimeType: 'image/png',
+                    data: png.toString('base64'),
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    )
+    const result = await runProviderTool(f.ctx, f.deps)
+    assert.match(f.calls[0].url, /gemini-2.5-flash-image:generateContent$/)
+    assert.equal(result.data?.migratedFrom, 'Imagen')
+  }))
+test('DashScope ASR returns text without inventing timestamps', async () =>
+  withFixture('dashscope_asr', { audio: '/static/uploads/audio.wav' }, async (f) => {
+    f.queue.push(
+      json({
+        output: { choices: [{ message: { content: [{ text: '你好' }] } }] },
+      }),
+    )
+    const result = await runProviderTool(f.ctx, f.deps)
+    assert.equal(result.data?.text, '你好')
+    assert.equal(result.files[0].kind, 'data')
+    assert.equal(
+      result.files.some((v) => v.kind === 'subtitle'),
+      false,
+    )
+  }))
+test('Lyria requires Google Cloud project before a billable submission', async () =>
+  withFixture('google_music', { prompt: 'jazz' }, async (f) => {
+    await assert.rejects(runProviderTool(f.ctx, f.deps), /Google Cloud 项目/)
+    assert.equal(f.calls.length, 0)
+    assert.equal(f.ctx.state.submissionStarted, undefined)
+  }))
+test('stock search preserves source credit and downloads only selected item', async () =>
+  withFixture('pexels_image', { query: 'forest', download: true, selected_id: '17' }, async (f) => {
+    f.queue.push(
+      json({
+        photos: [
+          {
+            id: 17,
+            url: 'https://pexels.com/photo/17',
+            photographer: 'Alice',
+            src: { original: 'https://images.pexels.com/a.jpg' },
+          },
+        ],
+      }),
+    )
+    const result = await runProviderTool(f.ctx, f.deps),
+      sidecar = JSON.parse(await fs.readFile(result.files[1].path, 'utf8'))
+    assert.equal(sidecar.source.author, 'Alice')
+    assert.equal(sidecar.source.license, 'Pexels License')
+    assert.equal(result.files[0].kind, 'image')
+    assert.equal(new Headers(f.calls[0].init.headers).get('Authorization'), 'test-secret')
+  }))
+test('Pixabay API key is query authenticated and absent from saved search results', async () =>
+  withFixture('pixabay_image', { query: 'forest' }, async (f) => {
+    f.queue.push(
+      json({
+        hits: [
+          {
+            id: 1,
+            tags: 'forest',
+            pageURL: 'https://pixabay.com/1',
+            largeImageURL: 'https://pixabay.com/1.jpg',
+            user: 'Alice',
+          },
+        ],
+      }),
+    )
+    const result = await runProviderTool(f.ctx, f.deps)
+    assert.equal(new URL(f.calls[0].url).searchParams.get('key'), 'test-secret')
+    assert.equal((await fs.readFile(result.files[0].path, 'utf8')).includes('test-secret'), false)
+  }))
+test('bounded response reader cancels oversized provider responses', async () => {
+  const response = new Response(Buffer.alloc(128))
+  await assert.rejects(responseBytes(response, 64), /大小限制/)
+})
+test('service URL validation rejects credential URLs and non-local insecure HTTP', () => {
+  assert.throws(
+    () =>
+      serviceUrl(
+        {
+          provider: 'openai',
+          baseUrl: 'https://user:pass@example.com',
+          apiKey: 'x',
+          model: 'x',
+        },
+        '/v1',
+      ),
+    /地址无效/,
+  )
+  assert.throws(
+    () =>
+      serviceUrl(
+        {
+          provider: 'openai',
+          baseUrl: 'http://example.com',
+          apiKey: 'x',
+          model: 'x',
+        },
+        '/v1',
+      ),
+    /HTTPS/,
+  )
+  assert.equal(
+    serviceUrl(
+      {
+        provider: 'comfyui',
+        baseUrl: 'http://127.0.0.1:8188',
+        apiKey: '',
+        model: 'api-workflow',
+      },
+      '/prompt',
+    ),
+    'http://127.0.0.1:8188/prompt',
+  )
+  // 公司内网后端可由部署决定是否终结 TLS，明文 http 合法
+  assert.equal(
+    serviceUrl(
+      {
+        provider: 'company',
+        baseUrl: 'http://company.internal:8080',
+        apiKey: 'token',
+        model: 'x',
+      },
+      '',
+    ),
+    'http://company.internal:8080',
+  )
+})
+
+test('definitive HTTP 403 records rejection rather than uncertain billing', async () =>
+  withFixture('flux_image', { prompt: 'street' }, async (f) => {
+    f.queue.push(new Response('', { status: 403 }))
+    await assert.rejects(runProviderTool(f.ctx, f.deps), /HTTP 403/)
+    assert.equal(f.ctx.state.rejected, true)
+  }))
+test('HTML pretending to be a generated PNG is rejected', async () =>
+  withFixture('flux_image', { prompt: 'street' }, async (f) => {
+    f.queue.push(
+      json({
+        ok: true,
+        request_id: 'fake',
+        assets: [{ media_type: 'image/png', base64: Buffer.from('<html>Error</html>').toString('base64') }],
+      }),
+    )
+    await assert.rejects(runProviderTool(f.ctx, f.deps), /图片服务返回/)
+  }))
+test('a failed queue call resolves its attempt, so a retry submits a fresh job', async () =>
+  withFixture('flux_image', { prompt: 'street' }, async (f) => {
+    f.queue.push(new Response('', { status: 500 }))
+    await assert.rejects(runProviderTool(f.ctx, f.deps), /HTTP 500/)
+    // 同步端点失败没有可恢复的服务端任务：重试不落入"提交不确定"死锁
+    assert.equal(f.ctx.state.submissionStarted, false)
+    f.queue.push(
+      json({ ok: true, request_id: 'retry', assets: [{ media_type: 'image/png', base64: png.toString('base64') }] }),
+    )
+    await runProviderTool(f.ctx, f.deps)
+    assert.equal(f.calls.length, 2)
+  }))
+/** 可灵工具走公司媒体目录：同步 base64 信封，配置行/args.model 优先于 spec 默认。 */
+async function klingFixture(
+  toolId: 'kling_official_image' | 'kling_official_video' | 'kling_video',
+  args: Record<string, unknown>,
+  respond: () => unknown,
+  model = '',
+) {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'vf-kling-company-'))
+  const calls: { url: string; init: RequestInit }[] = []
+  const ctx: ProviderContext = {
+    projectId: 1,
+    toolId,
+    args,
+    outputDir: dir,
+    signal: new AbortController().signal,
+    progress: () => {},
+    config: { id: 9, provider: 'company', baseUrl: 'https://company.invalid', apiKey: 'company-token', model },
+    state: {},
+    checkpoint: () => {},
+  }
+  const deps: Partial<ProviderDependencies> = {
+    fetch: (async (url: unknown, init: RequestInit = {}) => {
+      calls.push({ url: String(url), init })
+      const payload = respond()
+      return payload instanceof Response ? payload : json(payload)
+    }) as typeof fetch,
+    sleep: async () => {},
+    download: async () => png,
+    readMedia: async () => ({ name: 'first.png', mime: 'image/png', bytes: Buffer.from('owned-frame') }),
+  }
+  return {
+    ctx,
+    deps,
+    calls,
+    cleanup: () => fs.rm(dir, { recursive: true, force: true }),
+  }
+}
+const klingVideoEnvelope = { ok: true, videos: [{ media_type: 'video/mp4', base64: video.toString('base64') }] }
+test('Kling video posts the company media contract and saves the returned video', async () => {
+  const f = await klingFixture('kling_official_video', { prompt: 'street', duration: 5, aspect_ratio: '16:9' }, () => klingVideoEnvelope)
+  try {
+    const result = await runProviderTool(f.ctx, f.deps as ProviderDependencies)
+    assert.match(f.calls[0].url, /\/api\/media\/video$/)
+    assert.equal(new Headers(f.calls[0].init.headers).get('Authorization'), 'Bearer company-token')
+    const body = JSON.parse(String(f.calls[0].init.body))
+    assert.equal(body.model, 'kling-v2-6')
+    assert.equal(body.prompt, 'street')
+    assert.equal(body.duration, 5)
+    assert.equal(body.aspectRatio, '16:9')
+    assert.equal(body.generateAudio, true)
+    assert.equal(body.mode, 'pro')
+    assert.equal(result.files[0].kind, 'video')
+    assert.deepEqual(await fs.readFile(result.files[0].path), video)
+    assert.equal(f.ctx.state.submissionStarted, false)
+  } finally {
+    await f.cleanup()
+  }
+})
+test('Kling image saves every image in the company envelope', async () => {
+  const f = await klingFixture('kling_official_image', { prompt: 'street', count: 2 }, () => ({
+    ok: true,
+    images: [
+      { media_type: 'image/png', base64: png.toString('base64') },
+      { media_type: 'image/png', base64: png.toString('base64') },
+    ],
+  }))
+  try {
+    const result = await runProviderTool(f.ctx, f.deps as ProviderDependencies)
+    assert.match(f.calls[0].url, /\/api\/media\/image$/)
+    const body = JSON.parse(String(f.calls[0].init.body))
+    assert.equal(body.model, 'kling-v2')
+    assert.equal(body.n, 2)
+    assert.equal(body.aspectRatio, '16:9')
+    assert.equal(result.files.length, 2)
+    assert.equal(result.files[0].kind, 'image')
+  } finally {
+    await f.cleanup()
+  }
+})
+test('Kling image2video sends the first frame as a data URI and drops the ratio', async () => {
+  const f = await klingFixture(
+    'kling_video',
+    { prompt: 'street', image: '/static/creative/1/first.png', generate_audio: false, aspect_ratio: '9:16' },
+    () => klingVideoEnvelope,
+  )
+  try {
+    await runProviderTool(f.ctx, f.deps as ProviderDependencies)
+    const body = JSON.parse(String(f.calls[0].init.body))
+    assert.equal(body.imageUrl, `data:image/png;base64,${Buffer.from('owned-frame').toString('base64')}`)
+    assert.equal(body.aspectRatio, undefined)
+    assert.equal(body.generateAudio, false)
+  } finally {
+    await f.cleanup()
+  }
+})
+test('Kling model falls back to the spec default and honours the service row', async () => {
+  const spec = await klingFixture('kling_official_video', { prompt: 'street' }, () => klingVideoEnvelope)
+  const row = await klingFixture('kling_official_video', { prompt: 'street' }, () => klingVideoEnvelope, 'ops-kling-entry')
+  try {
+    await runProviderTool(spec.ctx, spec.deps as ProviderDependencies)
+    assert.equal(JSON.parse(String(spec.calls[0].init.body)).model, 'kling-v2-6')
+    await runProviderTool(row.ctx, row.deps as ProviderDependencies)
+    assert.equal(JSON.parse(String(row.calls[0].init.body)).model, 'ops-kling-entry')
+  } finally {
+    await spec.cleanup()
+    await row.cleanup()
+  }
+})
+test('Kling rejects durations the vendor cannot serve before any call', async () => {
+  const f = await klingFixture('kling_official_video', { prompt: 'street', duration: 7 }, () => klingVideoEnvelope)
+  try {
+    await assert.rejects(runProviderTool(f.ctx, f.deps as ProviderDependencies), /5 秒或 10 秒/)
+    assert.equal(f.calls.length, 0)
+    assert.equal(f.ctx.state.submissionStarted, undefined)
+  } finally {
+    await f.cleanup()
+  }
+})
+test('Kling oversized first frames are rejected before any call', async () => {
+  const f = await klingFixture('kling_official_video', { prompt: 'street', image: '/static/creative/1/big.png' }, () => klingVideoEnvelope)
+  f.deps.readMedia = async () => ({ name: 'big.png', mime: 'image/png', bytes: Buffer.alloc(10 * 1024 * 1024 + 1) })
+  try {
+    await assert.rejects(runProviderTool(f.ctx, f.deps as ProviderDependencies), /10 MB/)
+    assert.equal(f.calls.length, 0)
+  } finally {
+    await f.cleanup()
+  }
+})
+test('Doubao reads HTTP JSON audio chunks and uses unified API key resource headers', async () =>
+  withFixture('doubao_tts', { text: '你好' }, async (f) => {
+    f.queue.push(
+      new Response(
+        JSON.stringify({
+          code: 0,
+          data: audio.subarray(0, 100).toString('base64'),
+        }) +
+          '\n' +
+          JSON.stringify({
+            code: 0,
+            data: audio.subarray(100).toString('base64'),
+          }),
+        { headers: { 'content-type': 'application/json' } },
+      ),
+    )
+    const result = await runProviderTool(f.ctx, f.deps),
+      headers = new Headers(f.calls[0].init.headers)
+    assert.equal(headers.get('X-Api-Key'), 'test-secret')
+    assert.equal(headers.get('X-Api-Resource-Id'), 'seed-tts-2.0')
+    assert.deepEqual(await fs.readFile(result.files[0].path), audio)
+  }))
+test('Tencent Hunyuan signs native image job requests and respects numeric status codes', async () =>
+  withFixture('hunyuan_image', { prompt: '雨中竹林' }, async (f) => {
+    f.ctx.config!.apiKey = 'AKIDEXAMPLE:secret-value'
+    f.queue.push(
+      json({ Response: { JobId: 'hy1' } }),
+      json({
+        Response: {
+          JobStatusCode: '5',
+          ResultImage: ['https://example.cos.ap-guangzhou.myqcloud.com/a.png'],
+        },
+      }),
+    )
+    const result = await runProviderTool(f.ctx, f.deps),
+      headers = new Headers(f.calls[0].init.headers)
+    assert.equal(headers.get('X-TC-Action'), 'SubmitHunyuanImageJob')
+    assert.equal(headers.get('X-TC-Version'), '2023-09-01')
+    assert.equal(headers.get('X-TC-Region'), 'ap-guangzhou')
+    assert.match(headers.get('Authorization')!, /^TC3-HMAC-SHA256 Credential=AKIDEXAMPLE\//)
+    assert.equal(headers.get('Authorization')!.includes('secret-value'), false)
+    assert.equal(new Headers(f.calls[1].init.headers).get('X-TC-Action'), 'QueryHunyuanImageJob')
+    assert.equal(result.files[0].kind, 'image')
+  }))
+test('Tencent video uses its dedicated vclm service and DONE video output contract', async () =>
+  withFixture('hunyuan_cloud_video', { prompt: '雨中竹林', duration: 5 }, async (f) => {
+    f.ctx.config!.apiKey = 'AKID:secret'
+    f.queue.push(
+      json({ Response: { JobId: 'hv1' } }),
+      json({
+        Response: {
+          Status: 'DONE',
+          ResultVideoUrl: 'https://example.myqcloud.com/a.mp4',
+        },
+      }),
+    )
+    await runProviderTool(f.ctx, f.deps)
+    assert.equal(new URL(f.calls[0].url).hostname, 'vclm.tencentcloudapi.com')
+    assert.equal(new Headers(f.calls[0].init.headers).get('X-TC-Version'), '2024-05-23')
+    assert.equal(new Headers(f.calls[1].init.headers).get('X-TC-Action'), 'DescribeHunyuanToVideoJob')
+  }))
+
+test('Tencent TC3 signature matches a fixed canonical request vector', () => {
+  const headers = tencentHeaders(
+    'AKIDEXAMPLE:test-secret',
+    'hunyuan.tencentcloudapi.com',
+    'hunyuan',
+    'SubmitHunyuanImageJob',
+    '2023-09-01',
+    'ap-guangzhou',
+    '{"Prompt":"rainy street"}',
+    1700000000000,
+  )
+  assert.equal(headers['X-TC-Timestamp'], '1700000000')
+  assert.equal(
+    headers.Authorization,
+    'TC3-HMAC-SHA256 Credential=AKIDEXAMPLE/2023-11-14/hunyuan/tc3_request, SignedHeaders=content-type;host, Signature=aa0fd8bc9b1bb8db9e796d30a9410529b198711997224436e19859898a2f10ca',
+  )
+})
+
+test('TIFF provider images normalize to project-importable PNG', async () =>
+  withFixture('flux_image', {}, async (f) => {
+    const tiff = await sharp(png).tiff().toBuffer()
+    const result = await outputBytes(f.ctx, tiff, 'image', 'tiff')
+    assert.equal(path.extname(result.path), '.png')
+    assert.equal((await sharp(result.path).metadata()).format, 'png')
+  }))
+
+test('uncertain ComfyUI submission does not repeat uploads or server requests', async () =>
+  withFixture('comfyui_image', {}, async (f) => {
+    f.ctx.state.submissionStarted = true
+    await assert.rejects(runProviderTool(f.ctx, f.deps), /尚不确定/)
+    assert.equal(f.calls.length, 0)
+  }))

@@ -26,7 +26,7 @@ ai-drama 前端 ──HTTP──→ ai-drama 后端（领域服务 + 任务队�
 
 | 侧 | 变量 | 说明 |
 |---|---|---|
-| ai-drama | `HERMES_AGENT_URL` | hermes gateway 的 api_server 基址（如 `http://hermes:8642`，多 profile 复用时为 `http://hermes:8642/p/drama`） |
+| ai-drama | `HERMES_AGENT_URL` | hermes gateway 的 api_server 基址（如 `http://hermes:30175`，多 profile 复用时为 `http://hermes:30175/p/drama`） |
 | ai-drama | `HERMES_AGENT_KEY` | gateway 的 `API_SERVER_KEY` |
 | ai-drama | `AI_DRAMA_API_TOKEN` | ai-drama 自身 HTTP API 的共享令牌（浏览器/外部调用方用 `Authorization: Bearer`；未配置时仅放行回环来源，容器/公网部署必配。与 MCP 令牌分开命名，可同值部署） |
 | ai-drama | `AI_DRAMA_MCP_TOKEN` | hermes↔ai-drama 之间的 MCP 令牌（与 bot-backend 的服务令牌无关） |
@@ -42,7 +42,7 @@ ai-drama 前端 ──HTTP──→ ai-drama 后端（领域服务 + 任务队�
 ```yaml
 mcp_servers:
   ai_drama:
-    url: http://ai-drama-backend:3000/mcp   # ai-drama 后端地址 + /mcp
+    url: http://bot-backend:30172/mcp   # drama 子应用挂在 bot-backend 上 + /mcp
     headers:
       Authorization: Bearer <AI_DRAMA_MCP_TOKEN>
     # 可选：只暴露部分工具（详见 hermes 工具配置）
