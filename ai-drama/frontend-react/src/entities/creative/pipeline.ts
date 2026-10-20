@@ -142,6 +142,11 @@ export type PipelineAction = 'continue' | 'retry' | 'pause' | 'approve' | 'rewin
 export const pipelineApi = {
   get: (id: number, signal?: AbortSignal) => api.get<PipelineState>(`/creative/${id}/pipeline`, { signal }),
   run: (id: number, runId: number) => api.get<PipelineRun>(`/creative/${id}/pipeline/runs/${runId}`),
+  agentPending: (id: number, runId: number) =>
+    api.get<{ stageId: string; instructions: string; payload: string } | null>(
+      `/creative/${id}/pipeline/${runId}/agent-pending`),
+  agentCommit: (id: number, runId: number, version: number, artifact: string) =>
+    api.post(`/creative/${id}/pipeline/${runId}/agent-commit`, { version, artifact }, { timeoutMs: 30_000 }),
   toolPlan: (id: number, signal?: AbortSignal) =>
     api.get<PipelineToolPlan>(`/creative/${id}/pipeline/tool-plan`, { signal }),
   resumeTool: (

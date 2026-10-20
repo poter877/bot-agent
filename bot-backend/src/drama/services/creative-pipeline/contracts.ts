@@ -11,6 +11,9 @@ export type StageStatus = 'pending' | 'running' | 'waiting' | 'review' | 'comple
 export interface StageState {
   id: StageKind; status: StageStatus; attempt: number; artifact: PipelineArtifact | null
   error: string | null; approvedAt: string | null; startedAt: string | null; completedAt: string | null
+  /** 《重构》§6：text 步由本地 Hermes 客户端执行——服务端只准备上下文并等待回交。
+   *  非空表示本阶段正在等待客户端 Agent（运行状态为 waiting）。 */
+  pendingAgent?: { instructions: string; payload: string } | null
 }
 export type RunStatus = 'ready' | 'running' | 'pausing' | 'paused' | 'waiting' | 'review' | 'failed' | 'completed' | 'cancelled'
 export interface StageContext {
@@ -28,3 +31,10 @@ export interface StageResult {
   revision?: number
 }
 export class PipelineInputRequired extends Error {}
+/** 服务端无编排车道（HERMES_AGENT_* 已退役）：携带准备好的提示词与上下文，
+ *  由 runner 转为 waiting + pendingAgent，等待客户端经宿主会话执行后回交。 */
+export class AgentStagePending extends Error {
+  constructor(public readonly prepared: { instructions: string; payload: string }) {
+    super('本阶段需要在桌面 app 中由 AI 完成（服务端不代调模型）')
+  }
+}

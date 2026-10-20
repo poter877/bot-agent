@@ -23,6 +23,15 @@ const actionSchema = z
 export function createPipelineRoutes(runner: ReturnType<typeof createPipelineRunner> = pipelineRunner) {
   const app = new Hono()
   app.get('/:id/pipeline', (c) => success(c, getPipelineState(Number(c.req.param('id')))))
+  // 《重构》§6：客户端 Agent 认领（读准备好的提示词）与回交（产物注入后续跑）
+  app.get('/:id/pipeline/:runId/agent-pending', async (c) =>
+    success(c, await runner.pendingAgentStage(Number(c.req.param('id')), Number(c.req.param('runId')))))
+  app.post('/:id/pipeline/:runId/agent-commit', async (c) => {
+    const body = await c.req.json()
+    return success(c, await runner.commitAgentArtifact(
+      Number(c.req.param('id')), Number(c.req.param('runId')),
+      Number(body.version), String(body.artifact ?? '')))
+  })
   app.get('/:id/pipeline/capabilities', async (c) =>
     success(c, await pipelineCapabilities(Number(c.req.param('id')))),
   )

@@ -1,3 +1,4 @@
+import { AgentStageWatcher } from './AgentStageWatcher'
 import { CreativeProductionFiles } from './CreativeProductionFiles'
 import { CreativePipelineToolSteps } from './CreativePipelineToolSteps'
 import { toolboxQueries, type ToolboxFile } from '@/entities/creative/toolbox'
@@ -185,8 +186,12 @@ export function CreativePipelinePanel({
         )}
       </p>
     )
+  const runId = state?.run?.id ?? null
+  const runVersion = state?.run?.version ?? null
+
   return (
     <div className="space-y-4">
+      <AgentStageWatcher projectId={project.id} runId={runId} version={runVersion} />
       <CreativeSection
         title={`${definition.title} · ${text('制作流程', 'Workflow')}`}
         hint={text(

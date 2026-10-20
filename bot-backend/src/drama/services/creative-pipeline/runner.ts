@@ -16,6 +16,7 @@ import {
   type StageState,
   type StageContext,
   type StageResult,
+  AgentStagePending,
 } from './contracts.js'
 
 type RunRow = typeof schema.creativePipelineRuns.$inferSelect
@@ -221,15 +222,33 @@ export function createPipelineRunner(execute: StageExecutor = createStageExecuto
             .filter((s) => s.status === 'completed' && s.artifact)
             .map((s) => [s.id, s.artifact!]),
         )
-        const result = await execute({
-          project,
-          definition: state.definition,
-          stage,
-          artifacts: accepted,
-          previous: entry.artifact,
-          retry,
-          checkpoint: async (artifact, revision) => (await checkpoint(row, row.cursor, artifact, revision)),
-        })
+        let result
+        try {
+          result = await execute({
+            project,
+            definition: state.definition,
+            stage,
+            artifacts: accepted,
+            previous: entry.artifact,
+            retry,
+            checkpoint: async (artifact, revision) => (await checkpoint(row, row.cursor, artifact, revision)),
+          })
+        } catch (err) {
+          if (err instanceof AgentStagePending) {
+            // 《重构》§6：服务端不代调模型——暂存准备好的提示词，等客户端 Agent 回交
+            entry.status = 'waiting'
+            entry.pendingAgent = err.prepared
+            await patch(
+              row,
+              { status: 'waiting', stages: JSON.stringify(state.stages) },
+              'awaiting_agent',
+              { stage: stage.id },
+              stage.id,
+            )
+            return
+          }
+          throw err
+        }
         row = (await current(row))
         const latestProject = await getCreativeProject(row.projectId)
         const revision = result.revision ?? project.revision
@@ -313,7 +332,63 @@ export function createPipelineRunner(execute: StageExecutor = createStageExecuto
     if (row.version !== version) throw new CreativeError('流程状态已变化，请刷新后重试', 409)
     return row
   }
+
+  /** 《重构》§6：客户端 Agent 的准备上下文（waiting + pendingAgent 的当前阶段）。 */
+  async function pendingAgentStage(projectId: number, runId: number) {
+    const row = await readRun(projectId, runId)
+    const decoded = decode(row)
+    const stage = decoded.stages[row.cursor]
+    if (row.status !== 'waiting' || !stage?.pendingAgent) return null
+    return { stageId: stage.id, ...stage.pendingAgent }
+  }
+
+  /** 客户端 Agent 回交阶段产物：校验 → 注入（等价正常完成路径）→ 续跑。 */
+  async function commitAgentArtifact(projectId: number, runId: number, version: number, artifactJson: string) {
+    const row = await checked(projectId, runId, version)
+    const decoded = decode(row)
+    const index = row.cursor
+    const stage = decoded.stages[index]
+    if (row.status !== 'waiting' || !stage?.pendingAgent) {
+      throw new CreativeError('当前阶段不在等待客户端 Agent 的状态', 409)
+    }
+    let parsed: { summary?: unknown; content?: unknown; checks?: unknown }
+    try {
+      parsed = JSON.parse(artifactJson)
+    } catch {
+      throw new CreativeError('产物不是合法 JSON（应返回 {"summary","content","checks"}）', 400)
+    }
+    if (typeof parsed.summary !== 'string' || typeof parsed.content !== 'string') {
+      throw new CreativeError('产物缺少 summary/content 字段', 400)
+    }
+    const definition = decoded.definition ?? (await getPipelineState(projectId)).definition
+    const stageDef = definition.stages.find((it) => it.id === stage.id)
+    stage.artifact = {
+      summary: parsed.summary,
+      content: parsed.content,
+      checks: Array.isArray(parsed.checks) ? parsed.checks.map(String) : [],
+      data: {},
+    }
+    stage.error = null
+    stage.pendingAgent = null
+    stage.status = stageDef?.review ? 'review' : 'completed'
+    stage.completedAt = stageDef?.review ? null : new Date().toISOString()
+    const cursor = stage.status === 'completed' ? index + 1 : index
+    const status: RunStatus = stageDef?.review ? 'review' : cursor === decoded.stages.length ? 'completed' : 'running'
+    await patch(
+      row,
+      { status, cursor, stages: JSON.stringify(decoded.stages) },
+      'agent_committed',
+      { stage: stage.id },
+      stage.id,
+    )
+    if (status === 'running') await launch(await current(row), false)
+    return { status }
+  }
+
   return {
+    pendingAgentStage,
+    commitAgentArtifact,
+
     async start(projectId: number, revision: number) {
       const project = await getCreativeProject(projectId)
       if (project.revision !== revision) throw new CreativeError('项目内容已修改，请刷新后重试', 409)
