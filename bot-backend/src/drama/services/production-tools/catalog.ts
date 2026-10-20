@@ -327,7 +327,7 @@ export async function getToolDefinition(id: string): Promise<ToolDefinition> {
     ? `通过统一${serviceType}服务实现此项功能；可在模型与服务中选择实际使用的模型。原参考项：${item.referenceProvider || item.id}。`
     : acquisitionDomains[id]
       ? `检索 ${acquisitionDomains[id]} 的素材来源页面，保留出处；候选页面需检查文件与许可。`
-      : `${featureName}，支持独立执行、产物检查和导入项目。`
+      : `${categories[item.category] ?? '制作'}类工具，可独立执行、检查产物并导入项目。`
   let available: boolean = implemented,
     reason: string | undefined = implemented ? undefined : '该项尚无可执行实现'
   if (serviceType) {

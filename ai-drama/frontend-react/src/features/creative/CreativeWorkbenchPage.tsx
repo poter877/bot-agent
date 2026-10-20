@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useBeforeUnload, useBlocker, useNavigate } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useStore } from 'zustand'
-import { ArrowLeft, ArrowRight, Check, CheckCircle2, ChevronDown, Circle, Clapperboard, FileText, Film, Loader2, MessageSquare, Music2, Play as PlayIcon, Save, Settings2, Sparkles } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, CheckCircle2, ChevronDown, Circle, Clapperboard, FileText, Film, Loader2, MessageSquare, Music2, Play as PlayIcon, Save, Settings2, Sparkles, Wrench } from 'lucide-react'
 import { creativeApi } from '@/entities/creative/api'
 import { creativeQueries } from '@/entities/creative/queries'
 import { hasActiveShotTasks, newCreativeShot, taskIsActive, toCreativeDraft, type CreativeDraft, type CreativeProject, type CreativeShot } from '@/entities/creative/model'
@@ -164,8 +164,8 @@ export function CreativeWorkbenchPage({ projectId }: { projectId: number }) {
 
   const stages: { id: CreativeStage; label: string; icon: typeof FileText }[] = [
     { id: 'pipeline', label: text('制作流程', 'Workflow'), icon: PlayIcon },
-    { id: 'toolbox', label: text('制作工具箱','Toolbox'), icon: Settings2 },
-    { id: 'tools', label: text('制作工具','Production tools'), icon: Settings2 },
+    { id: 'toolbox', label: text('工具目录', 'Tool catalog'), icon: Wrench },
+    { id: 'tools', label: text('专项工具', 'Specialty tools'), icon: Settings2 },
     { id: 'brief', label: copy.brief, icon: FileText }, { id: 'shots', label: copy.shots, icon: Clapperboard },
     { id: 'audio', label: copy.audio, icon: Music2 }, { id: 'export', label: copy.export, icon: Film },
   ]

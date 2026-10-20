@@ -168,7 +168,10 @@ function CompanyCatalogPicker({ type, cfgs, configsPending, onChanged }: { type:
         </div>
       )}
       {catalog.data && !entries.length && (
-        <p className="text-xs text-content-subtle">暂无已启用模型 — 请先在运营管理台（bot-backend /console）启用模型并配置密钥</p>
+        <div className="flex flex-wrap items-center gap-2 rounded-control border border-warning bg-warning-soft px-3 py-2 text-xs text-warn-text">
+          <span>暂无已启用模型 — 请先在运营管理台启用模型并配置密钥</span>
+          <a href="/console" target="_blank" rel="noreferrer" className="underline underline-offset-2">打开管理台 ↗</a>
+        </div>
       )}
       {entries.length > 0 && (
         <div className={MODEL_CHIPS}>
@@ -188,7 +191,7 @@ function CompanyCatalogPicker({ type, cfgs, configsPending, onChanged }: { type:
           ))}
         </div>
       )}
-      <p className="text-micro leading-relaxed text-content-subtle">模型清单由运营管理台维护（已启用且配有密钥）；点击模型设为此服务的默认模型，制作时可随时换用清单中的其他模型。</p>
+      {entries.length > 0 && <p className="text-micro leading-relaxed text-content-subtle">模型清单由运营管理台维护（已启用且配有密钥）；点击模型设为此服务的默认模型，制作时可随时换用清单中的其他模型。</p>}
     </div>
   )
 }

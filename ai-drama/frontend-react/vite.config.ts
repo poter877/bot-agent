@@ -9,6 +9,7 @@ const backendOrigin = process.env.AI_DRAMA_BACKEND_ORIGIN || 'http://localhost:3
 const backendProxy = {
   '/api': { target: backendOrigin, changeOrigin: true },
   '/static': { target: backendOrigin, changeOrigin: true },
+  '/console': { target: backendOrigin, changeOrigin: true },
 }
 
 export default defineConfig({

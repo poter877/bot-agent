@@ -214,7 +214,7 @@ export function CreativeToolboxPanel({ project, disabled, canRun, onProjectUpdat
   }
   const actOnJob = (job: ToolboxJob, action: () => Promise<unknown>) => { setError(null); setPendingJobId(job.id); mutation.mutate(action) }
   return <div className="space-y-4">
-    <CreativeSection title="制作工具箱" hint="按制作任务选择工具，调整输入后执行；任务记录与产物保存在当前项目。" action={<div className="flex flex-wrap items-center gap-3"><Button size="sm" variant="ghost" disabled={catalog.isFetching} onClick={() => void catalog.refetch()}>刷新工具</Button><Link to="/settings" className="inline-flex items-center gap-1 text-xs text-brand-content underline"><Settings2 size={13} aria-hidden />模型与服务配置</Link></div>}>
+    <CreativeSection title="工具目录" hint="按制作任务选择工具，调整输入后执行；任务记录与产物保存在当前项目。" action={<div className="flex flex-wrap items-center gap-3"><Button size="sm" variant="ghost" disabled={catalog.isFetching} onClick={() => void catalog.refetch()}>刷新工具</Button><Link to="/settings" className="inline-flex items-center gap-1 text-xs text-brand-content underline"><Settings2 size={13} aria-hidden />模型与服务配置</Link></div>}>
       <div className="flex flex-wrap gap-2 text-xs text-content-muted"><span>{tools.length} 项工具</span><span>·</span><span>{tools.filter(tool => tool.available).length} 项当前可用</span></div>
       {catalog.isError && <div role="alert" className="mt-3 flex flex-wrap items-center gap-2 text-sm text-danger">{catalog.error.message}<Button size="sm" onClick={() => void catalog.refetch()}>重新读取工具</Button></div>}
       {configs.isError && <p role="alert" className="mt-3 text-xs text-danger">模型配置无法读取：{configs.error.message}<Button size="sm" onClick={() => void configs.refetch()}>重试配置</Button></p>}
@@ -229,7 +229,7 @@ export function CreativeToolboxPanel({ project, disabled, canRun, onProjectUpdat
         {matching.slice(0, visibleCount).map(tool => <button key={tool.id} type="button" aria-pressed={selectedId === tool.id} onClick={() => { setSelectedId(tool.id); setError(null) }} className={cn('min-w-0 space-y-2 rounded-control border p-3 text-left focus-visible:outline-none focus-visible:shadow-focus', selectedId === tool.id ? 'border-brand bg-brand-soft' : 'border-outline bg-transparent hover:bg-hover-overlay')}>
           <span className="flex items-start justify-between gap-2"><span className="break-words text-sm font-semibold">{tool.name}</span><Wrench size={14} className="mt-0.5 shrink-0 text-content-muted" aria-hidden /></span>
           <span className="block line-clamp-2 text-xs leading-relaxed text-content-muted">{tool.description}</span>
-          <span className="flex flex-wrap gap-2 text-[10px] text-content-muted"><span>{categoryLabel(tool.category)}</span><span>{tool.provider}</span><span className={tool.available ? 'text-success' : 'text-content-subtle'}>{tool.available ? '可执行' : tool.implemented === false ? '尚未接入' : '需配置或依赖'}</span></span>
+          <span className="flex flex-wrap gap-2 text-[10px] text-content-muted"><span>{categoryLabel(tool.category)}</span><span>{tool.provider}</span>{tool.available ? <span className="text-success">可执行</span> : tool.implemented === false ? <span className="text-content-subtle">尚未接入</span> : <span className="text-warning">需配置或依赖</span>}</span>
         </button>)}
       </div>
       {!catalog.isPending && !catalog.isError && !matching.length && <p className="mt-4 text-sm text-content-muted">没有符合条件的工具，请调整搜索或筛选条件。</p>}
