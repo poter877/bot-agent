@@ -110,15 +110,23 @@ hermes 桌面 app（`apps/desktop`）侧边栏有「视频工厂」入口，打�
 
 ### 宿主机 dev 网关（不走 trio 容器时）
 
-trio 之外，宿主机直跑（本机现状，端口 30179）：
+trio 之外，宿主机直跑。**网关是 systemd 用户服务**（`~/.config/systemd/user/
+hermes-drama-gateway.service`），开机自起、崩溃自动拉起，端口固定 30179：
 
-```bash
-# 1. drama profile home（~/hermes-dev-data/drama-home）：
-#    config.yaml → model.provider=hono + mcp_servers.ai_drama(localhost:30172/mcp)
-#    .env → API_SERVER_KEY=<key>、API_SERVER_PORT=30179、HERMES_BOT_BACKEND_URL
-HERMES_HOME=~/hermes-dev-data/drama-home hermes gateway
-# 2. bot-backend/.env：HERMES_AGENT_URL=http://127.0.0.1:30179 + HERMES_AGENT_KEY=<同 key>
 ```
+后端分层（"一套后端"的落法）：
+  bot-backend(:30172) —— 唯一模型出口 + 唯一账号库（Better Auth）
+  hermes gateway(:30179) —— 唯一编排大脑的 OpenAI 兼容面（drama agent 走这里）
+  hermes serve(桌面 app 私有) —— 桌面 UI 的 ws 后端（app 自己 spawn，架构钦定）
+两个 hermes 进程是两个协议面（/v1 vs /api/ws），serve 不装配 messaging 平台、
+gateway 不带 web server——合并不了；但模型、账号、凭据、配置全部收敛在
+bot-backend + 各 home 的 config/.env，只有一份真相。
+```
+
+drama profile home（`~/hermes-dev-data/drama-home`）：config.yaml → `model.provider:
+hono` + `mcp_servers.ai_drama`（127.0.0.1:30172/mcp）；.env → `API_SERVER_KEY`、
+`API_SERVER_PORT=30179`、`HERMES_BOT_BACKEND_URL`。bot-backend/.env →
+`HERMES_AGENT_URL=http://127.0.0.1:30179` + `HERMES_AGENT_KEY`（同 key）。
 
 三个踩过的坑（2026-10-20 排障记录）：
 
