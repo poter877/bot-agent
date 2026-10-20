@@ -90,6 +90,7 @@ class StudioAgentLane {
 
   async history(sessionId: string) {
     await this.ready
+
     const r = await this.client.request('session.history', { session_id: sessionId }) as {
       messages?: Array<{ role: string; text?: string | null }>
     }
@@ -110,10 +111,17 @@ class StudioAgentLane {
   }
 }
 
-export function createDesktopStudioHost(conn: DesktopStudioConnection): StudioHost {
+export interface DesktopStudioHandle {
+  host: StudioHost
+  /** 页面卸载时释放 lane 的 ws 订阅。会话本身继续活在 serve 上（切换页面
+   *  不取消 Agent）；app 退出由 Electron 既有受管清理带走自有 serve。 */
+  dispose: () => void
+}
+
+export function createDesktopStudioHost(conn: DesktopStudioConnection): DesktopStudioHandle {
   const agentLane = new StudioAgentLane(`${conn.baseUrl.replace(/^http/, 'ws')}/api/ws?token=${encodeURIComponent(conn.token)}`)
 
-  return {
+  const host: StudioHost = {
     business: {
       async request(path, init) {
         const method = init?.method ?? (init?.body !== undefined ? 'POST' : 'GET')
@@ -202,4 +210,6 @@ export function createDesktopStudioHost(conn: DesktopStudioConnection): StudioHo
       }
     }
   }
+
+  return { host, dispose: () => agentLane.dispose() }
 }

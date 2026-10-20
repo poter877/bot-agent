@@ -34,6 +34,7 @@ export function DramaPage() {
 
     // 宿主工厂需要 serve 的连接信息（baseUrl + 会话令牌）做上传与媒体
     // 通道——先取连接再挂载，host 成为纯同步对象。
+    let handle: { dispose: () => void } | null = null
     void window.hermesDesktop.getConnection().then(conn => {
       if (cancelled) {
         return
@@ -45,15 +46,17 @@ export function DramaPage() {
         return
       }
 
+      const studio = createDesktopStudioHost({ baseUrl: conn.baseUrl, token: conn.token ?? '' })
+      handle = studio
       root = createRoot(host)
-      root.render(
-        <DramaApp host={createDesktopStudioHost({ baseUrl: conn.baseUrl, token: conn.token ?? '' })} initialPath="/" />
-      )
+      root.render(<DramaApp host={studio.host} initialPath="/" />)
     })
 
     return () => {
       cancelled = true
       root?.unmount()
+      // 释放 lane 的 ws 订阅；会话继续活在 serve 上（切换页面不取消 Agent）。
+      handle?.dispose()
     }
   }, [])
 
