@@ -22,6 +22,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import shutil
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -43,8 +45,67 @@ def _error_response(exc: AccountBackendError) -> HTTPException:
     return HTTPException(status_code=status, detail=str(exc))
 
 
+# ── 会话前装配（《重构》方案 §7）─────────────────────────────────────────────
+# hermes 的 MCP 客户端按 config.yaml 的 mcp_servers 装配（新会话生效，配置
+# 每次现读）。插件的 MCP 桥地址含 serve 的动态端口，因此在首个请求时把
+# 「当前端口 + 本进程会话令牌」写进 profile 配置与技能目录——幂等，端口
+# 变化（serve 重启）时覆写。凭据不出本机：令牌是 serve 自己的会话令牌。
+
+_ASSEMBLY_DONE_URL: str | None = None
+MCP_SERVER_NAME = "ai_drama"
+
+
+def _ensure_studio_assembly(base_url: str) -> None:
+    global _ASSEMBLY_DONE_URL
+    bridge_url = f"{base_url}/api/plugins/video-studio/mcp"
+    if _ASSEMBLY_DONE_URL == bridge_url:
+        return
+
+    from hermes_cli import web_server
+
+    entry = {
+        "url": bridge_url,
+        "headers": {"Authorization": f"Bearer {web_server._SESSION_TOKEN}"},
+    }
+    try:
+        from hermes_cli.config import load_config
+        from hermes_cli.mcp_config import _save_mcp_server
+
+        current = (load_config().get("mcp_servers") or {}).get(MCP_SERVER_NAME)
+        if current != entry:
+            _save_mcp_server(MCP_SERVER_NAME, entry)
+            log.info("video-studio: assembled mcp_servers.%s -> %s", MCP_SERVER_NAME, bridge_url)
+    except Exception:
+        log.warning("video-studio: MCP assembly failed", exc_info=True)
+        return  # 下个请求重试
+
+    _install_product_skill()
+    _ASSEMBLY_DONE_URL = bridge_url
+
+
+def _install_product_skill() -> None:
+    """把随插件分发的产品技能放进当前 profile 的 skills/（存在即跳过——
+    用户可自行修改，升级由部署另行管理）。"""
+    try:
+        from hermes_constants import get_hermes_home
+
+        src = Path(__file__).resolve().parent.parent / "skills" / "video-studio"
+        dst = Path(get_hermes_home()) / "skills" / "video-studio"
+        if not src.is_dir() or (dst / "SKILL.md").exists():
+            return
+        shutil.copytree(src, dst)
+        log.info("video-studio: installed product skill at %s", dst)
+    except Exception:
+        log.warning("video-studio: skill install failed", exc_info=True)
+
+
+def _request_base(request: Request) -> str:
+    return str(request.base_url).rstrip("/")
+
+
 @router.api_route("/api/{path:path}", methods=["GET", "POST"])
 async def studio_api(path: str, request: Request) -> object:
+    _ensure_studio_assembly(_request_base(request))
     if not path.startswith(_ALLOWED_PREFIXES):
         raise HTTPException(status_code=404, detail="video-studio forwards business API paths only")
 
