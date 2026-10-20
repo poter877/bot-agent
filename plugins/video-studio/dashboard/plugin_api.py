@@ -4,24 +4,29 @@
 的业务与账号 API，凭据由本进程（serve）的账号桥按当前 profile 持有，前端
 不接触任何服务密钥。
 
-边界（刻意）：
-- 只转发 ``/api/v1/...``（视频工厂业务）与 ``/api/auth/...``（会话探测），
-  逐前缀白名单，不做前端可指定任意 URL 的通用代理；
-- 目标只取配置的 bot-backend（account_backend_session.bot_backend_base）；
-- 凭据走 request_account_backend 的既有代际校验——账号切换后晚到响应不会
-  落入新账号视图；
-- 首期为 JSON GET/POST。上传、图片预览、音视频 Range 播放与下载的流式通道
-  在共享账号传输层补齐后接入（方案 §7），不做大文件的 Base64 化。
+三条通道：
+- ``/api/{path}``     JSON 业务/账号 API（白名单前缀 v1/、auth/）
+- ``/media/{path}``   媒体流（/static/...）：Range/HEAD 透传，用于视频拖动播放、
+                      图片与下载；凭据同账号桥，前端用 query token 访问
+                      （媒体标签带不了 header——白名单见 web_server._QUERY_TOKEN_API_PREFIXES）
+- ``/upload/v1/{path}`` 上传：multipart 原样转发（Content-Type/boundary 保持），
+                      上限 100 MiB——大文件全程 HTTP，不做 Base64 化
+- ``/mcp``            MCP 账号桥：转发 MCP JSON-RPC 到 bot-backend /mcp，凭据
+                      按当前 profile（hermes 侧 MCP 客户端的动态装配见方案 P2）
+
+通用代理是刻意禁止的：目标只取配置的 bot-backend，路径只走固定映射。
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import StreamingResponse
 
-from account_backend_session import AccountBackendError, request_account_backend
+from account_backend_session import AccountBackendError, open_account_backend_stream, request_account_backend
 
 log = logging.getLogger(__name__)
 
@@ -29,6 +34,13 @@ router = APIRouter()
 
 # 业务白名单前缀（相对 /api/）。新增能力时在此扩展，不做通配放行。
 _ALLOWED_PREFIXES = ("v1/", "auth/")
+_UPLOAD_MAX_BYTES = 100 * 1024 * 1024
+_MEDIA_READ_CHUNK = 64 * 1024
+
+
+def _error_response(exc: AccountBackendError) -> HTTPException:
+    status = exc.status_code if isinstance(exc.status_code, int) and 400 <= exc.status_code < 600 else 502
+    return HTTPException(status_code=status, detail=str(exc))
 
 
 @router.api_route("/api/{path:path}", methods=["GET", "POST"])
@@ -47,5 +59,96 @@ async def studio_api(path: str, request: Request) -> object:
     try:
         return await asyncio.to_thread(request_account_backend, f"/api/{path}", payload=payload)
     except AccountBackendError as exc:
-        status = exc.status_code if isinstance(exc.status_code, int) and 400 <= exc.status_code < 600 else 502
-        raise HTTPException(status_code=status, detail=str(exc)) from exc
+        raise _error_response(exc) from exc
+
+
+# 媒体响应头透传白名单（其余头属于 bot-backend 的传输细节，不外泄）
+_MEDIA_PASSTHROUGH_HEADERS = ("content-type", "content-length", "content-range", "accept-ranges", "etag", "last-modified", "cache-control")
+
+
+@router.api_route("/media/{path:path}", methods=["GET", "HEAD"])
+async def studio_media(path: str, request: Request) -> StreamingResponse:
+    forward_headers: dict[str, str] = {}
+    if rng := request.headers.get("range"):
+        forward_headers["Range"] = rng
+    if request.method == "HEAD":
+        forward_headers["Accept-Encoding"] = "identity"
+
+    def _open():
+        return open_account_backend_stream(f"/static/{path}", method=request.method, headers=forward_headers or None, timeout=120.0)
+
+    try:
+        upstream = await asyncio.to_thread(_open)
+    except AccountBackendError as exc:
+        raise _error_response(exc) from exc
+
+    status = getattr(upstream, "status", 200) or 200
+    headers = {k: v for k, v in upstream.headers.items() if k.lower() in _MEDIA_PASSTHROUGH_HEADERS}
+
+    if request.method == "HEAD":
+        await asyncio.to_thread(upstream.close)
+        return StreamingResponse(iter(()), status_code=status, headers=headers)
+
+    def _chunks():
+        try:
+            while True:
+                chunk = upstream.read(_MEDIA_READ_CHUNK)
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            upstream.close()
+
+    # 同步生成器由 starlette 放进线程池执行；Range 状态（206）原样透传。
+    return StreamingResponse(_chunks(), status_code=status, headers=headers)
+
+
+@router.post("/upload/v1/{path:path}")
+async def studio_upload(path: str, request: Request) -> object:
+    body = await request.body()
+    if len(body) > _UPLOAD_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="upload exceeds the 100 MiB budget")
+    content_type = request.headers.get("content-type")
+    if not content_type or "multipart/form-data" not in content_type:
+        raise HTTPException(status_code=415, detail="multipart/form-data body required")
+
+    def _forward() -> object:
+        # boundary 在 Content-Type 里，原样透传即保持 multipart 结构
+        resp = open_account_backend_stream(
+            f"/api/v1/{path}", method="POST", headers={"Content-Type": content_type}, body=body, timeout=180.0)
+        with resp:
+            return json.loads(resp.read() or b"null")
+
+    try:
+        return await asyncio.to_thread(_forward)
+    except AccountBackendError as exc:
+        raise _error_response(exc) from exc
+
+
+@router.post("/mcp")
+async def studio_mcp_bridge(request: Request) -> object:
+    """MCP 账号桥：同一 serve 内的 hermes MCP 客户端经此访问 bot-backend 的
+    领域工具，凭据按当前 profile（用户身份），而非静态共享令牌。"""
+    try:
+        payload = await request.json()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="JSON-RPC body required") from exc
+
+    def _forward() -> bytes:
+        resp = open_account_backend_stream(
+            "/mcp", method="POST",
+            headers={"Content-Type": "application/json", "Accept": "application/json, text/event-stream"},
+            body=json.dumps(payload).encode(), timeout=60.0)
+        with resp:
+            return resp.read()
+
+    try:
+        raw = await asyncio.to_thread(_forward)
+    except AccountBackendError as exc:
+        raise _error_response(exc) from exc
+
+    # streamable HTTP 的应答可能是 JSON 或 SSE 文本；插件不解释协议，按原始字节转发
+    try:
+        return json.loads(raw or b"null")
+    except ValueError:
+        return StreamingResponse(iter([raw]), media_type="text/event-stream")

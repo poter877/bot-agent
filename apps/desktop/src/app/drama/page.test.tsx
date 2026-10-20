@@ -9,6 +9,11 @@ import { appViewForPath, ROUTES_AREA, SIDEBAR_NAV_AREA } from '../routes'
 import { DramaContributions } from './contributions'
 import { DramaPage } from './page'
 
+// page 现在挂载前先取 serve 连接信息；测试给一个最小桩。
+vi.stubGlobal('window', Object.assign(window, {
+  hermesDesktop: { getConnection: () => Promise.resolve({ baseUrl: 'http://127.0.0.1:1', token: 't' }) }
+}))
+
 vi.mock('@drama/embed', () => ({
   DramaApp: (props: { initialPath?: string }) => (
     <div data-drama-app data-initial-path={props.initialPath} />

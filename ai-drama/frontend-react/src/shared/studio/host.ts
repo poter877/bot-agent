@@ -22,6 +22,8 @@ export interface StudioHost {
    *  前端现有的状态码/JSON 处理分支原样复用。 */
   business: {
     request(path: string, init?: { method?: 'GET' | 'POST'; body?: unknown; signal?: AbortSignal }): Promise<Response>
+    /** multipart 上传（path 为 /api/v1 语义）；宿主未实现时回退 request 通道。 */
+    upload(path: string, file: File, signal?: AbortSignal): Promise<Response>
   }
   /** 宿主登录门的账号状态投影；嵌入模式不再出现第二次登录。 */
   account: {

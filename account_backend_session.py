@@ -277,6 +277,58 @@ class _NoBackendRedirects(urllib.request.HTTPRedirectHandler):
         return None
 
 
+def open_account_backend_stream(
+    path: str,
+    *,
+    method: str = "GET",
+    headers: dict | None = None,
+    body: bytes | None = None,
+    timeout: float = 30.0,
+):
+    """Open a NON-JSON request to the account backend and return the raw response.
+
+    The JSON helper above covers the common API surface; uploads (multipart,
+    Content-Type passthrough) and media Range reads need the wire response
+    itself. Credential ladder and header contract are identical to
+    ``_request_account_backend`` with two deliberate differences:
+
+    - The session lock is NOT held for the stream's lifetime (a movie-length
+      download must not freeze every other account op); the jar is therefore
+      not persisted after the response closes — a cookie rotated mid-stream
+      is picked up by the next request instead.
+    - The caller owns the response and MUST ``close()`` it.
+
+    Raises the same :class:`AccountBackendError` contract as the JSON helper.
+    """
+    base = bot_backend_base()
+    token = load_account_bearer_token()
+    jar = None if token is not None else load_account_auth_jar()
+    opener = urllib.request.build_opener(
+        *([] if jar is None else [urllib.request.HTTPCookieProcessor(jar)]), _NoBackendRedirects())
+    parsed = urlsplit(base)
+    request = urllib.request.Request(
+        base + path, data=body, method=method,
+        headers={
+            "Accept": "application/json, text/event-stream, */*",
+            "Origin": f"{parsed.scheme}://{parsed.netloc}",
+            **(dict(headers) if headers else {}),
+        },
+    )
+    if token is not None:
+        request.add_header("Authorization", f"Bearer {token}")
+    try:
+        return opener.open(request, timeout=timeout)
+    except urllib.error.HTTPError as error:
+        try:
+            detail = json.loads(error.read(16_384)).get("message")
+        except (ValueError, AttributeError):
+            detail = None
+        message = detail[:2_000] if isinstance(detail, str) else f"Account backend returned HTTP {error.code}."
+        raise AccountBackendError(message, error.code) from None
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError) as error:
+        raise AccountBackendError("Account service is unavailable. Please retry.") from error
+
+
 def request_account_backend(path: str, *, payload: dict | None = None, timeout: float = 10.0):
     # Logout and late status responses must not race a cookie back onto disk.
     with account_session_lock():

@@ -150,8 +150,10 @@ async function requestForm<T>(path: string, file: File, opts: RequestOptions = {
   const fd = new FormData()
   fd.append('file', file)
   try {
-    // 上传走宿主流式通道（P1 后续）；当前回退原生 fetch（开发版同源代理可用）。
-    const resp = await fetch(`${BASE}${path}`, { method: 'POST', body: fd, signal, headers: authHeaders() })
+    const host = studioHost()
+    const resp = host?.business.upload
+      ? await host.business.upload(`/api/v1${path}`, file, signal)
+      : await fetch(`${BASE}${path}`, { method: 'POST', body: fd, signal, headers: authHeaders() })
     const ms = Math.round(performance.now() - start)
     if (resp.status === 401 && !path.startsWith('/auth') && !window.location.pathname.startsWith('/login')) {
       // 登录模式跳登录页；旧模式（共享令牌）广播给 ApiTokenGate 弹令牌输入

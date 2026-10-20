@@ -485,9 +485,16 @@ def _has_valid_session_token(request: Request) -> bool:
 # the OS shell / a new tab, where no header can be set). Kept narrow.
 _QUERY_TOKEN_API_PATHS: frozenset[str] = frozenset({"/api/files/download"})
 
+# Prefixes with the same query-token allowance — for elements that cannot set
+# headers at all (``<img>``/``<video>`` src). Only READ media streams of an
+# explicitly opted-in product plugin live here; the token is the loopback
+# serve's own session token (short-lived, rotates with the app), never an
+# account credential.
+_QUERY_TOKEN_API_PREFIXES: tuple[str, ...] = ("/api/plugins/video-studio/media/",)
+
 
 def _has_valid_query_token(request: Request, path: str) -> bool:
-    if path not in _QUERY_TOKEN_API_PATHS:
+    if path not in _QUERY_TOKEN_API_PATHS and not path.startswith(_QUERY_TOKEN_API_PREFIXES):
         return False
     token = request.query_params.get("token", "")
     return bool(token) and hmac.compare_digest(token.encode(), _SESSION_TOKEN.encode())

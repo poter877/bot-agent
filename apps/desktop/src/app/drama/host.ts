@@ -6,8 +6,18 @@
  * 链路：无 CORS、无 Vite 代理依赖、凭据不出宿主。IPC 对后端 ≥400 会 reject
  * 带 statusCode 的错误——这里还原成标准 Response，前端现有的 401/错误处理
  * 分支原样复用。
+ *
+ * business.upload 与 assets.resolveUrl 用渲染进程对 serve 的直接 HTTP（携带
+ * serve 的会话令牌）：multipart 与 Range 流不适合 IPC 的 JSON 往返——大文件
+ * 全程 HTTP 流式，正是方案 §7 要求的通道。连接信息在挂载时预取一次（宿主
+ * 工厂是同步纯函数，见 page.tsx 的装配顺序）。
  */
 import type { StudioHost } from '@drama/shared/studio/host'
+
+export interface DesktopStudioConnection {
+  baseUrl: string
+  token: string
+}
 
 function errorToResponse(error: unknown): Response {
   const status = Number(
@@ -30,7 +40,7 @@ function errorToResponse(error: unknown): Response {
   })
 }
 
-export function createDesktopStudioHost(): StudioHost {
+export function createDesktopStudioHost(conn: DesktopStudioConnection): StudioHost {
   return {
     business: {
       async request(path, init) {
@@ -51,6 +61,19 @@ export function createDesktopStudioHost(): StudioHost {
         } catch (error) {
           return errorToResponse(error)
         }
+      },
+
+      async upload(path, file, signal) {
+        const fd = new FormData()
+        fd.append('file', file)
+
+        // 插件的 /upload/... 通道：multipart 原样转发（fetch 可带令牌 header）
+        return fetch(`${conn.baseUrl}/api/plugins/video-studio/upload${path.replace(/^\/+/, '')}`, {
+          method: 'POST',
+          headers: { 'X-Hermes-Session-Token': conn.token },
+          body: fd,
+          signal
+        })
       }
     },
     account: {
@@ -83,8 +106,15 @@ export function createDesktopStudioHost(): StudioHost {
       }
     },
     assets: {
-      // P1 后续接票据化媒体通道；首期透传相对路径，行为与现状一致。
       resolveUrl(path) {
+        // 媒体标签（<img>/<video>）带不了 header——/static/... 改走插件的
+        // /media/ 通道 + query token（serve 对该前缀开了窄白名单）。
+        if (path.startsWith('/static/')) {
+          const media = path.slice('/static/'.length)
+
+          return `${conn.baseUrl}/api/plugins/video-studio/media/${media}?token=${encodeURIComponent(conn.token)}`
+        }
+
         return path
       }
     }

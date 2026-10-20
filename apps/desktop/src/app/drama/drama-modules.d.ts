@@ -17,6 +17,7 @@ declare module '@drama/shared/studio/host' {
   export interface StudioHost {
     business: {
       request(path: string, init?: { method?: 'GET' | 'POST'; body?: unknown; signal?: AbortSignal }): Promise<Response>
+      upload(path: string, file: File, signal?: AbortSignal): Promise<Response>
     }
     account: {
       status(): Promise<{ authenticated: boolean; user: StudioUser | null }>

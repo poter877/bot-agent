@@ -28,7 +28,9 @@ process.env.AI_DRAMA_MCP_TOKEN = 'test-token'
 
 const { db, schema, getInsertId } = await import('../../src/drama/db/index.js')
 const { buildMcpServer } = await import('../../src/drama/mcp/server.js')
-const mcpRoute = (await import('../../src/drama/mcp/route.js')).default
+// 无 auth 注入：测试只覆盖静态令牌面；用户会话面（createMcpApp(auth)）
+// 在鉴权统一后由集成测试覆盖。
+const mcpRoute = (await import('../../src/drama/mcp/route.js')).createMcpApp(null)
 const { STORAGE_ROOT } = await import('../../src/drama/utils/paths.js')
 const { Client } = await import('@modelcontextprotocol/sdk/client/index.js')
 const { InMemoryTransport } = await import('@modelcontextprotocol/sdk/inMemory.js')

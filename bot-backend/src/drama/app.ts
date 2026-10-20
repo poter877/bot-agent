@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { Hono, type MiddlewareHandler } from 'hono'
 import type { Auth } from '../modules/auth/auth.js'
+import { DATA_ROOT } from './utils/paths.js'
 
 import dramas from './routes/dramas.js'
 import creative from './routes/creative.js'
@@ -33,7 +34,7 @@ import props from './routes/props.js'
 import settings from './routes/settings.js'
 import storage from './routes/storage.js'
 import serverUpdate from './routes/serverUpdate.js'
-import mcp from './mcp/route.js'
+import { createMcpApp } from './mcp/route.js'
 import { recoverCreativeRenders } from './services/creative-projects.js'
 import { recoverCreativePipelines } from './services/creative-pipeline/runner.js'
 import { recoverFilmRuns } from './services/film-pipeline/runs.js'
@@ -44,7 +45,11 @@ import { creativeToolService } from './services/creative-tools/jobs.js'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // src/drama → 上三级为仓库根；媒体根缺省指向 ai-drama/data（前端/工具箱产物落点不变）
 const repoRoot = path.resolve(__dirname, '../../..')
-export const DRAMA_DATA_ROOT = process.env.AI_DRAMA_DATA_ROOT || path.join(repoRoot, 'ai-drama', 'data')
+// 静态服务与上传落盘共用同一数据锚点（utils/paths 的 DATA_ROOT）——迁移早期
+// 两者各算各的 repoRoot 相对路径，上传写进 data/static 而 /static 找
+// ai-drama/data，媒体永远 404。AI_DRAMA_DATA_ROOT 仍可整体覆盖（trio 容器
+// 用它指向数据卷）。
+export const DRAMA_DATA_ROOT = process.env.AI_DRAMA_DATA_ROOT || DATA_ROOT
 
 /** 会话门：Better Auth 会话（进程内校验）或 Bearer 服务令牌；豁免 health。 */
 function sessionGate(auth: Auth | null): MiddlewareHandler {
@@ -93,7 +98,7 @@ export function createDramaApp(auth: Auth | null): Hono {
   api.route('/server-update', serverUpdate)
   app.route('/api/v1', api)
 
-  app.route('/mcp', mcp)
+  app.route('/mcp', createMcpApp(auth))
 
   // 生成媒体：uuid 命名不可变 → 长缓存；工具箱产物下载面加沙箱头
   app.use('/static/*', async (c, next) => {

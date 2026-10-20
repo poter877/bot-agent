@@ -1,8 +1,14 @@
 /**
  * MCP 路由 — /mcp，streamable HTTP transport（无状态模式）。
  *
- * 鉴权：Authorization: Bearer <AI_DRAMA_MCP_TOKEN>。这是 hermes agent ↔ ai-drama
- * 后端之间的令牌（与 bot-backend 无关）；env 未配置或令牌不符一律 403（fail-closed）。
+ * 鉴权（两条，任一通过）：
+ * 1. 用户会话：与宿主同一 Better Auth 会话（cookie）——《重构》方案 §7 的
+ *    MCP 账号桥：桌面 serve 内的插件按当前 profile 取用户凭据转发，工具
+ *    归属真实用户，云端不信任工具参数里自报的 user_id。
+ * 2. 静态共享令牌：Authorization: Bearer <AI_DRAMA_MCP_TOKEN>——hermes
+ *    gateway ↔ ai-drama 的部署级令牌，仅作迁移期兼容（P4 撤除旧链路后收回）。
+ *
+ * 两条都不满足一律 403（fail-closed）。env 未配置静态令牌时仅用户会话可用。
  *
  * 会话/状态：无状态 —— 每个 POST 新建 transport + server，响应即结束
  * （enableJsonResponse，无 SSE 长连接），客户端每次调用带齐参数。
@@ -14,6 +20,7 @@ import type { Context } from 'hono'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { logTaskProgress } from '../utils/task-logger.js'
 import { buildMcpServer } from './server.js'
+import type { Auth } from '../../modules/auth/auth.js'
 
 const app = new Hono()
 
@@ -39,9 +46,26 @@ function tokenMatches(c: Context): boolean {
   return timingSafeEqual(a, b)
 }
 
+/** 用户会话校验：Better Auth cookie（与 /api/v1 同一身份源） */
+function userSessionValid(auth: Auth | null): (c: Context) => Promise<boolean> {
+  return async c => {
+  if (!auth) return false
+  try {
+    const session = (await auth.api.getSession({ headers: c.req.raw.headers })) as unknown as { user?: { id?: string } } | null
+    return Boolean(session?.user?.id)
+  } catch {
+    return false
+  }
+  }
+}
+
+export function createMcpApp(auth: Auth | null): Hono {
+const app = new Hono()
+
 app.all('/', async (c) => {
-  if (!tokenMatches(c)) {
-    return c.json({ error: 'Forbidden: AI_DRAMA_MCP_TOKEN missing in Authorization: Bearer header, or not configured on the server' }, 403)
+  const sessionValid = userSessionValid(auth)
+  if (!tokenMatches(c) && !(await sessionValid(c))) {
+    return c.json({ error: 'Forbidden: a user session cookie or the migration-period AI_DRAMA_MCP_TOKEN bearer is required' }, 403)
   }
   if (c.req.method !== 'POST') {
     return c.json({ error: 'Method Not Allowed: stateless MCP endpoint, POST JSON-RPC only' }, 405)
@@ -65,4 +89,6 @@ app.all('/', async (c) => {
   }
 })
 
-export default app
+
+return app
+}
