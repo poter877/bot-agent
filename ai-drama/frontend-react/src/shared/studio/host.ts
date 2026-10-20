@@ -55,6 +55,8 @@ export interface StudioHost {
     createSession(opts: { title?: string; idempotencyKey?: string }): Promise<StudioAgentSession>
     submit(sessionId: string, text: string): Promise<{ status?: string }>
     interrupt(sessionId: string): Promise<void>
+    /** 持久会话历史（含祖先），用于重开页面恢复对话。 */
+    history(sessionId: string): Promise<Array<{ role: string; text?: string | null }>>
     /** 订阅事件流；返回退订函数。事件含所有会话——按 sessionId 过滤是
      *  调用方的责任（多项目并行时）。 */
     onEvent(handler: (event: StudioAgentEvent) => void): () => void

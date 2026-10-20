@@ -88,6 +88,15 @@ class StudioAgentLane {
     await this.client.request('session.interrupt', { session_id: sessionId })
   }
 
+  async history(sessionId: string) {
+    await this.ready
+    const r = await this.client.request('session.history', { session_id: sessionId }) as {
+      messages?: Array<{ role: string; text?: string | null }>
+    }
+
+    return (r.messages ?? []).map(m => ({ role: m.role, text: m.text }))
+  }
+
   onEvent(handler: (event: StudioAgentEvent) => void) {
     this.handlers.add(handler)
 
@@ -176,6 +185,7 @@ export function createDesktopStudioHost(conn: DesktopStudioConnection): StudioHo
       },
       submit: (sessionId, text) => agentLane.submit(sessionId, text),
       interrupt: sessionId => agentLane.interrupt(sessionId),
+      history: sessionId => agentLane.history(sessionId),
       onEvent: handler => agentLane.onEvent(handler)
     },
     assets: {

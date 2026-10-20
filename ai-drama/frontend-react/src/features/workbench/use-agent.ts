@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { agentChat } from '@/entities/ai-config/workspace-api'
 import { toastError } from '@/shared/lib/errors'
+import { runStudioTask } from '@/shared/studio/agent-task'
 
 export function useAgent() {
   const { t } = useTranslation()
@@ -27,13 +28,20 @@ export function useAgent() {
       setRunning(true)
       setRunningType(type)
       try {
-        await agentChat(type, {
-          message: msg,
-          drama_id: dramaId,
-          episode_id: episodeId,
-          model: model || undefined,
-          config_id: configId || undefined,
+        const task = runStudioTask(type, `${msg}（dramaId=${dramaId}, episodeId=${episodeId}）`, {
+          title: `视频工厂 · ${type} · ep${episodeId}`,
         })
+        if (task) {
+          await task.run
+        } else {
+          await agentChat(type, {
+            message: msg,
+            drama_id: dramaId,
+            episode_id: episodeId,
+            model: model || undefined,
+            config_id: configId || undefined,
+          })
+        }
         toast.success(t('composables.agent.done'))
         onDone?.()
       } catch (err) {

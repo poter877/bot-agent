@@ -33,7 +33,20 @@ export function useStudioAgentChat(projectKey: string, projectTitle: string, opt
   const [busy, setBusy] = useState(false)
   // 事件到消息行的映射状态：当前流式中的 assistant 行 id
   const streamingRef = useRef<string | null>(null)
+  const restoredRef = useRef(false)
   const sessionRef = useRef<{ sessionId: string } | null>(null)
+
+  // 历史恢复：有关联会话且本地为空（页面重开）时拉一次持久转录。
+  useEffect(() => {
+    const lane = host?.agent
+    const assoc = studioSessions.get(projectKey)
+    if (!lane || !assoc || restoredRef.current) return
+    restoredRef.current = true
+    void lane.history(assoc.sessionId).then(rows => {
+      const visible = rows.filter(r => r.role === 'user' || r.role === 'assistant')
+      if (visible.length) setMessages(visible.map((r, i) => ({ id: `h-${i}`, role: r.role as 'user' | 'assistant', content: r.text ?? '', status: 'done' as const })))
+    }).catch(() => {})
+  }, [host, projectKey])
 
   useEffect(() => {
     if (!host?.agent) return
