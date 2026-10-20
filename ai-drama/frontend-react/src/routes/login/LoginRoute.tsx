@@ -55,7 +55,7 @@ export function LoginRoute() {
         <div className="mb-8 flex flex-col items-center gap-2">
           <img src={brandLogo} alt="" className="h-11 w-11 rounded-xl object-contain" />
           <h1 className="text-lg font-bold text-content">{t('common.appName', '视频工厂')}</h1>
-          <p className="text-[12.5px] text-content-muted">使用公司账号登录后继续</p>
+          <p className="text-[12.5px] text-content-muted">使用平台账号登录后继续</p>
         </div>
         <div className="mb-4 flex rounded-pill bg-sunken p-1">
           {([['signin', '登录'], ['signup', '注册']] as const).map(([value, label]) => (
@@ -83,7 +83,7 @@ export function LoginRoute() {
             {busy && <Loader2 size={13} className="animate-spin" />}
             {busy ? '提交中…' : mode === 'signin' ? '登录' : '注册并登录'}
           </Button>
-          <p className="text-center text-micro leading-relaxed text-content-subtle">账号由公司管理后台统一管理；忘记密码请联系管理员。</p>
+          <p className="text-center text-micro leading-relaxed text-content-subtle">账号由平台管理后台统一管理；忘记密码请联系管理员。</p>
         </form>
       </div>
     </div>

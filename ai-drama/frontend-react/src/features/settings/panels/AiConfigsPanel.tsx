@@ -156,7 +156,7 @@ function CompanyCatalogPicker({ type, cfgs, onChanged }: { type: ServiceType; cf
       {catalog.isPending && <p role="status" className="text-xs text-content-subtle">正在加载可用模型…</p>}
       {catalog.isError && (
         <div role="alert" className="flex flex-wrap items-center gap-2 text-xs text-danger">
-          <span>公司目录加载失败：{catalog.error instanceof Error && catalog.error.message ? catalog.error.message : '请确认公司后端（bot-backend）已启动'}</span>
+          <span>平台目录加载失败：{catalog.error instanceof Error && catalog.error.message ? catalog.error.message : '请确认模型服务（bot-backend）已启动'}</span>
           <Button size="sm" variant="ghost" onClick={() => void catalog.refetch()}>重试</Button>
         </div>
       )}

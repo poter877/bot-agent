@@ -49,7 +49,7 @@ export function LoginPage() {
           <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-xl border border-brand/40 bg-brand/10 text-[18px]">🛰️</div>
           <h1 className="text-[17px] font-semibold">运营管理台</h1>
           <p className="mt-1 text-[12.5px] text-content-muted">
-            {mode === 'setup' ? '首次使用：创建第一个管理员账号' : 'bot-backend · 公司模型网关'}
+            {mode === 'setup' ? '首次使用：创建第一个管理员账号' : 'bot-backend · 模型平台'}
           </p>
         </div>
         <form onSubmit={submit} className="flex flex-col gap-4 rounded-2xl border border-line bg-ink-900/80 p-6 shadow-[0_8px_40px_rgba(0,0,0,0.35)]">
