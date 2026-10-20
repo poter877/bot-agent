@@ -1,0 +1,7 @@
+name: company
+version: 1.0.0
+description: "Dashboard auth provider — company account backend (bot-backend / Better Auth). Single sign-on across the trio: the account store is bot-backend's PostgreSQL (managed from the /console ops UI); ai-drama already authenticates against it directly. Activates when HERMES_BOT_BACKEND_URL plus a secret (HERMES_DASHBOARD_COMPANY_SECRET, falling back to API_SERVER_KEY) are configured. verify_session validates the stored Better Auth cookie against /api/auth/get-session with a 60s cache, so a revoked account fails closed everywhere at once."
+author: NousResearch
+kind: backend
+requires_env:
+  - HERMES_BOT_BACKEND_URL

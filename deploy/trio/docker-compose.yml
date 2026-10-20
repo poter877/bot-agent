@@ -106,12 +106,28 @@ services:
     environment:
       HERMES_HOME: /data/drama-home
       API_SERVER_KEY: ${API_SERVER_KEY:?}
+      # 统一认证：dashboard 的 company provider 指向 bot-backend 账号库
+      HERMES_BOT_BACKEND_URL: http://bot-backend:30172
+      HERMES_DASHBOARD_COMPANY_SECRET: ${HERMES_DASHBOARD_COMPANY_SECRET:-${BETTER_AUTH_SECRET:?reuse the auth secret}}
+      # 网关容器同时拉起 dashboard（s6 服务）；公司认证 provider 经 bot-backend
+      HERMES_DASHBOARD: 1
+      HERMES_DASHBOARD_PORT: "9119"
       # 容器内默认绑 127.0.0.1，端口映射会连不通；对外服务必须绑全网卡。
       API_SERVER_HOST: 0.0.0.0
-      HERMES_BOT_BACKEND_URL: http://bot-backend:30172
     command: ["hermes", "gateway"]
     volumes:
       - trio-drama-home:/data/drama-home
+
+  portal:
+    image: nginx:alpine
+    depends_on:
+      - bot-backend
+    ports:
+      - "${PORTAL_HOST_PORT:-30178}:80"
+    volumes:
+      - ../../portal/dist:/usr/share/nginx/html:ro
+      - ./portal-nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    restart: unless-stopped
 
 volumes:
   trio-drama-media:
