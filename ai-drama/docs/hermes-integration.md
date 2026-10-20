@@ -130,7 +130,9 @@ hermes 桌面 app（`apps/desktop`）侧边栏有「视频工厂」入口，打�
   bot-backend 只经 `HERMES_AGENT_URL` 调它（容器间地址），**绝不在 bot-backend
   进程里拉起任何东西**（bot-backend 是纯后端项目）。
 - **部署产物**：`deploy/trio/docker-compose.yml`（postgres + redis + bot-backend +
-  hermes-gateway），上服务器即此拓扑。
+  hermes-gateway），上服务器即此拓扑。gateway 是核心服务（随堆必起）；drama-home
+  由一次性 `drama-home-init` 播种（config.yaml 模板 + 服务令牌凭据，幂等）；
+  `smoke.sh` 全链路冒烟（含真实 turn），无需账号密码。
 - **开发机**：客户端在本地跑（桌面 app dev），服务端组件的本地替身 =
   bot-backend（tsx watch）+ drama gateway（systemd 用户服务）。替身与服务器组件
   同构，切换到真服务器只需改桌面 app 与 bot-backend 的指向。

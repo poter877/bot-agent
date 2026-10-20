@@ -10,11 +10,18 @@ import type { AppEnv } from '../shared/context.js'
  */
 export function securityMiddleware(): Array<MiddlewareHandler<AppEnv>> {
   return [
-    // 管理台的 HTML 面（/admin 服务端渲染控制台 + /console SPA）必须加载同源
-    // 脚本/样式才能工作。注册在最前、于 next() 之后再改写 CSP，保证覆盖
-    // secureHeaders 的 default-src 'none'（/api 与其余响应维持最严格）。
+    // 管理台的 HTML 面（/admin 服务端渲染控制台 + /console SPA）与视频工厂的
+    // SPA 兜底壳（drama 子应用对 Accept: text/html 的导航请求回 index.html）
+    // 必须加载同源脚本/样式才能工作。注册在最前、于 next() 之后再改写 CSP，
+    // 保证覆盖 secureHeaders 的 default-src 'none'（/api 与其余响应维持最严格）。
     function consoleCsp(c, next) {
-      const relaxed = c.req.path.startsWith('/admin') || c.req.path.startsWith('/console')
+      const htmlNavigation = (c.req.header('accept') ?? '').includes('text/html')
+      const relaxed =
+        c.req.path.startsWith('/admin') ||
+        c.req.path.startsWith('/console') ||
+        // 仅浏览器导航（HTML 文档）；API 客户端都声明 application/json，
+        // 不会误入宽松档。
+        htmlNavigation
       return next().then(() => {
         if (relaxed) {
           c.res.headers.set(

@@ -68,7 +68,7 @@ services:
       COMPANY_BACKEND_URL: http://bot-backend:30172
       COMPANY_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:?}
       HERMES_AGENT_URL: http://hermes-gateway:30175
-      HERMES_AGENT_KEY: ${API_SERVER_KEY:-}
+      HERMES_AGENT_KEY: ${API_SERVER_KEY:?set the gateway API key}
       # 视频工厂前端静态托管（宿主构建 dist 挂载进容器）
       FRONTEND_DIST: /app/frontend-dist
       WORKSPACE_PATH: /app/workspace
@@ -94,13 +94,42 @@ services:
       RATE_LIMIT_LLM_STREAM_WINDOW_SECONDS: ${RATE_LIMIT_LLM_STREAM_WINDOW_SECONDS:-60}
 
 
+  # drama-home 一次性播种：把随仓库的 config（模型出口 + ai_drama MCP）与
+  # 服务令牌凭据写进命名卷；幂等（已存在则跳过），gateway 等它完成才启动。
+  drama-home-init:
+    image: node:22-alpine
+    volumes:
+      - trio-drama-home:/data/drama-home
+      - ./drama-home/config.yaml:/seed/config.yaml:ro
+    environment:
+      SEED_MCP_URL: http://bot-backend:30172/mcp
+      SEED_MCP_TOKEN: ${AI_DRAMA_MCP_TOKEN:?}
+      SEED_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:?}
+    command:
+      - sh
+      - -c
+      - |
+        mkdir -p /data/drama-home
+        if [ ! -f /data/drama-home/config.yaml ]; then
+          sed -e "s#__MCP_URL__#$$SEED_MCP_URL#" -e "s#__MCP_TOKEN__#$$SEED_MCP_TOKEN#" /seed/config.yaml > /data/drama-home/config.yaml
+          echo "seeded drama-home config.yaml"
+        fi
+        # 服务令牌作为网关的账号凭据（/api/llm/models 收 INTERNAL_SERVICE_TOKEN；
+        # 生产账号线如需用户会话再按文档换 cookie jar 方案）
+        printf '%s' "$$SEED_SERVICE_TOKEN" > /data/drama-home/account-auth-token.txt
+        chmod 600 /data/drama-home/account-auth-token.txt
+        echo "drama-home ready"
+    restart: "no"
+
   hermes-gateway:
-    profiles: ["hermes"]
     build:
       context: ../..
       dockerfile: Dockerfile
     depends_on:
-      - bot-backend
+      bot-backend:
+        condition: service_started
+      drama-home-init:
+        condition: service_completed_successfully
     ports:
       - "${GATEWAY_HOST_PORT:-30175}:30175"
     environment:
@@ -118,16 +147,6 @@ services:
     volumes:
       - trio-drama-home:/data/drama-home
 
-  portal:
-    image: nginx:alpine
-    depends_on:
-      - bot-backend
-    ports:
-      - "${PORTAL_HOST_PORT:-30178}:80"
-    volumes:
-      - ../../portal/dist:/usr/share/nginx/html:ro
-      - ./portal-nginx.conf:/etc/nginx/conf.d/default.conf:ro
-    restart: unless-stopped
 
 volumes:
   trio-drama-media:

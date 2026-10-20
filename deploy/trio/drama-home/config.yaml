@@ -1,0 +1,13 @@
+# drama profile 种子配置（deploy/trio 容器网关用；__MCP_URL__/__MCP_TOKEN__
+# 由 drama-home-init 播种时替换）。模型经 bot-backend 唯一出口；领域工具挂 ai_drama。
+_config_version: 50
+
+model:
+  default: "deepseek-flash"
+  provider: "hono"
+
+mcp_servers:
+  ai_drama:
+    url: __MCP_URL__
+    headers:
+      Authorization: "Bearer __MCP_TOKEN__"
