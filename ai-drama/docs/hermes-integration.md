@@ -81,6 +81,20 @@ fail-closed → gateway `/v1/models` → 可选端到端一次真实 turn，需�
 `DRAMA_ACCOUNT_EMAIL/PASSWORD`，脚本会登录 bot-backend 并把会话写进 drama home
 的 `account-auth-cookies.txt`）。
 
+### 桌面 app 入口（视频工厂页）
+
+hermes 桌面 app（`apps/desktop`）侧边栏有「视频工厂」入口，打开 `/drama` 工作区页面：
+Electron `<webview>` 直接嵌入 bot-backend 根路径上的 drama SPA，与 hermes 聊天同窗切换。
+
+- **服务地址**：默认 `http://localhost:30172`（dev 与 trio 相同）；页面内「更改地址」
+  可改，存于桌面端 localStorage（`hermes.desktop.drama.baseUrl`，机器级）。
+- **登录**：webview 与 app 内置浏览器共用 `persist:hermes-preview` 分区——Better Auth
+  cookie 一处登录，工作室页/内置浏览器/预览互通。
+- **安全契约**：沙箱开、node 关、无弹窗；guest 内 `target="_blank"` 只经预加载的
+  trusted-click 桥（http/https 白名单）走系统浏览器。
+- **实现**：`apps/desktop/src/app/drama/`（页面 + webview guest + 地址 store +
+  贡献注册），仿 `cloud-computer` 的 ROUTES_AREA/SIDEBAR_NAV_AREA 模式。
+
 ### 并发标定（drama 账号是所有 agent turn 的主体）
 
 | 旋钮 | 位置 | 默认 | 说明 |
