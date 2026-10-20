@@ -144,6 +144,42 @@ it('renders company services as catalog pickers and keeps catalog tool presets a
   await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({ service_type: 'image', provider: 'openai', api_key: 'legacy-secret', base_url: 'https://old.example.com' })))
 })
 
+it('does not auto-provision while the configs list is still loading', async () => {
+  // 目录先到、configs 永远 pending：此刻"配置缺失"是假象，建档会造重复行
+  vi.spyOn(aiConfigApi, 'companyModels').mockImplementation(async (kind?: string) =>
+    kind === 'text'
+      ? { models: [{ id: 'deepseek-flash', displayName: 'DeepSeek Flash' }], defaultModel: 'deepseek-flash' } as const
+      : { models: [], defaultModel: null })
+  const never = new Promise<never>(() => {})
+  vi.spyOn(aiConfigApi, 'list').mockImplementation(() => never)
+  const create = vi.spyOn(aiConfigApi, 'create').mockResolvedValue({})
+  mountPanel()
+  // 目录 chips 已渲染（目录就绪），但建档必须按住不发
+  await screen.findByRole('button', { name: /DeepSeek Flash/ })
+  await new Promise((r) => setTimeout(r, 50))
+  expect(create).not.toHaveBeenCalled()
+})
+
+it('targets the backend-resolved row when duplicate company rows exist', async () => {
+  // 重复建档留下的现场：id=1（旧、空）与 id=9（新、有模型）并存。
+  // 后端 rankConfigs 取 id=1 — 面板的点击也必须写到 id=1，否则默认模型永远传不进管道。
+  vi.spyOn(aiConfigApi, 'companyModels').mockImplementation(async (kind?: string) =>
+    kind === 'text'
+      ? { models: [{ id: 'deepseek-flash', displayName: 'DeepSeek Flash' }, { id: 'deepseek-v4-pro', displayName: 'DeepSeek V4 Pro' }], defaultModel: 'deepseek-flash' } as const
+      : { models: [], defaultModel: null })
+  const configs = [
+    { ...config(1, ''), serviceType: 'text' as const, provider: 'company', models: [] },
+    { ...config(9, 'deepseek-flash'), serviceType: 'text' as const, provider: 'company', models: ['deepseek-flash'] },
+  ]
+  vi.spyOn(aiConfigApi, 'list').mockResolvedValue(configs)
+  const create = vi.spyOn(aiConfigApi, 'create').mockResolvedValue({})
+  const update = vi.spyOn(aiConfigApi, 'update').mockResolvedValue(null)
+  mountPanel()
+  fireEvent.click(await screen.findByRole('button', { name: /DeepSeek V4 Pro/ }))
+  await waitFor(() => expect(update).toHaveBeenCalledWith(1, expect.objectContaining({ model: ['deepseek-v4-pro'] })))
+  expect(create).not.toHaveBeenCalled()
+})
+
 it('auto-provisions the company config from the catalog default and switches defaults on click', { timeout: 20_000 }, async () => {
   const companyModels = vi.spyOn(aiConfigApi, 'companyModels').mockImplementation(async (kind?: string) =>
     kind === 'image'

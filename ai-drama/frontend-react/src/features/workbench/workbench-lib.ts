@@ -110,7 +110,7 @@ export interface ModelOption {
 /** 汇总该类型全部启用配置的模型（按优先级排序；不同配置的同名模型分别保留） */
 export function collectModelOptions(cfgs: AiConfig[]): ModelOption[] {
   const out: ModelOption[] = []
-  const sorted = [...cfgs].filter((c) => c.isActive).sort((a, b) => (b.priority || 0) - (a.priority || 0))
+  const sorted = [...cfgs].filter((c) => c.isActive).sort((a, b) => (b.priority || 0) - (a.priority || 0) || a.id - b.id)
   for (const c of sorted) {
     for (const m of configModels(c)) {
       out.push({
@@ -134,7 +134,8 @@ export function collectModelOptions(cfgs: AiConfig[]): ModelOption[] {
 export function mergeModelOptions(cfgs: AiConfig[], catalog: CompanyModelCatalog | undefined): ModelOption[] {
   const fromConfigs = collectModelOptions(cfgs)
   if (!catalog || !catalog.models.length) return fromConfigs
-  const active = [...cfgs].filter((c) => c.isActive).sort((a, b) => (b.priority || 0) - (a.priority || 0))[0]
+  // Tie-break 与后端 rankConfigs 一致（id 升序）：多行同优先级时三处消费者取同一行
+  const active = [...cfgs].filter((c) => c.isActive).sort((a, b) => (b.priority || 0) - (a.priority || 0) || a.id - b.id)[0]
   if (!active) return fromConfigs
   const ordered = catalog.defaultModel
     ? [...catalog.models].sort((a, b) => (a.id === catalog.defaultModel ? -1 : b.id === catalog.defaultModel ? 1 : 0))

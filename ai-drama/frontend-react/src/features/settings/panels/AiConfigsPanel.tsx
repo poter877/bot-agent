@@ -14,6 +14,7 @@ import { z } from 'zod'
 import { qk } from '@/shared/api/query-keys'
 import { aiConfigApi, type AiConfig, type CompanyModelKind, type ConfigTestResult, type ServiceType } from '@/entities/ai-config/model'
 import { toolboxQueries } from '@/entities/creative/toolbox'
+import { pickActiveConfig } from '@/shared/lib/active-config'
 import { toastError } from '@/shared/lib/errors'
 import { providerIconUrl } from '@/shared/lib/provider-icons'
 import { useTheme } from '@/shared/config/theme'
@@ -116,9 +117,13 @@ const COMPANY_TYPES = new Set(['text', 'image', 'video', 'speech', 'transcriptio
 
 /** 公司服务的模型直选分区：列出运营台已启用的模型，点击即设为该服务的默认模型；
  *  目录就绪而公司配置缺失时按目录默认自动建档（零接触开通）。 */
-function CompanyCatalogPicker({ type, cfgs, onChanged }: { type: ServiceType; cfgs: AiConfig[]; onChanged: () => void }) {
+function CompanyCatalogPicker({ type, cfgs, configsPending, onChanged }: { type: ServiceType; cfgs: AiConfig[]; configsPending: boolean; onChanged: () => void }) {
   const ensured = useRef(false)
-  const companyCfg = cfgs.find((c) => c.provider === 'company') ?? null
+  // 与后端 resolveServiceRow 同一行：active → priority 降序 → id 升序；没有 active
+  // 行时退回最旧的 company 行（点击会顺带置 active），绝不因此另建新行。
+  const companyRows = cfgs.filter((c) => c.provider === 'company')
+  const companyCfg =
+    pickActiveConfig(companyRows) ?? companyRows.slice().sort((a, b) => a.id - b.id)[0] ?? null
   const catalog = useQuery({
     queryKey: qk.companyModels(type),
     queryFn: ({ signal }) => aiConfigApi.companyModels(type as CompanyModelKind, signal),
@@ -128,14 +133,16 @@ function CompanyCatalogPicker({ type, cfgs, onChanged }: { type: ServiceType; cf
   const defaultModel = companyCfg?.isActive ? (companyCfg.models[0] ?? null) : null
 
   useEffect(() => {
-    if (ensured.current || companyCfg || !entries.length) return
+    // configs 列表还没落地时 cfgs 是空的——此刻"缺失"是假象，建档会造出
+    // 重复行（面板多次挂载时每次都撞这个窗口）。
+    if (configsPending || ensured.current || companyCfg || !entries.length) return
     ensured.current = true
     const seed = catalog.data?.defaultModel ?? entries[0]!.id
     aiConfigApi
       .create({ service_type: type, provider: 'company', name: `company-${type}`, api_key: '', base_url: '', model: [seed] })
       .then(onChanged)
       .catch(() => { ensured.current = false })
-  }, [companyCfg, entries.length, catalog.data?.defaultModel, type, onChanged])
+  }, [configsPending, companyCfg, entries.length, catalog.data?.defaultModel, type, onChanged])
 
   const pickMutation = useMutation({
     mutationFn: (m: string) => {
@@ -510,7 +517,7 @@ export function AiConfigsPanel() {
               )}
             </div>
             {COMPANY_TYPES.has(st.type) && (
-              <CompanyCatalogPicker type={st.type} cfgs={byType(st.type)} onChanged={invalidate} />
+              <CompanyCatalogPicker type={st.type} cfgs={byType(st.type)} configsPending={configsQuery.isPending} onChanged={invalidate} />
             )}
             {!COMPANY_TYPES.has(st.type) && byType(st.type).map((c, i) => (
               <div key={c.id} className={cn(CONFIG_ROW, i > 0 && 'border-t border-outline')}>
