@@ -10,6 +10,7 @@
  * - 统一带共享令牌 Authorization 头（shared/api/token.ts，401 时广播给 ApiTokenGate）
  */
 import { authHeaders, notifyUnauthorized } from '@/shared/api/token'
+import { studioHost } from '@/shared/studio/host'
 import { sessionMode } from '@/shared/api/session'
 
 export class ApiError extends Error {
@@ -101,7 +102,14 @@ async function request<T>(method: string, path: string, body?: unknown, opts: Re
   }
 
   try {
-    const resp = await fetch(`${BASE}${path}`, init)
+    const host = studioHost()
+    const resp = host
+      ? await host.business.request(`/api/v1${path}`, {
+          method: method as 'GET' | 'POST',
+          ...(body === undefined ? {} : { body }),
+          signal
+        })
+      : await fetch(`${BASE}${path}`, init)
     const ms = Math.round(performance.now() - start)
     if (resp.status === 401 && !path.startsWith('/auth') && !window.location.pathname.startsWith('/login')) {
       // 登录模式跳登录页；旧模式（共享令牌）广播给 ApiTokenGate 弹令牌输入
@@ -142,6 +150,7 @@ async function requestForm<T>(path: string, file: File, opts: RequestOptions = {
   const fd = new FormData()
   fd.append('file', file)
   try {
+    // 上传走宿主流式通道（P1 后续）；当前回退原生 fetch（开发版同源代理可用）。
     const resp = await fetch(`${BASE}${path}`, { method: 'POST', body: fd, signal, headers: authHeaders() })
     const ms = Math.round(performance.now() - start)
     if (resp.status === 401 && !path.startsWith('/auth') && !window.location.pathname.startsWith('/login')) {

@@ -18,6 +18,8 @@ export interface SessionUser {
   name?: string
 }
 
+import { studioHost } from '@/shared/studio/host'
+
 let cachedMode: SessionMode | null = null
 
 export function sessionMode(): SessionMode | null {
@@ -25,6 +27,14 @@ export function sessionMode(): SessionMode | null {
 }
 
 export async function probeSession(): Promise<{ mode: SessionMode; user: SessionUser | null }> {
+  // 嵌入模式：账号状态来自宿主登录门（StudioHost 注入方），不再二次登录。
+  const host = studioHost()
+  if (host) {
+    const { authenticated, user } = await host.account.status()
+    cachedMode = 'login'
+    return { mode: 'login', user: authenticated && user ? { id: user.id, email: user.email, name: user.name } : null }
+  }
+
   let user: SessionUser | null = null
   let mode: SessionMode = 'legacy'
   try {

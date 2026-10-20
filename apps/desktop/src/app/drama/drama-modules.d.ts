@@ -7,10 +7,34 @@
 // Keep this file script-scoped (top-level imports would make it a module and
 // silently disable `declare module`).
 
+declare module '@drama/shared/studio/host' {
+  export interface StudioUser {
+    id: string
+    email: string
+    name?: string
+  }
+
+  export interface StudioHost {
+    business: {
+      request(path: string, init?: { method?: 'GET' | 'POST'; body?: unknown; signal?: AbortSignal }): Promise<Response>
+    }
+    account: {
+      status(): Promise<{ authenticated: boolean; user: StudioUser | null }>
+    }
+    assets: {
+      resolveUrl(path: string): string
+    }
+  }
+
+  export function setStudioHost(host: StudioHost | null): void
+  export function studioHost(): StudioHost | null
+}
+
 declare module '@drama/embed' {
   import type { ComponentType } from 'react'
 
-  export const DramaApp: ComponentType<{ initialPath?: string }>
+  // eslint-disable-next-line @typescript-eslint/consistent-type-imports -- ambient module-scoped import() is the only form allowed here
+  export const DramaApp: ComponentType<{ initialPath?: string; host?: import('@drama/shared/studio/host').StudioHost | null }>
 }
 
 declare module '@drama/app/styles/index.css' {

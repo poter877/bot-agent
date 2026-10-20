@@ -17,11 +17,14 @@ import { AppProviders } from './app/providers'
 import { buildRoutes } from './app/router'
 import { bootstrap } from './app/bootstrap'
 import { initI18n } from '@/shared/config/i18n'
+import { setStudioHost, type StudioHost } from '@/shared/studio/host'
 
 bootstrap()
 initI18n()
 
-export function DramaApp({ initialPath = '/' }: { initialPath?: string }) {
+export function DramaApp({ initialPath = '/', host }: { initialPath?: string; host?: StudioHost | null }) {
+  // 宿主能力注入：嵌入模式业务/账号走宿主通道；null/undefined = 独立浏览器版。
+  setStudioHost(host ?? null)
   const router = useMemo(
     () => createMemoryRouter(buildRoutes(), { initialEntries: [initialPath] }),
     [initialPath],

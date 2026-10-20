@@ -1,0 +1,8 @@
+{
+  "name": "video-studio",
+  "label": "Video studio",
+  "description": "Video studio product integration — business API bridge for the embedded studio page (fixed mapping to bot-backend, profile-scoped account credentials)",
+  "icon": "Video",
+  "version": "0.1.0",
+  "api": "plugin_api.py"
+}

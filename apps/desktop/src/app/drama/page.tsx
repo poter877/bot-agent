@@ -21,6 +21,8 @@ import { DramaApp } from '@drama/embed'
 import { type CSSProperties, useEffect, useRef } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 
+import { createDesktopStudioHost } from './host'
+
 export function DramaPage() {
   // A stable host: the ref holds the div, the effect owns the root lifecycle.
   // StrictMode's mount→unmount→mount just walks the same steps twice.
@@ -34,7 +36,7 @@ export function DramaPage() {
     }
 
     const root: Root = createRoot(host)
-    root.render(<DramaApp initialPath="/" />)
+    root.render(<DramaApp host={createDesktopStudioHost()} initialPath="/" />)
 
     return () => {
       root.unmount()
