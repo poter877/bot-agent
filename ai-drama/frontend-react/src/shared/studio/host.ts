@@ -57,6 +57,8 @@ export interface StudioHost {
     interrupt(sessionId: string): Promise<void>
     /** 持久会话历史（含祖先），用于重开页面恢复对话。 */
     history(sessionId: string): Promise<Array<{ role: string; text?: string | null }>>
+    /** 按 stored id 复活会话（serve 重启后 runtime id 失效时）；返回新 runtime id。 */
+    resume(storedSessionId: string): Promise<StudioAgentSession>
     /** 订阅事件流；返回退订函数。事件含所有会话——按 sessionId 过滤是
      *  调用方的责任（多项目并行时）。 */
     onEvent(handler: (event: StudioAgentEvent) => void): () => void

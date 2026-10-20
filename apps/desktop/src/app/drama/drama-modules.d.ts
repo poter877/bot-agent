@@ -41,6 +41,7 @@ declare module '@drama/shared/studio/host' {
       submit(sessionId: string, text: string): Promise<{ status?: string }>
       interrupt(sessionId: string): Promise<void>
       history(sessionId: string): Promise<Array<{ role: string; text?: string | null }>>
+      resume(storedSessionId: string): Promise<StudioAgentSession>
       onEvent(handler: (event: StudioAgentEvent) => void): () => void
     }
   }

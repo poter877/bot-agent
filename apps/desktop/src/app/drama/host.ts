@@ -88,6 +88,17 @@ class StudioAgentLane {
     await this.client.request('session.interrupt', { session_id: sessionId })
   }
 
+  async resume(storedSessionId: string) {
+    await this.ready
+
+    const r = await this.client.request('session.resume', { session_id: storedSessionId, defer_history: true }) as {
+      session_id: string
+      stored_session_id?: string
+    }
+
+    return { sessionId: r.session_id, storedSessionId: r.stored_session_id ?? storedSessionId }
+  }
+
   async history(sessionId: string) {
     await this.ready
 
@@ -194,6 +205,7 @@ export function createDesktopStudioHost(conn: DesktopStudioConnection): DesktopS
       submit: (sessionId, text) => agentLane.submit(sessionId, text),
       interrupt: sessionId => agentLane.interrupt(sessionId),
       history: sessionId => agentLane.history(sessionId),
+      resume: stored => agentLane.resume(stored),
       onEvent: handler => agentLane.onEvent(handler)
     },
     assets: {

@@ -42,7 +42,16 @@ export function useStudioAgentChat(projectKey: string, projectTitle: string, opt
     const assoc = studioSessions.get(projectKey)
     if (!lane || !assoc || restoredRef.current) return
     restoredRef.current = true
-    void lane.history(assoc.sessionId).then(rows => {
+    const pull = assoc.storedSessionId
+      ? lane.history(assoc.sessionId).catch(async () => {
+          // serve 重启后 runtime id 失效——按 stored id 复活后重拉
+          const revived = await lane.resume(assoc.storedSessionId!)
+          sessionRef.current = { sessionId: revived.sessionId }
+          studioSessions.set(projectKey, { sessionId: revived.sessionId, storedSessionId: revived.storedSessionId })
+          return lane.history(revived.sessionId)
+        })
+      : lane.history(assoc.sessionId)
+    void pull.then(rows => {
       const visible = rows.filter(r => r.role === 'user' || r.role === 'assistant')
       if (visible.length) setMessages(visible.map((r, i) => ({ id: `h-${i}`, role: r.role as 'user' | 'assistant', content: r.text ?? '', status: 'done' as const })))
     }).catch(() => {})
