@@ -25,6 +25,8 @@ initI18n()
 export function DramaApp({ initialPath = '/', host }: { initialPath?: string; host?: StudioHost | null }) {
   // 宿主能力注入：嵌入模式业务/账号走宿主通道；null/undefined = 独立浏览器版。
   setStudioHost(host ?? null)
+  // 受控全局引用（仅嵌入模式挂载）：工作室内部模块与诊断用；独立浏览器版恒为 undefined。
+  ;(globalThis as { __STUDIO_HOST__?: unknown }).__STUDIO_HOST__ = host ?? undefined
   const router = useMemo(
     () => createMemoryRouter(buildRoutes(), { initialEntries: [initialPath] }),
     [initialPath],

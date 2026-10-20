@@ -15,6 +15,20 @@ export interface StudioUser {
   name?: string
 }
 
+/** 宿主 Agent 会话通道的事件（网关推送的统一形态）。type 为网关事件名
+ *  （message.delta 流式文本、tool.start/complete 工具活动、approval.pending
+ *  审批、session.* 会话生命周期）；payload 为该事件的原始载荷。 */
+export interface StudioAgentEvent {
+  type: string
+  sessionId?: string
+  payload?: unknown
+}
+
+export interface StudioAgentSession {
+  sessionId: string
+  storedSessionId?: string
+}
+
 export interface StudioHost {
   /** 业务 API：固定映射到 bot-backend（经宿主通道，用户身份由宿主持有；
    *  前端不接触任何服务密钥）。path 为 bot-backend 语义的绝对路径
@@ -33,6 +47,17 @@ export interface StudioHost {
    *  （宿主同源代理/通道就绪前不改变行为）；票据化访问在 P1 后续接入。 */
   assets: {
     resolveUrl(path: string): string
+  }
+  /** 宿主 Agent 会话（《重构》方案 §4/§5）：复用宿主 serve 的会话与事件流。
+   *  独立会话由调用方按项目维度管理（见 shared/studio/sessions.ts）；
+   *  本接口不承担会话身份与凭据——一切随宿主登录态。 */
+  agent: {
+    createSession(opts: { title?: string; idempotencyKey?: string }): Promise<StudioAgentSession>
+    submit(sessionId: string, text: string): Promise<{ status?: string }>
+    interrupt(sessionId: string): Promise<void>
+    /** 订阅事件流；返回退订函数。事件含所有会话——按 sessionId 过滤是
+     *  调用方的责任（多项目并行时）。 */
+    onEvent(handler: (event: StudioAgentEvent) => void): () => void
   }
 }
 

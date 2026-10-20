@@ -1,3 +1,4 @@
+import type { StudioAgentEvent, StudioHost } from '@drama/shared/studio/host'
 /**
  * StudioHost 的桌面实现 —— 视频工厂内嵌页的宿主通道（《重构》方案 §4/§7）。
  *
@@ -12,7 +13,7 @@
  * 全程 HTTP 流式，正是方案 §7 要求的通道。连接信息在挂载时预取一次（宿主
  * 工厂是同步纯函数，见 page.tsx 的装配顺序）。
  */
-import type { StudioHost } from '@drama/shared/studio/host'
+import { JsonRpcGatewayClient } from '@hermes/shared'
 
 export interface DesktopStudioConnection {
   baseUrl: string
@@ -40,7 +41,69 @@ function errorToResponse(error: unknown): Response {
   })
 }
 
+/**
+ * 工作室专属的 Agent 车道：一条独立于桌面主 UI 的 JSON-RPC 连接（自己的
+ * requestIdPrefix），会话创建/提交/事件流/打断全部走它。独立连接让工作室
+ * 的订阅与桌面聊天的订阅互不干扰（会话本身也天然隔离，不串普通聊天）。
+ */
+class StudioAgentLane {
+  private client: JsonRpcGatewayClient
+  private handlers = new Set<(event: StudioAgentEvent) => void>()
+  private ready: Promise<void>
+
+  constructor(wsUrl: string) {
+    this.client = new JsonRpcGatewayClient({ requestIdPrefix: 'studio' })
+    this.client.onAny(event => {
+      const forwarded: StudioAgentEvent = {
+        type: event.type,
+        sessionId: (event as { session_id?: string }).session_id,
+        payload: (event as { payload?: unknown }).payload
+      }
+
+      for (const handler of this.handlers) {
+        handler(forwarded)
+      }
+    })
+    this.ready = this.client.connect(wsUrl)
+  }
+
+  async createSession(opts: { title?: string; idempotencyKey?: string }) {
+    await this.ready
+
+    return this.client.request('session.create', {
+      source: 'desktop',
+      title: opts.title,
+      ...(opts.idempotencyKey ? { idempotency_key: opts.idempotencyKey } : {})
+    }) as Promise<{ session_id: string; stored_session_id?: string }>
+  }
+
+  async submit(sessionId: string, text: string) {
+    await this.ready
+
+    return this.client.request('prompt.submit', { session_id: sessionId, text }) as Promise<{ status?: string }>
+  }
+
+  async interrupt(sessionId: string) {
+    await this.ready
+    await this.client.request('session.interrupt', { session_id: sessionId })
+  }
+
+  onEvent(handler: (event: StudioAgentEvent) => void) {
+    this.handlers.add(handler)
+
+    return () => {
+      this.handlers.delete(handler)
+    }
+  }
+
+  dispose() {
+    this.client.close()
+  }
+}
+
 export function createDesktopStudioHost(conn: DesktopStudioConnection): StudioHost {
+  const agentLane = new StudioAgentLane(`${conn.baseUrl.replace(/^http/, 'ws')}/api/ws?token=${encodeURIComponent(conn.token)}`)
+
   return {
     business: {
       async request(path, init) {
@@ -104,6 +167,16 @@ export function createDesktopStudioHost(conn: DesktopStudioConnection): StudioHo
           return { authenticated: false, user: null }
         }
       }
+    },
+    agent: {
+      async createSession(opts) {
+        const r = await agentLane.createSession(opts)
+
+        return { sessionId: r.session_id, storedSessionId: r.stored_session_id }
+      },
+      submit: (sessionId, text) => agentLane.submit(sessionId, text),
+      interrupt: sessionId => agentLane.interrupt(sessionId),
+      onEvent: handler => agentLane.onEvent(handler)
     },
     assets: {
       resolveUrl(path) {

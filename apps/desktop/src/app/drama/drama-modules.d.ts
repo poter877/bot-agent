@@ -8,6 +8,17 @@
 // silently disable `declare module`).
 
 declare module '@drama/shared/studio/host' {
+  export interface StudioAgentEvent {
+    type: string
+    sessionId?: string
+    payload?: unknown
+  }
+
+  export interface StudioAgentSession {
+    sessionId: string
+    storedSessionId?: string
+  }
+
   export interface StudioUser {
     id: string
     email: string
@@ -24,6 +35,12 @@ declare module '@drama/shared/studio/host' {
     }
     assets: {
       resolveUrl(path: string): string
+    }
+    agent: {
+      createSession(opts: { title?: string; idempotencyKey?: string }): Promise<StudioAgentSession>
+      submit(sessionId: string, text: string): Promise<{ status?: string }>
+      interrupt(sessionId: string): Promise<void>
+      onEvent(handler: (event: StudioAgentEvent) => void): () => void
     }
   }
 
