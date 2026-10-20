@@ -107,7 +107,7 @@ export async function migrateServiceConfigs() {
 }
 
 export async function resolveServiceRow(type: ServiceType, id?: number, includeDisabled = false) {
-  migrateServiceConfigs()
+  await migrateServiceConfigs()
   const rows = (await db.select().from(schema.aiServiceConfigs).where(eq(schema.aiServiceConfigs.serviceType, type)))
   return rows.filter(r => (id === undefined || r.id === id) && (includeDisabled || r.isActive) &&
     (serviceProviders()[type] || []).includes(r.provider || '')).sort(rankConfigs)[0]

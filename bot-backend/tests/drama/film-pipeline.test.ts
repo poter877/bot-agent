@@ -12,13 +12,13 @@ const { filmStyles, filmStyleGroups, getFilmStyle } = await import('../../src/dr
 const film = (await import('../../src/drama/routes/film.js')).default
 const { filmPipelineDefinition } = await import('../../src/drama/services/film-pipeline/definitions.js')
 
-test('film DDL creates tables and dramas gains film_style', () => {
+test('film DDL creates tables and dramas gains film_style', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'film-ddl-'))
   const db = new Database(path.join(dir, 't.sqlite3'))
   initSqliteSchema(db)
-  const tables = (db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[]).map((r) => r.name)
+  const tables = ((await db.prepare("SELECT name FROM sqlite_master WHERE type='table'")) as { name: string }[]).map((r) => r.name)
   for (const t of ['film_projects', 'film_runs', 'film_render_jobs']) assert.ok(tables.includes(t), `${t} missing`)
-  const cols = (db.prepare('PRAGMA table_info(dramas)').all() as { name: string }[]).map((c) => c.name)
+  const cols = ((await db.prepare('PRAGMA table_info(dramas)')) as { name: string }[]).map((c) => c.name)
   assert.ok(cols.includes('film_style'))
 })
 

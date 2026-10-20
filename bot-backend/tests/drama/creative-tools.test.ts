@@ -6,7 +6,13 @@ import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { eq } from 'drizzle-orm'
 const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'creative-tools-'))
-process.env.SQLITE_PATH = path.join(directory, 'test.sqlite')
+import { Pool } from 'pg'
+const __base = process.env.DATABASE_URL
+if (!__base) throw new Error('tests need DATABASE_URL (point at the test cluster, e.g. bot_backend_test)')
+const __admin = new Pool({ connectionString: __base })
+const __dbName = 'drama_' + process.pid + '_' + (Date.now() % 1000000)
+await __admin.query(`CREATE DATABASE "${__dbName}" TEMPLATE bot_backend_test`)
+process.env.DATABASE_URL = __base.replace(/\/[^/?]+$/, `/${__dbName}`)
 process.env.HUOBAO_DATA_DIR = directory
 process.env.STORAGE_PATH = path.join(directory, 'static')
 process.env.MYSQL_AUTO_IMPORT = 'false'
@@ -41,7 +47,7 @@ function service(deps: Partial<Deps>) {
   services.push(s)
   return s
 }
-function create() {
+async function create() {
   const doc = createCreativeDocument('character_animation')
   doc.brief.idea = '海洋生态'
   doc.shots = [
@@ -65,7 +71,7 @@ function create() {
   ]
   const now = new Date().toISOString()
   const id = getInsertId(
-    db
+    (await db
       .insert(schema.dramas)
       .values({
         title: '制作测试',
@@ -73,12 +79,10 @@ function create() {
         creativeCategory: 'character_animation',
         createdAt: now,
         updatedAt: now,
-      })
-      .run(),
-  )
-  db.insert(schema.creativeProjects)
-    .values({ projectId: id, document: JSON.stringify(doc), revision: 1, updatedAt: now })
-    .run()
+      }).returning()),
+  );
+  (await db.insert(schema.creativeProjects)
+    .values({ projectId: id, document: JSON.stringify(doc), revision: 1, updatedAt: now }).returning())
   return getCreativeProject(id)
 }
 function context(project: ReturnType<typeof create>, stageId: string) {
@@ -182,7 +186,7 @@ before(async () => {
   for (const provider of ['sync', 'meshy', 'tavily', 'pexels'] as const)
     saveToolSettings(provider, { enabled: true, apiKey: `secret-${provider}` })
 })
-after(async () => {
+after(async () => { process.env.DATABASE_URL = __base; await __admin.query(`DROP DATABASE IF EXISTS "${__dbName}"`); await __admin.end();
   services.forEach((s) => s.dispose())
   db.$client.close()
   await fs.rm(directory, { recursive: true, force: true })
@@ -220,7 +224,7 @@ test('remote download rejects private IPs, unsafe domains, credentials and non-H
   assert.equal(isPublicIPv4('8.8.8.8'), true)
 })
 test('GLB validation checks geometry, embedded resources, rig and ownership', async () => {
-  const p = create(),
+  const p = await create(),
     other = create()
   assert.deepEqual(inspectGlb(glb()), { meshes: 1, joints: 0, animations: 0 })
   assert.throws(() => inspectGlb(Buffer.from('fake.glb')), /GLB/)
@@ -259,7 +263,7 @@ function syncDeps(onSubmit = () => {}): Partial<Deps> {
   }
 }
 test('Sync uploads actual media once, probes output, applies revision safely and pipeline does not resync', async () => {
-  const p = create()
+  const p = await create()
   approveCreativeProject(p.id, 1)
   let submit = 0
   const s = service(syncDeps(() => submit++))
@@ -288,7 +292,7 @@ test('Sync uploads actual media once, probes output, applies revision safely and
   )
 })
 test('lip-sync cannot overwrite edited input', async () => {
-  const p = create(),
+  const p = await create(),
     s = service(syncDeps())
   const j = await s.start(p.id, 1, 'lipsync', { shotId: 'speaker' })
   await s.idle(j.id)
@@ -296,7 +300,7 @@ test('lip-sync cannot overwrite edited input', async () => {
   await assert.rejects(applyLipSync(p.id, j.id, saved.revision), /输入已变化/)
 })
 test('Meshy submits embedded GLB and retains rigged GLB and FBX', async () => {
-  const p = create(),
+  const p = await create(),
     model = await uploadCreativeModel(p.id, 'human.glb', glb())
   let submitted = 0
   const s = service({
@@ -327,7 +331,7 @@ test('Meshy submits embedded GLB and retains rigged GLB and FBX', async () => {
   assert.equal(submitted, 1)
 })
 test('unknown submission blocks retries and remote-ID recovery never resubmits', async () => {
-  const p = create(),
+  const p = await create(),
     model = await uploadCreativeModel(p.id, 'human.glb', glb())
   let posts = 0
   const s = service({
@@ -352,7 +356,7 @@ test('unknown submission blocks retries and remote-ID recovery never resubmits',
   assert.equal(getToolJob(p.id, j.id).status, 'completed')
 })
 test('definitive rejection allows explicit new submission', async () => {
-  const p = create(),
+  const p = await create(),
     model = await uploadCreativeModel(p.id, 'human.glb', glb())
   const s = service({
     json: async () => {
@@ -367,7 +371,7 @@ test('definitive rejection allows explicit new submission', async () => {
   await s.idle(next.id)
 })
 test('restart polls existing remote task and rejects unrigged output', async () => {
-  const p = create(),
+  const p = await create(),
     model = await uploadCreativeModel(p.id, 'human.glb', glb())
   const first = service({
     json: async (_u, _k, body) => (body ? { result: 'existing' } : { status: 'IN_PROGRESS', progress: 30 }),
@@ -375,12 +379,12 @@ test('restart polls existing remote task and rejects unrigged output', async () 
   const j = await first.start(p.id, 1, 'rigging', { modelId: model.id })
   await first.idle(j.id)
   first.dispose()
-  const stored = db.select().from(schema.creativeToolJobs).where(eq(schema.creativeToolJobs.id, j.id)).get()!
+  const stored = (await db.select().from(schema.creativeToolJobs).where(eq(schema.creativeToolJobs.id, j.id)))[0]!
   const pinned = JSON.parse(stored.input).configId
   assert.ok(pinned)
-  const original = db.select().from(schema.aiServiceConfigs).where(eq(schema.aiServiceConfigs.id, pinned)).get()!
-  const alternative = getInsertId(db.insert(schema.aiServiceConfigs).values({ ...original, id: undefined,
-    name: 'Other Meshy account', apiKey: 'other-meshy-secret', priority: 99 }).run())
+  const original = (await db.select().from(schema.aiServiceConfigs).where(eq(schema.aiServiceConfigs.id, pinned)))[0]!
+  const alternative = getInsertId((await db.insert(schema.aiServiceConfigs).values({ ...original, id: undefined,
+    name: 'Other Meshy account', apiKey: 'other-meshy-secret', priority: 99 }).returning()))
   let posts = 0
   const second = service({
     json: async (_u, key, body) => {
@@ -394,11 +398,11 @@ test('restart polls existing remote task and rejects unrigged output', async () 
   await second.idle(j.id)
   assert.equal(posts, 0)
   assert.equal(getToolJob(p.id, j.id).status, 'failed')
-  assert.match(getToolJob(p.id, j.id).error!, /骨骼/)
-  db.delete(schema.aiServiceConfigs).where(eq(schema.aiServiceConfigs.id, alternative)).run()
+  assert.match(getToolJob(p.id, j.id).error!, /骨骼/);
+  (await db.delete(schema.aiServiceConfigs).where(eq(schema.aiServiceConfigs.id, alternative)))
 })
 test('Pexels imports real media with attribution, deduplicates and checks revision', async () => {
-  const p = create()
+  const p = await create()
   const deps: Deps = {
     ...toolDependencies,
     json: async (url) => {
@@ -432,7 +436,7 @@ test('Pexels imports real media with attribution, deduplicates and checks revisi
   await assert.rejects(importStockCandidate(p.id, j.id, 'https://localhost', 2, deps), /不存在/)
 })
 test('research evidence enters the narrative and retained source list', async () => {
-  const p = create()
+  const p = await create()
   p.production.fields.researchMode = 'tavily'
   const saved = saveCreativeProject(p.id, p)
   const s = service({
@@ -457,7 +461,7 @@ test('research evidence enters the narrative and retained source list', async ()
   assert.equal((output.artifact.data?.articles as unknown[]).length, 1)
 })
 test('rig stage returns actual bound model rather than a fabricated narrative', async () => {
-  const p = create(),
+  const p = await create(),
     model = await uploadCreativeModel(p.id, 'human.glb', glb())
   p.production.fields = { rigMode: 'meshy', rigModelId: String(model.id) }
   const saved = saveCreativeProject(p.id, p)
@@ -477,12 +481,11 @@ test('rig stage returns actual bound model rather than a fabricated narrative', 
   assert.ok(output?.artifact.data?.files)
   assert.equal(output?.waiting, undefined)
 })
-test('deleted project cannot expose jobs or models', () => {
-  const p = create()
-  db.update(schema.dramas)
+test('deleted project cannot expose jobs or models', async () => {
+  const p = await create();
+  (await db.update(schema.dramas)
     .set({ deletedAt: new Date().toISOString() })
-    .where(eq(schema.dramas.id, p.id))
-    .run()
+    .where(eq(schema.dramas.id, p.id)))
   assert.throws(() => listToolJobs(p.id), CreativeError)
   assert.throws(() => listCreativeModels(p.id), CreativeError)
 })
@@ -492,7 +495,7 @@ test('portrait sync uses the selected image and ignores an old inactive video sl
   await sharp({ create: { width: 64, height: 64, channels: 3, background: '#5577aa' } })
     .png()
     .toFile(path.join(directory, 'static/uploads/portrait.png'))
-  const p = create()
+  const p = await create()
   p.shots[0].mediaType = 'image'
   p.shots[0].imageUrl = '/static/uploads/portrait.png'
   const saved = saveCreativeProject(p.id, p)
@@ -519,7 +522,7 @@ test('portrait sync uses the selected image and ignores an old inactive video sl
 })
 
 test('automatic stock imports once, advances the revision, and gives the next stage real sources', async () => {
-  const p = create()
+  const p = await create()
   p.production.fields = { stockMode: 'pexels', stockQuery: 'ocean', stockCount: '1' }
   const saved = saveCreativeProject(p.id, p)
   const deps: Deps = {
@@ -562,7 +565,7 @@ test('automatic stock imports once, advances the revision, and gives the next st
 })
 
 test('service timeout pauses polling; recovery queries the same remote job', async () => {
-  const p = create(),
+  const p = await create(),
     model = await uploadCreativeModel(p.id, 'human.glb', glb())
   let posts = 0
   const s = service({
@@ -576,11 +579,10 @@ test('service timeout pauses polling; recovery queries the same remote job', asy
   })
   const j = await s.start(p.id, 1, 'rigging', { modelId: model.id })
   await s.idle(j.id)
-  s.dispose()
-  db.update(schema.creativeToolJobs)
+  s.dispose();
+  (await db.update(schema.creativeToolJobs)
     .set({ createdAt: '2020-01-01T00:00:00Z' })
-    .where(eq(schema.creativeToolJobs.id, j.id))
-    .run()
+    .where(eq(schema.creativeToolJobs.id, j.id)))
   s.recover()
   await s.idle(j.id)
   assert.equal(getToolJob(p.id, j.id).status, 'failed')

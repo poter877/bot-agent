@@ -9,7 +9,13 @@ import type { StageKind } from '../../src/drama/services/creative-pipeline/defin
 import type { CreativeCategory } from '../../src/drama/services/creative-catalog.js'
 
 const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'creative-tool-policy-'))
-process.env.SQLITE_PATH = path.join(directory, 'test.sqlite')
+import { Pool } from 'pg'
+const __base = process.env.DATABASE_URL
+if (!__base) throw new Error('tests need DATABASE_URL (point at the test cluster, e.g. bot_backend_test)')
+const __admin = new Pool({ connectionString: __base })
+const __dbName = 'drama_' + process.pid + '_' + (Date.now() % 1000000)
+await __admin.query(`CREATE DATABASE "${__dbName}" TEMPLATE bot_backend_test`)
+process.env.DATABASE_URL = __base.replace(/\/[^/?]+$/, `/${__dbName}`)
 process.env.HUOBAO_DATA_DIR = directory
 process.env.STORAGE_PATH = path.join(directory, 'static')
 process.env.MYSQL_AUTO_IMPORT = 'false'
@@ -25,7 +31,7 @@ const { planPipelineTools, parsePipelineAutomation } = await import(
 const { default: inventory } = await import('../../src/drama/services/production-tools/inventory.json', {
   with: { type: 'json' },
 })
-after(async () => {
+after(async () => { process.env.DATABASE_URL = __base; await __admin.query(`DROP DATABASE IF EXISTS "${__dbName}"`); await __admin.end();
   db.$client.close()
   await fs.rm(directory, { recursive: true, force: true })
 })
@@ -126,9 +132,9 @@ test('all inventory tools have explicit category, stage, purpose and activation 
 })
 
 for (const definition of pipelineDefinitions)
-  test(`${definition.id} selects real local work and final quality checks without cloud fan-out`, () => {
+  test(`${definition.id} selects real local work and final quality checks without cloud fan-out`, async () => {
     const first = context(definition.category, definition.stages[0].id)
-    const before = planPipelineTools(first, 'before')
+    const before = await planPipelineTools(first, 'before')
     assert.ok(before.some((item) => item.toolId === 'video_analyzer'))
     assert.equal(
       before.some((item) => item.role === 'research' && item.toolId !== 'corpus_builder'),
@@ -140,7 +146,7 @@ for (const definition of pipelineDefinitions)
     )
     const edit = context(definition.category, 'edit')
     edit.project.shots[0].videoUrl = '/static/uploads/source.mp4'
-    const planned = planPipelineTools(edit, 'before')
+    const planned = await planPipelineTools(edit, 'before')
     assert.ok(planned.some((item) => item.toolId === 'composition_validator'))
     assert.ok(planned.some((item) => item.toolId === 'subtitle_gen'))
     const compose = context(definition.category, 'compose')
@@ -158,12 +164,12 @@ for (const definition of pipelineDefinitions)
         ],
       },
     }
-    assert.ok(planPipelineTools(compose, 'after').some((item) => item.toolId === 'visual_qa'))
+    assert.ok((await planPipelineTools(compose, 'after')).some((item) => item.toolId === 'visual_qa'))
   })
 
-test('stock search binds stable selected ID into download and writes result into project sources', () => {
+test('stock search binds stable selected ID into download and writes result into project sources', async () => {
   const ctx = context('documentary', 'idea', { stockTool: 'nasa', analysis: 'off' })
-  const steps = planPipelineTools(ctx, 'before')
+  const steps = await planPipelineTools(ctx, 'before')
   assert.equal(steps.length, 2)
   assert.equal(steps[0].args.download, false)
   assert.equal(steps[1].args.download, true)
@@ -171,17 +177,17 @@ test('stock search binds stable selected ID into download and writes result into
   assert.deepEqual(steps[1].dependsOn, [steps[0].key])
   assert.equal(steps[1].apply?.target, 'source')
 })
-test('source-page discovery remains a research artifact and never pretends to download media', () => {
+test('source-page discovery remains a research artifact and never pretends to download media', async () => {
   const ctx = context('documentary', 'idea', { researchTool: 'esa', analysis: 'off' })
-  const steps = planPipelineTools(ctx, 'before')
+  const steps = await planPipelineTools(ctx, 'before')
   assert.equal(steps.length, 1)
   assert.equal(steps[0].toolId, 'esa')
   assert.equal(steps[0].apply?.target, 'artifact')
   assert.equal(steps[0].args.download, undefined)
 })
-test('explicit provider selection makes exactly one visual call for each missing shot', () => {
+test('explicit provider selection makes exactly one visual call for each missing shot', async () => {
   const ctx = context('cinematic', 'assets', { videoTool: 'veo_video' })
-  const steps = planPipelineTools(ctx, 'before')
+  const steps = await planPipelineTools(ctx, 'before')
   assert.deepEqual(
     steps.map((item) => item.toolId),
     ['veo_video'],
@@ -189,10 +195,10 @@ test('explicit provider selection makes exactly one visual call for each missing
   assert.equal(steps[0].args.prompt, ctx.project.shots[0].visualPrompt)
   assert.equal(steps[0].apply?.shotId, 'shot-one')
   ctx.project.shots[0].videoUrl = '/static/creative/1/existing.mp4'
-  assert.equal(planPipelineTools(ctx, 'before').length, 0)
+  assert.equal((await planPipelineTools(ctx, 'before')).length, 0)
 })
-test('automatic explainer diagrams use approved text without invented graph relationships', () => {
-  const steps = planPipelineTools(context('explainer', 'assets'), 'before')
+test('automatic explainer diagrams use approved text without invented graph relationships', async () => {
+  const steps = await planPipelineTools(context('explainer', 'assets'), 'before')
   assert.deepEqual(
     steps.map((item) => item.toolId),
     ['diagram_gen'],
@@ -201,24 +207,24 @@ test('automatic explainer diagrams use approved text without invented graph rela
   assert.equal(steps[0].args.connections, undefined)
   assert.equal(steps[0].apply?.kind, 'image')
 })
-test('structured math and code scenes execute the named native renderer and carry precise input', () => {
+test('structured math and code scenes execute the named native renderer and carry precise input', async () => {
   const math = context('explainer', 'assets')
   scenePlan(math, 'math_animate', { expression: 'sin(x+t)', x_min: -3, x_max: 3 })
-  const planned = planPipelineTools(math, 'before')
+  const planned = await planPipelineTools(math, 'before')
   assert.equal(planned[0].toolId, 'math_animate')
   assert.equal(planned[0].args.expression, 'sin(x+t)')
   assert.equal(planned[0].apply?.kind, 'video')
   const code = context('screen_demo', 'assets')
   scenePlan(code, 'code_snippet', { code: 'const value = 1', language: 'typescript' })
-  assert.equal(planPipelineTools(code, 'before')[0].args.code, 'const value = 1')
+  assert.equal((await planPipelineTools(code, 'before'))[0].args.code, 'const value = 1')
 })
-test('character animation passes real specification, rig, poses and timeline through six dependent steps', () => {
+test('character animation passes real specification, rig, poses and timeline through six dependent steps', async () => {
   const ctx = context('character_animation', 'assets')
   scenePlan(ctx, 'character_rig_renderer', {
     characters: [{ id: 'leaf', name: '叶子', color: '#22aa44' }],
     actions: [{ characterId: 'leaf', start: 0, end: 8, pose: 'wave', x: 0.5, toX: 0.5 }],
   })
-  const steps = planPipelineTools(ctx, 'before')
+  const steps = await planPipelineTools(ctx, 'before')
   assert.deepEqual(
     steps.map((item) => item.toolId),
     [
@@ -234,44 +240,38 @@ test('character animation passes real specification, rig, poses and timeline thr
   assert.deepEqual(steps[5].args.action_timeline, { $step: steps[3].key, dataPath: '' })
   assert.ok(steps[5].dependsOn.includes(steps[4].key))
   assert.equal(steps[5].apply?.kind, 'video')
-  assert.throws(
-    () => planPipelineTools(context('character_animation', 'assets'), 'before'),
-    /角色列表与动作时间轴/,
-  )
+  await assert.rejects(async () => planPipelineTools(context('character_animation', 'assets'), 'before'), /角色列表与动作时间轴/)
 })
-test('3D scenes request an actual movie and refuse missing world specification', () => {
+test('3D scenes request an actual movie and refuse missing world specification', async () => {
   const ctx = context('animation', 'assets')
   scenePlan(ctx, 'threejs_world', { world_spec: { objects: [{ type: 'box', size: 1, color: '#aabbcc' }] } })
-  const steps = planPipelineTools(ctx, 'before')
+  const steps = await planPipelineTools(ctx, 'before')
   assert.equal(steps[0].args.render_video, true)
   assert.equal(steps[0].apply?.kind, 'video')
   assert.equal(steps[0].apply?.target, 'shot')
-  assert.throws(
-    () => planPipelineTools(context('animation', 'assets', { visual: 'blender' }), 'before'),
-    /world_spec/,
-  )
+  await assert.rejects(async () => planPipelineTools(context('animation', 'assets', { visual: 'blender' }), 'before'), /world_spec/)
 })
-test('scene processing chains keep analysis JSON separate from the previous actual media', () => {
+test('scene processing chains keep analysis JSON separate from the previous actual media', async () => {
   const ctx = context('explainer', 'assets')
   scenePlan(ctx, 'math_animate', { expression: 'sin(x+t)' }, [
     { toolId: 'visual_qa', args: {} },
     { toolId: 'color_grade', args: { preset: 'warm' } },
   ])
   // color grading is intentionally restricted to matching film workflows.
-  assert.throws(() => planPipelineTools(ctx, 'before'), /不适合/)
+  await assert.rejects(async () => planPipelineTools(ctx, 'before'), /不适合/)
   const film = context('cinematic', 'assets')
   scenePlan(film, 'veo_video', {}, [
     { toolId: 'visual_qa', args: {} },
     { toolId: 'color_grade', args: { preset: 'warm' } },
   ])
-  const steps = planPipelineTools(film, 'before')
+  const steps = await planPipelineTools(film, 'before')
   assert.deepEqual(steps[2].args.sourceUrl, { $step: steps[0].key, kind: 'video' })
   assert.ok(steps[2].dependsOn.includes(steps[1].key))
 })
-test('model generation precedes character rigging and real rigged GLB files feed final scene rendering', () => {
+test('model generation precedes character rigging and real rigged GLB files feed final scene rendering', async () => {
   const design = context('character_animation', 'character_design', { modelTool: 'fal_3d' })
   assert.deepEqual(
-    planPipelineTools(design, 'before').map((step) => step.toolId),
+    (await planPipelineTools(design, 'before')).map((step) => step.toolId),
     ['fal_3d'],
   )
   const render = context('character_animation', 'assets', { modelTool: 'fal_3d' })
@@ -282,26 +282,26 @@ test('model generation precedes character rigging and real rigged GLB files feed
     data: { files: [{ url: '/static/creative/1/rigged.glb', kind: 'model' }] },
   }
   scenePlan(render, 'blender_world', { world_spec: { objects: [] } })
-  const planned = planPipelineTools(render, 'before')
+  const planned = await planPipelineTools(render, 'before')
   assert.deepEqual(planned[0].args.model_urls, ['/static/creative/1/rigged.glb'])
   assert.equal(
     planned.some((step) => step.toolId === 'fal_3d'),
     false,
   )
 })
-test('edited shot prompts override obsolete tool plan and service parameter prompts', () => {
+test('edited shot prompts override obsolete tool plan and service parameter prompts', async () => {
   const ctx = context('cinematic', 'assets', { toolParameters: { veo_video: { prompt: '旧描述' } } })
   scenePlan(ctx, 'veo_video', { prompt: '另一个旧描述' })
   ctx.project.shots[0].visualPrompt = '用户编辑后的新画面'
-  assert.equal(planPipelineTools(ctx, 'before')[0].args.prompt, '用户编辑后的新画面')
+  assert.equal((await planPipelineTools(ctx, 'before'))[0].args.prompt, '用户编辑后的新画面')
 })
-test('post-processing keeps analysis JSON out of the media chain and binds real face tracking data', () => {
+test('post-processing keeps analysis JSON out of the media chain and binds real face tracking data', async () => {
   const ctx = context('talking_head', 'assets', {
     postTools: ['face_tracker', 'auto_reframe', 'audio_enhance', 'visual_qa'],
   })
   ctx.project.shots[0].videoUrl = '/static/uploads/source.mp4'
   ctx.project.shots[0].audioUrl = '/static/uploads/voice.wav'
-  const steps = planPipelineTools(ctx, 'after')
+  const steps = await planPipelineTools(ctx, 'after')
   const tracker = steps.find((item) => item.toolId === 'face_tracker')!,
     frame = steps.find((item) => item.toolId === 'auto_reframe')!,
     voice = steps.find((item) => item.toolId === 'audio_enhance')!
@@ -312,25 +312,25 @@ test('post-processing keeps analysis JSON out of the media chain and binds real 
   const qa = steps.filter((item) => item.toolId === 'visual_qa')
   assert.deepEqual(qa.at(-1)!.args.sourceUrl, { $step: frame.key })
 })
-test('selected speech and music create actual audio writebacks without replacing source text', () => {
+test('selected speech and music create actual audio writebacks without replacing source text', async () => {
   const ctx = context('avatar', 'assets', { speechTool: 'azure_tts', musicTool: 'suno_music' })
   ctx.project.plan.musicDirection = '轻柔钢琴'
   ctx.project.shots[0].narration = '这是一段批准讲稿'
   ctx.project.shots[0].videoUrl = '/static/uploads/source.mp4'
-  const steps = planPipelineTools(ctx, 'before')
+  const steps = await planPipelineTools(ctx, 'before')
   assert.equal(steps.find((item) => item.toolId === 'suno_music')?.apply?.target, 'music')
   const speech = steps.find((item) => item.toolId === 'azure_tts')!
   assert.equal(speech.args.text, '这是一段批准讲稿')
   assert.equal(speech.apply?.kind, 'audio')
 })
-test('Sync avatar workflow waits for fitted speech and a real generated portrait before using the shot ID', () => {
+test('Sync avatar workflow waits for fitted speech and a real generated portrait before using the shot ID', async () => {
   const ctx = context('avatar', 'assets', {
     avatarTool: 'lip_sync',
     speechTool: 'azure_tts',
     imageTool: 'openai_image',
   })
   ctx.project.shots[0].narration = '这是已批准的主持人讲稿'
-  const steps = planPipelineTools(ctx, 'before')
+  const steps = await planPipelineTools(ctx, 'before')
   const speech = steps.find((step) => step.toolId === 'azure_tts')!,
     portrait = steps.find((step) => step.toolId === 'openai_image')!,
     avatar = steps.find((step) => step.toolId === 'lip_sync')!
@@ -342,25 +342,25 @@ test('Sync avatar workflow waits for fitted speech and a real generated portrait
   assert.equal(avatar.apply?.kind, 'video')
   assert.equal(steps.filter((step) => step.role === 'voice').length, 1)
 })
-test('Sync reuses existing audio and a bound portrait and never calls another speech model', () => {
+test('Sync reuses existing audio and a bound portrait and never calls another speech model', async () => {
   const ctx = context('avatar', 'assets', { avatarTool: 'talking_head', speechTool: 'openai_tts' })
   ctx.project.shots[0].audioUrl = '/static/uploads/approved-voice.wav'
   ctx.project.shots[0].imageUrl = '/static/uploads/portrait.png'
-  const steps = planPipelineTools(ctx, 'before')
+  const steps = await planPipelineTools(ctx, 'before')
   assert.deepEqual(
     steps.map((step) => step.toolId),
     ['talking_head'],
   )
   assert.deepEqual(steps[0].dependsOn, [])
 })
-test('HeyGen uses native script and voice ID without a duplicate external TTS call', () => {
+test('HeyGen uses native script and voice ID without a duplicate external TTS call', async () => {
   const ctx = context('avatar', 'assets', {
     avatarTool: 'heygen_avatar',
     speechTool: 'azure_tts',
     toolParameters: { heygen_avatar: { avatar_id: 'real-avatar', voice_id: 'real-voice' } },
   })
   ctx.project.shots[0].narration = '批准的原生口播讲稿'
-  const steps = planPipelineTools(ctx, 'before')
+  const steps = await planPipelineTools(ctx, 'before')
   assert.deepEqual(
     steps.map((step) => step.toolId),
     ['heygen_avatar', 'audio_mixer'],
@@ -375,32 +375,32 @@ test('HeyGen uses native script and voice ID without a duplicate external TTS ca
   assert.deepEqual(steps[1].args.sourceUrls, [{ $step: steps[0].key, kind: 'video' }])
   assert.deepEqual(steps[1].dependsOn, [steps[0].key])
   ctx.project.shots[0].audioUrl = '/static/uploads/approved-voice.wav'
-  assert.throws(() => planPipelineTools(ctx, 'before'), /已有独立配音请改选Sync/)
+  await assert.rejects(async () => planPipelineTools(ctx, 'before'), /已有独立配音请改选Sync/)
   ctx.previous = {
     summary: '已完成数字人视频',
     content: '',
     checks: [],
     data: { toolRuntime: { version: 1, steps: [{ ...steps[0], status: 'completed' }] } },
   }
-  assert.equal(planPipelineTools(ctx, 'before').length, 2)
+  assert.equal((await planPipelineTools(ctx, 'before')).length, 2)
 })
-test('avatar input gaps stop before submission and explicitly disabled avatar paths preserve legacy behavior', () => {
+test('avatar input gaps stop before submission and explicitly disabled avatar paths preserve legacy behavior', async () => {
   const missing = context('avatar', 'assets', { avatarTool: 'lip_sync', speechTool: 'openai_tts' })
   missing.project.shots[0].narration = '已批准讲稿'
-  assert.throws(() => planPipelineTools(missing, 'before'), /人物画面|肖像/)
+  await assert.rejects(async () => planPipelineTools(missing, 'before'), /人物画面|肖像/)
   const voice = context('avatar', 'assets', { avatarTool: 'lip_sync', speechTool: 'off' })
   voice.project.shots[0].imageUrl = '/static/uploads/portrait.png'
   voice.project.shots[0].narration = '已批准讲稿'
-  assert.throws(() => planPipelineTools(voice, 'before'), /逐镜头真实配音/)
-  assert.equal(planPipelineTools(context('avatar', 'assets', { avatarTool: 'off' }), 'before').length, 0)
-  assert.equal(planPipelineTools(context('avatar', 'assets'), 'before').length, 0)
+  await assert.rejects(async () => planPipelineTools(voice, 'before'), /逐镜头真实配音/)
+  assert.equal(await planPipelineTools(context('avatar', 'assets', { avatarTool: 'off' }), 'before').length, 0)
+  assert.equal(await planPipelineTools(context('avatar', 'assets'), 'before').length, 0)
   const disabled = context('avatar', 'assets', { avatarTool: 'off' })
   disabled.project.shots[0].audioUrl = '/static/uploads/approved-voice.wav'
   disabled.project.shots[0].imageUrl = '/static/uploads/portrait.png'
   scenePlan(disabled, 'lip_sync', {})
-  assert.throws(() => planPipelineTools(disabled, 'before'), /已关闭 avatarTool/)
+  await assert.rejects(async () => planPipelineTools(disabled, 'before'), /已关闭 avatarTool/)
 })
-test('transcription selection uses the same canonical field and rejects visual or speech aliases', () => {
+test('transcription selection uses the same canonical field and rejects visual or speech aliases', async () => {
   assert.equal(
     parsePipelineAutomation(context('talking_head', 'idea', { transcriptionTool: 'dashscope_asr' }).project)
       .transcriptionTool,
@@ -408,13 +408,13 @@ test('transcription selection uses the same canonical field and rejects visual o
   )
   const invalid = context('talking_head', 'idea', { transcriptionTool: 'openai_tts' })
   invalid.project.production.sources[0].transcript = ''
-  assert.throws(() => planPipelineTools(invalid, 'before'), /transcription/)
+  await assert.rejects(async () => planPipelineTools(invalid, 'before'), /transcription/)
 })
-test('ASR prepares actual mono WAV audio and text-only engines never invent timed captions', () => {
+test('ASR prepares actual mono WAV audio and text-only engines never invent timed captions', async () => {
   const tool = 'dashscope_asr'
   const ctx = context('talking_head', 'idea', { transcriptionTool: tool })
   ctx.project.production.sources[0].transcript = ''
-  const steps = planPipelineTools(ctx, 'before')
+  const steps = await planPipelineTools(ctx, 'before')
   const extract = steps.find((step) => step.toolId === 'audio_mixer')!,
     transcribe = steps.find((step) => step.toolId === tool)!
   assert.equal(extract.args.sample_rate, 16000)
@@ -422,10 +422,10 @@ test('ASR prepares actual mono WAV audio and text-only engines never invent time
   assert.deepEqual(transcribe.args.audio_url, { $step: extract.key, kind: 'audio' })
   assert.equal(transcribe.apply?.kind, 'data')
 })
-test('recording stays opt-in and is never inferred from entering software demo workflow', () => {
+test('recording stays opt-in and is never inferred from entering software demo workflow', async () => {
   const noCapture = context('screen_demo', 'idea')
   assert.equal(
-    planPipelineTools(noCapture, 'before').some((item) => item.role === 'interactive'),
+    (await planPipelineTools(noCapture, 'before')).some((item) => item.role === 'interactive'),
     false,
   )
   const capture = context('screen_demo', 'idea', {
@@ -433,7 +433,7 @@ test('recording stays opt-in and is never inferred from entering software demo w
     analysis: 'off',
     toolParameters: { screen_recorder: { duration_seconds: 12, screen_index: 2 } },
   })
-  const steps = planPipelineTools(capture, 'before')
+  const steps = await planPipelineTools(capture, 'before')
   assert.deepEqual(
     steps.map((item) => item.toolId),
     ['cap_recorder', 'screen_recorder'],
@@ -441,11 +441,11 @@ test('recording stays opt-in and is never inferred from entering software demo w
   assert.equal(steps[1].apply?.target, 'source')
   assert.equal(steps[1].args.screen_index, 2)
 })
-test('editing trims the approved range before reframing and validates actual resulting files', () => {
+test('editing trims the approved range before reframing and validates actual resulting files', async () => {
   const ctx = context('clip_factory', 'edit')
   ctx.project.shots[0].videoUrl = '/static/uploads/source.mp4'
   ctx.project.shots[0].trimStart = 5
-  const steps = planPipelineTools(ctx, 'before')
+  const steps = await planPipelineTools(ctx, 'before')
   const trim = steps.find((item) => item.toolId === 'video_trimmer')!,
     reframe = steps.find((item) => item.toolId === 'auto_reframe')!,
     validate = steps.find((item) => item.toolId === 'composition_validator')!
@@ -457,7 +457,7 @@ test('editing trims the approved range before reframing and validates actual res
     kind: 'video',
   })
 })
-test('delivery bundle uses real final outputs and runs after quality checks on pipelines without publish stage', () => {
+test('delivery bundle uses real final outputs and runs after quality checks on pipelines without publish stage', async () => {
   const ctx = context('documentary', 'compose')
   ctx.previous = {
     summary: '成片',
@@ -473,20 +473,20 @@ test('delivery bundle uses real final outputs and runs after quality checks on p
       ],
     },
   }
-  const steps = planPipelineTools(ctx, 'after'),
+  const steps = await planPipelineTools(ctx, 'after'),
     bundle = steps.find((item) => item.toolId === 'export_bundle')!
   assert.deepEqual(bundle.args.sourceUrls, ['/static/creative/1/movie.mp4', '/static/creative/1/movie.srt'])
   assert.equal(bundle.apply?.target, 'delivery')
   assert.ok(bundle.dependsOn.includes(steps.find((item) => item.toolId === 'visual_qa')!.key))
 })
-test('selected composition engine consumes the entire approved audio and picture timeline once', () => {
+test('selected composition engine consumes the entire approved audio and picture timeline once', async () => {
   const ctx = context('cinematic', 'compose', { postTools: ['hyperframes_compose'] })
   ctx.project.shots[0].videoUrl = '/static/uploads/source.mp4'
   ctx.project.shots[0].audioUrl = '/static/uploads/voice.wav'
   ctx.project.audio.musicUrl = '/static/uploads/music.wav'
   ctx.project.audio.narrationUrl = '/static/uploads/narration.wav'
   ctx.project.audio.musicVolume = 0.14
-  const steps = planPipelineTools(ctx, 'before')
+  const steps = await planPipelineTools(ctx, 'before')
   assert.equal(steps.length, 1)
   assert.equal(steps[0].toolId, 'hyperframes_compose')
   assert.equal(steps[0].apply?.target, 'render')
@@ -502,15 +502,15 @@ test('selected composition engine consumes the entire approved audio and picture
   const assets = context('cinematic', 'assets', { postTools: ['hyperframes_compose'] })
   assets.project.shots[0].videoUrl = '/static/uploads/source.mp4'
   assert.equal(
-    planPipelineTools(assets, 'after').some((step) => step.toolId === 'hyperframes_compose'),
+    (await planPipelineTools(assets, 'after')).some((step) => step.toolId === 'hyperframes_compose'),
     false,
   )
 })
-test('clip delivery preserves independent video outputs with a selected compositor', () => {
+test('clip delivery preserves independent video outputs with a selected compositor', async () => {
   const ctx = context('clip_factory', 'compose', { postTools: ['video_compose'] })
   ctx.project.shots[0].videoUrl = '/static/uploads/source.mp4'
   ctx.project.shots.push({ ...ctx.project.shots[0], id: 'shot-two', title: '第二条', trimStart: 15 })
-  const steps = planPipelineTools(ctx, 'before')
+  const steps = await planPipelineTools(ctx, 'before')
   assert.equal(steps.length, 2)
   assert.deepEqual(
     steps.map((step) => step.apply?.shotId),
@@ -518,7 +518,7 @@ test('clip delivery preserves independent video outputs with a selected composit
   )
   for (const step of steps) assert.equal((step.args.timeline as { shots: unknown[] }).shots.length, 1)
 })
-test('post-caption burning uses actual render output and quality checks the new file without duplicate burns', () => {
+test('post-caption burning uses actual render output and quality checks the new file without duplicate burns', async () => {
   const ctx = context('documentary', 'compose', { postTools: ['remotion_caption_burn'] })
   ctx.artifacts.compose = {
     summary: '实际成片',
@@ -534,7 +534,7 @@ test('post-caption burning uses actual render output and quality checks the new 
       ],
     },
   }
-  const steps = planPipelineTools(ctx, 'after'),
+  const steps = await planPipelineTools(ctx, 'after'),
     burn = steps.find((step) => step.toolId === 'remotion_caption_burn')!
   assert.equal(burn.apply?.target, 'render')
   assert.equal(burn.args.sourceUrl, '/static/creative/1/movie.mp4')
@@ -548,44 +548,41 @@ test('post-caption burning uses actual render output and quality checks the new 
   })
   ctx.project.audio.burnSubtitles = true
   assert.equal(
-    planPipelineTools(ctx, 'after').some((step) => step.toolId === 'remotion_caption_burn'),
+    (await planPipelineTools(ctx, 'after')).some((step) => step.toolId === 'remotion_caption_burn'),
     false,
   )
 })
-test('source analysis fingerprints change when actual transcripts change despite identical search query', () => {
+test('source analysis fingerprints change when actual transcripts change despite identical search query', async () => {
   const ctx = context('documentary', 'idea')
-  const first = planPipelineTools(ctx, 'before').find((step) => step.toolId === 'corpus_builder')!
+  const first = (await planPipelineTools(ctx, 'before')).find((step) => step.toolId === 'corpus_builder')!
   ctx.project.production.sources[0].transcript += '新的真实原稿'
-  const second = planPipelineTools(ctx, 'before').find((step) => step.toolId === 'corpus_builder')!
+  const second = (await planPipelineTools(ctx, 'before')).find((step) => step.toolId === 'corpus_builder')!
   assert.notEqual(first.args.sourceFingerprint, second.args.sourceFingerprint)
 })
-test('invalid automation, unsupported category tools and missing required inputs stop before a call', () => {
+test('invalid automation, unsupported category tools and missing required inputs stop before a call', async () => {
   const invalid = context('explainer', 'assets')
   invalid.project.production.fields.automation = '{'
   assert.throws(() => parsePipelineAutomation(invalid.project), /格式不正确/)
-  assert.throws(
-    () => planPipelineTools(context('screen_demo', 'assets', { videoTool: 'veo_video' }), 'before'),
-    /不适合/,
-  )
+  await assert.rejects(async () => planPipelineTools(context('screen_demo', 'assets', { videoTool: 'veo_video' }), 'before'), /不适合/)
   const missing = context('explainer', 'assets')
   scenePlan(missing, 'math_animate', {})
-  assert.throws(() => planPipelineTools(missing, 'before'), /expression/)
+  await assert.rejects(async () => planPipelineTools(missing, 'before'), /expression/)
   const unsafe = context('talking_head', 'assets', {
     postTools: ['silence_cutter'],
     toolParameters: { silence_cutter: { operation: 'cut' } },
   })
   unsafe.project.shots[0].videoUrl = '/static/uploads/source.mp4'
   unsafe.project.shots[0].audioUrl = '/static/uploads/independent-voice.wav'
-  assert.throws(() => planPipelineTools(unsafe, 'after'), /独立配音/)
+  await assert.rejects(async () => planPipelineTools(unsafe, 'after'), /独立配音/)
 })
-test('explicit silence removal first cuts only the approved range and writes the shorter real video back', () => {
+test('explicit silence removal first cuts only the approved range and writes the shorter real video back', async () => {
   const ctx = context('talking_head', 'assets', {
     postTools: ['silence_cutter', 'auto_reframe'],
     toolParameters: { silence_cutter: { operation: 'cut' } },
   })
   ctx.project.shots[0].videoUrl = '/static/uploads/source.mp4'
   ctx.project.shots[0].trimStart = 3
-  const steps = planPipelineTools(ctx, 'after')
+  const steps = await planPipelineTools(ctx, 'after')
   const trim = steps.find((step) => step.toolId === 'video_trimmer')!,
     cut = steps.find((step) => step.toolId === 'silence_cutter')!,
     frame = steps.find((step) => step.toolId === 'auto_reframe')!

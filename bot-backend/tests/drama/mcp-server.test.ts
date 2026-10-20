@@ -15,7 +15,13 @@ import os from 'node:os'
 import path from 'node:path'
 
 const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'mcp-server-'))
-process.env.SQLITE_PATH = path.join(dir, 'test.sqlite')
+import { Pool } from 'pg'
+const __base = process.env.DATABASE_URL
+if (!__base) throw new Error('tests need DATABASE_URL (point at the test cluster, e.g. bot_backend_test)')
+const __admin = new Pool({ connectionString: __base })
+const __dbName = 'drama_' + process.pid + '_' + (Date.now() % 1000000)
+await __admin.query(`CREATE DATABASE "${__dbName}" TEMPLATE bot_backend_test`)
+process.env.DATABASE_URL = __base.replace(/\/[^/?]+$/, `/${__dbName}`)
 process.env.STORAGE_PATH = path.join(dir, 'static')
 process.env.MYSQL_AUTO_IMPORT = 'false'
 process.env.AI_DRAMA_MCP_TOKEN = 'test-token'
@@ -56,21 +62,21 @@ function parseTextContent(result: { content: Array<{ type: string; text: string 
   return JSON.parse(result.content[0].text)
 }
 
-test('seed: drama + episode with script content', () => {
-  const dramaId = getInsertId(db.insert(schema.dramas).values({
+test('seed: drama + episode with script content', async () => {
+  const dramaId = getInsertId(await db.insert(schema.dramas).values({
     title: 'MCP 测试剧', createdAt: now, updatedAt: now,
-  }).run())
-  episodeId = getInsertId(db.insert(schema.episodes).values({
+  }).returning().returning().returning().returning().returning().returning().returning().returning().returning({ id: schema.dramas.id }))
+  episodeId = getInsertId(await db.insert(schema.episodes).values({
     dramaId, episodeNumber: 1, title: '第一集', content: '原始小说内容，待改写为剧本',
     scriptContent: '## S1 | 内景 · 客厅 | 夜\n林小雨说：「你来了。」',
     createdAt: now, updatedAt: now,
-  }).run())
+  }).returning().returning().returning().returning().returning().returning().returning().returning().returning({ id: schema.episodes.id }))
   // 生成配置指向不可达地址：submit 测试只验证任务落库，后台处理快速失败即可
-  db.insert(schema.aiServiceConfigs).values({
+  await db.insert(schema.aiServiceConfigs).values({
     serviceType: 'image', provider: 'company', name: 'image-config',
     baseUrl: 'https://company.invalid', apiKey: 'secret', model: JSON.stringify(['company-image-model']),
     isActive: true, createdAt: now, updatedAt: now,
-  }).run()
+  }).returning().returning().returning().returning().returning().returning().returning().returning()
 })
 
 test('list tools: 领域工具全集 + 任务工具 + build 工具，上下文字段并入可选入参', async () => {
@@ -111,7 +117,7 @@ test('list tools: 领域工具全集 + 任务工具 + build 工具，上下文�
 test('call tool with episodeId: read_episode_script 走真实 DB 返回剧本', async () => {
   const { client } = await connectClient()
   const result = await client.callTool({ name: 'read_episode_script', arguments: { episodeId } })
-  const payload = parseTextContent(result)
+  const payload = (await parseTextContent(result))
   assert.equal(payload.episode_id, episodeId)
   // read_episode_script 优先返回 content（原始内容），scriptContent 为改写产物
   assert.ok(payload.content.includes('原始小说内容'))
@@ -120,7 +126,7 @@ test('call tool with episodeId: read_episode_script 走真实 DB 返回剧本', 
 test('call tool without context: 既有守卫返回 error 结果（不抛异常）', async () => {
   const { client } = await connectClient()
   const result = await client.callTool({ name: 'read_episode_script', arguments: {} })
-  const payload = parseTextContent(result)
+  const payload = (await parseTextContent(result))
   assert.equal(payload.error, 'Missing episodeId in request context')
 })
 
@@ -130,11 +136,11 @@ test('submit_image_task → get_task_status：任务落 sys_task 且可轮询', 
     name: 'submit_image_task',
     arguments: { prompt: '一只赛博朋克猫', episodeId, drama_id: 1, size: '1024x1024' },
   })
-  const { task_id } = parseTextContent(submit)
+  const { task_id } = (await parseTextContent(submit))
   assert.equal(typeof task_id, 'number')
 
   const status = await client.callTool({ name: 'get_task_status', arguments: { task_id } })
-  const row = parseTextContent(status)
+  const row = (await parseTextContent(status))
   assert.equal(row.id, task_id)
   assert.equal(row.type, 'image')
   assert.equal(row.prompt, '一只赛博朋克猫')
@@ -144,7 +150,7 @@ test('submit_image_task → get_task_status：任务落 sys_task 且可轮询', 
 test('get_task_status 对不存在任务返回 error 结果', async () => {
   const { client } = await connectClient()
   const result = await client.callTool({ name: 'get_task_status', arguments: { task_id: -1 } })
-  assert.ok(String(parseTextContent(result).error).includes('not found'))
+  assert.ok(String((await parseTextContent(result)).error).includes('not found'))
 })
 
 // ─── film build 工具（write_file / render_frame / run_blender）────────────────
@@ -155,7 +161,7 @@ test('write_file: 写入工程目录并追加 agent.log 日志行', async () => 
     name: 'write_file',
     arguments: { projectId: FILM_PROJECT_ID, path: 'index.html', content: '<html>DUR</html>' },
   })
-  assert.deepEqual(parseTextContent(result), { ok: true, path: 'index.html' })
+  assert.deepEqual((await parseTextContent(result)), { ok: true, path: 'index.html' })
   assert.equal(fs.readFileSync(path.join(filmDir, 'index.html'), 'utf8'), '<html>DUR</html>')
   assert.match(agentLogText(), / write_file index\.html \(16 chars\)/)
 })
@@ -166,12 +172,12 @@ test('write_file: 路径越界拒绝（../ 与绝对路径都不落盘）', asyn
     name: 'write_file',
     arguments: { projectId: FILM_PROJECT_ID, path: '../escape.txt', content: 'x' },
   })
-  assert.match(String(parseTextContent(escape).error), /路径越界/)
+  assert.match(String((await parseTextContent(escape)).error), /路径越界/)
   const absolute = await client.callTool({
     name: 'write_file',
     arguments: { projectId: FILM_PROJECT_ID, path: '/tmp/escape.txt', content: 'x' },
   })
-  assert.match(String(parseTextContent(absolute).error), /路径越界/)
+  assert.match(String((await parseTextContent(absolute)).error), /路径越界/)
   assert.ok(!fs.existsSync(path.join(STORAGE_ROOT, 'films', 'escape.txt')))
 })
 
@@ -272,14 +278,14 @@ test('run_blender: 未检测到 Blender / 脚本不存在 → error 结果', asy
       name: 'run_blender',
       arguments: { projectId: FILM_PROJECT_ID, script: 'x.py', output_image: 'out/x.png' },
     })
-    assert.match(String(parseTextContent(noBlender).error), /未检测到 Blender/)
+    assert.match(String((await parseTextContent(noBlender)).error), /未检测到 Blender/)
 
     process.env.BLENDER_PATH = exe
     const missingScript = await client.callTool({
       name: 'run_blender',
       arguments: { projectId: FILM_PROJECT_ID, script: 'missing.py', output_image: 'out/x.png' },
     })
-    assert.match(String(parseTextContent(missingScript).error), /脚本不存在：missing\.py/)
+    assert.match(String((await parseTextContent(missingScript)).error), /脚本不存在：missing\.py/)
   } finally {
     process.env.BLENDER_PATH = saved
     if (!saved) delete process.env.BLENDER_PATH
@@ -324,7 +330,7 @@ test('/mcp: 正确令牌的 initialize 走通 streamable HTTP（JSON 响应）',
   })
   assert.equal(res.status, 200)
   const body = await res.json()
-  assert.equal(body.result.serverInfo.name, 'ai-drama')
+  assert.equal((await body).result.serverInfo.name, 'ai-drama')
 })
 
 test('/mcp: 无状态模式 GET 返回 405', async () => {
@@ -333,3 +339,5 @@ test('/mcp: 无状态模式 GET 返回 405', async () => {
   })
   assert.equal(res.status, 405)
 })
+
+after(async () => { process.env.DATABASE_URL = __base; await __admin.query(`DROP DATABASE IF EXISTS "${__dbName}"`); await __admin.end(); })

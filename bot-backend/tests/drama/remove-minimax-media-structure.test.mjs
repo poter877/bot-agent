@@ -37,7 +37,13 @@ test('startup migration neutralizes saved MiniMax configurations (legacy direct-
 
   // 行为验证：库中残留的 minimax 配置行经启动迁移后 provider 归一为 company
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'minimax-cleanup-'))
-  process.env.SQLITE_PATH = path.join(directory, 'test.sqlite')
+  import { Pool } from 'pg'
+const __base = process.env.DATABASE_URL
+if (!__base) throw new Error('tests need DATABASE_URL (point at the test cluster, e.g. bot_backend_test)')
+const __admin = new Pool({ connectionString: __base })
+const __dbName = 'drama_' + process.pid + '_' + (Date.now() % 1000000)
+await __admin.query(`CREATE DATABASE "${__dbName}" TEMPLATE bot_backend_test`)
+process.env.DATABASE_URL = __base.replace(/\/[^/?]+$/, `/${__dbName}`)
   process.env.MYSQL_AUTO_IMPORT = 'false'
   process.env.COMPANY_BACKEND_URL = 'https://company.invalid'
   process.env.COMPANY_SERVICE_TOKEN = 'company-token'
@@ -45,25 +51,27 @@ test('startup migration neutralizes saved MiniMax configurations (legacy direct-
     const { db, schema, getInsertId } = await import('../../src/drama/db/index.js')
     const { migrateServiceConfigs } = await import('../../src/drama/services/ai-registry.js')
     const ts = new Date().toISOString()
-    const configId = getInsertId(db.insert(schema.aiServiceConfigs).values({
+    const configId = (await getInsertId((await db.insert(schema.aiServiceConfigs).values({
       serviceType: 'video', provider: 'minimax', name: '旧 MiniMax 直连', baseUrl: 'https://api.minimax.chat',
       apiKey: 'legacy-secret', model: JSON.stringify(['abab6.5s-chat']), priority: 1, isActive: true,
       createdAt: ts, updatedAt: ts,
-    }).run())
-    const dramaId = getInsertId(db.insert(schema.dramas).values({ title: '残留配置剧', createdAt: ts, updatedAt: ts }).run())
-    const episodeId = getInsertId(db.insert(schema.episodes).values({
+    }).returning().returning().returning().returning().returning().returning().returning().returning())))
+    const dramaId = (await getInsertId((await db.insert(schema.dramas).values({ title: '残留配置剧', createdAt: ts, updatedAt: ts }).returning().returning().returning().returning().returning().returning().returning().returning())))
+    const episodeId = (await getInsertId((await db.insert(schema.episodes).values({
       dramaId, episodeNumber: 1, title: '第1集', videoConfigId: configId, createdAt: ts, updatedAt: ts,
-    }).run())
+    }).returning().returning().returning().returning().returning().returning().returning().returning())))
 
     migrateServiceConfigs()
 
-    const row = db.select().from(schema.aiServiceConfigs).where(eq(schema.aiServiceConfigs.id, configId)).get()
+    const row = (await (await db.select().from(schema.aiServiceConfigs).where((await eq(schema.aiServiceConfigs.id, configId))))[0])
     assert.equal(row.provider, 'company')
     assert.equal(row.apiKey, 'company-token')
     // 行原位更新（不删不换 id）→ 集引用仍然有效；MySQL 时代靠"先 detach 再 delete"达成的效果由 id 保留承接
-    const episode = db.select().from(schema.episodes).where(eq(schema.episodes.id, episodeId)).get()
+    const episode = (await (await db.select().from(schema.episodes).where((await eq(schema.episodes.id, episodeId))))[0])
     assert.equal(episode.videoConfigId, configId)
   } finally {
     await fs.rm(directory, { recursive: true, force: true })
   }
 })
+
+after(async () => { process.env.DATABASE_URL = __base; await __admin.query(`DROP DATABASE IF EXISTS "${__dbName}"`); await __admin.end(); })

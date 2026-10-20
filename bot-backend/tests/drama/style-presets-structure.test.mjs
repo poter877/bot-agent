@@ -17,18 +17,22 @@ test('drama creation no longer pre-creates episodes from total_episodes', () => 
 })
 
 // 行为测试经真实路由 + 临时 SQLite 库（env 先于动态导入设置）
-const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'aspect-ratio-'))
-process.env.SQLITE_PATH = path.join(directory, 'test.sqlite')
-process.env.MYSQL_AUTO_IMPORT = 'false'
+import { Pool } from 'pg'
+const __base = process.env.DATABASE_URL
+if (!__base) throw new Error('tests need DATABASE_URL (point at the test cluster, e.g. bot_backend_test)')
+const __admin = new Pool({ connectionString: __base })
+const __dbName = 'drama_' + process.pid + '_' + (Date.now() % 1000000)
+await __admin.query(`CREATE DATABASE "${__dbName}" TEMPLATE bot_backend_test`)
+process.env.DATABASE_URL = __base.replace(/\/[^/?]+$/, `/${__dbName}`)
 const dramasRoute = (await import('../../src/drama/routes/dramas.js')).default
-after(async () => { await fs.rm(directory, { recursive: true, force: true }) })
+after(async () => { process.env.DATABASE_URL = __base; await __admin.query(`DROP DATABASE IF EXISTS "${__dbName}"`); await __admin.end() })
 
 async function request(url, method = 'GET', body) {
   const response = await dramasRoute.request(url, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined })
   return { status: response.status, body: await response.json() }
 }
 
-test('drama creation records a fixed aspect ratio for video generation', async () => {
+await test('drama creation records a fixed aspect ratio for video generation', async () => {
   // 创建时固定：缺省 16:9（zod aspectRatioSchema 白名单 16:9/9:16/1:1，旧的手写默认值已收敛为 schema 校验）
   const created = await request('/', 'POST', { title: '锁比例' })
   assert.equal(created.status, 201)

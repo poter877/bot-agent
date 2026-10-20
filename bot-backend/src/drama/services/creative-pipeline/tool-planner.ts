@@ -82,7 +82,7 @@ const selectionSettings: Record<string, keyof PipelineAutomation> = {
   avatar: 'avatarTool',
 }
 const size = async (project: CreativeProject) =>
-  await project.aspectRatio === '9:16'
+  project.aspectRatio === '9:16'
     ? { width: 720, height: 1280 }
     : project.aspectRatio === '1:1'
       ? { width: 960, height: 960 }
@@ -98,7 +98,7 @@ function outputFiles(artifact?: PipelineArtifact) {
 /** Select only tools required by the accepted scene, never every provider advertising the same capability. */
 export async function planPipelineTools(context: StageContext, phase: PipelineToolPhase): Promise<PipelineToolStep[]> {
   const { project, stage } = context
-  const automation = (await parsePipelineAutomation(project))
+  const automation = parsePipelineAutomation(project)
   const steps: PipelineToolStep[] = []
   const selected = (key: keyof PipelineAutomation) => {
     const value = automation[key]
@@ -377,7 +377,7 @@ export async function planPipelineTools(context: StageContext, phase: PipelineTo
     const avatarId = supplied.avatar_id
     let portrait: unknown = supplied.image ?? supplied.image_url ?? supplied.portrait ?? shot.imageUrl
     let portraitStep: PipelineToolStep | undefined
-    const imageTool = await selected('imageTool')
+    const imageTool = selected('imageTool')
     const makePortrait = () => {
       if (!imageTool)
         throw new PipelineInputRequired(
@@ -399,7 +399,7 @@ export async function planPipelineTools(context: StageContext, phase: PipelineTo
       const resumedNative =
         Array.isArray(currentRuntime.steps) &&
         currentRuntime.steps.some(async (value) => {
-          const step = await object(value)
+          const step = object(value)
           return (
             step.key === `shot-${shot.id}-avatar` && step.toolId === toolId && step.status === 'completed'
           )
@@ -456,7 +456,7 @@ export async function planPipelineTools(context: StageContext, phase: PipelineTo
     let speech: PipelineToolStep | undefined
     if (!shot.audioUrl) {
       const speechTool =
-        await selected('speechTool') ??
+        selected('speechTool') ??
         (automation.speechTool !== 'off' && project.production.fields.speechMode === 'openai'
           ? 'tts_selector'
           : undefined)
@@ -465,14 +465,14 @@ export async function planPipelineTools(context: StageContext, phase: PipelineTo
           `「${shot.title}」的Sync口型需要逐镜头真实配音，请上传或明确开启配音模型。`,
         )
       requireSelection(speechTool, 'speech')
-      speech = (await assetStep(
+      speech = assetStep(
         `shot-${shot.id}-speech`,
         speechTool,
         { ...common(shot), ...params(speechTool), text: shot.narration, language: project.brief.language },
         shot,
         'audio',
         true,
-      ))
+      )
     }
     if (!shot.videoUrl && !shot.imageUrl) {
       if (portrait) {
@@ -512,7 +512,7 @@ export async function planPipelineTools(context: StageContext, phase: PipelineTo
       searchAndImport(
         plan.toolId,
         `shot-${shot.id}-${plan.toolId}`,
-        await String(supplied.query || shot.visualPrompt || project.brief.idea),
+        String(supplied.query || shot.visualPrompt || project.brief.idea),
         shot,
       )
       return
@@ -630,7 +630,7 @@ export async function planPipelineTools(context: StageContext, phase: PipelineTo
   }
 
   if (phase === 'before' && ['research', 'idea'].includes(stage.id)) {
-    const research = await selected('researchTool')
+    const research = selected('researchTool')
     if (research) {
       const policy = getPipelineToolPolicy(research)
       if (!policy || !['research', 'analysis'].includes(policy.role))
@@ -660,10 +660,10 @@ export async function planPipelineTools(context: StageContext, phase: PipelineTo
         true,
       )
     }
-    const stock = await selected('stockTool')
+    const stock = selected('stockTool')
     if (stock) {
       requireSelection(stock, 'stock');
-      (await searchAndImport(stock, 'research-stock', project.production.fields.stockQuery || project.brief.idea))
+      await searchAndImport(stock, 'research-stock', project.production.fields.stockQuery || project.brief.idea)
     }
     if (automation.capture) {
       if (project.category !== 'screen_demo')
@@ -798,7 +798,7 @@ export async function planPipelineTools(context: StageContext, phase: PipelineTo
     }
   }
   if (stage.id === 'assets' && phase === 'before') {
-    const musicTool = await selected('musicTool')
+    const musicTool = selected('musicTool')
     if (musicTool && !project.audio.musicUrl) {
       requireSelection(musicTool, 'music')
       const direction = project.plan.musicDirection || project.brief.tone
@@ -827,8 +827,8 @@ export async function planPipelineTools(context: StageContext, phase: PipelineTo
         { apply: { target: 'artifact' } },
       ))
     for (const shot of project.shots) {
-      const plan = await object((shot as Shot & { toolPlan?: ToolPlan }).toolPlan) as ToolPlan
-      const avatarTool = await selected('avatarTool')
+      const plan = object((shot as Shot & { toolPlan?: ToolPlan }).toolPlan) as ToolPlan
+      const avatarTool = selected('avatarTool')
       if (avatarTool && (!plan.toolId || getPipelineToolPolicy(plan.toolId)?.selectionKey === 'avatar')) {
         avatarScene(shot, avatarTool, plan.toolId === avatarTool ? plan : undefined)
         continue
@@ -881,29 +881,29 @@ export async function planPipelineTools(context: StageContext, phase: PipelineTo
             videoTool = selected('videoTool')
           const toolId = shot.mediaType === 'image' ? imageTool : videoTool
           if (toolId) {
-            await requireSelection(toolId, shot.mediaType);
-            (await assetStep(
+            requireSelection(toolId, shot.mediaType);
+            assetStep(
               `shot-${shot.id}-selected-visual`,
               toolId,
               { ...common(shot), ...params(toolId) },
               shot,
               shot.mediaType,
               true,
-            ))
+      )
           }
         }
       }
-      const speechTool = await selected('speechTool')
+      const speechTool = selected('speechTool')
       if (speechTool && !shot.audioUrl && !project.audio.narrationUrl && shot.narration.trim()) {
         requireSelection(speechTool, 'speech');
-        (await assetStep(
+        assetStep(
           `shot-${shot.id}-speech`,
           speechTool,
           { ...common(shot), ...params(speechTool), text: shot.narration, language: project.brief.language },
           shot,
           'audio',
           true,
-        ))
+      )
       }
     }
   }
@@ -920,7 +920,7 @@ export async function planPipelineTools(context: StageContext, phase: PipelineTo
         if (!policy || !['post', 'analysis', 'model', 'visual'].includes(policy.role))
           throw new PipelineInputRequired(`「${toolId}」不是可用于镜头的后处理工具。`)
         allowed(toolId, true)
-        const supplied = await params(toolId)
+        const supplied = params(toolId)
         const audioTool = toolId === 'audio_enhance' || toolId === 'audio_mixer'
         const lastMedia = audioTool ? lastAudio : lastVisual
         const sourceUrl = lastMedia

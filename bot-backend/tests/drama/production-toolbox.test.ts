@@ -7,7 +7,13 @@ import { randomUUID } from 'node:crypto'
 import sharp from 'sharp'
 import { eq } from 'drizzle-orm'
 const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'production-toolbox-'))
-process.env.SQLITE_PATH = path.join(dir, 'test.sqlite')
+import { Pool } from 'pg'
+const __base = process.env.DATABASE_URL
+if (!__base) throw new Error('tests need DATABASE_URL (point at the test cluster, e.g. bot_backend_test)')
+const __admin = new Pool({ connectionString: __base })
+const __dbName = 'drama_' + process.pid + '_' + (Date.now() % 1000000)
+await __admin.query(`CREATE DATABASE "${__dbName}" TEMPLATE bot_backend_test`)
+process.env.DATABASE_URL = __base.replace(/\/[^/?]+$/, `/${__dbName}`)
 process.env.STORAGE_PATH = path.join(dir, 'static')
 process.env.MYSQL_AUTO_IMPORT = 'false'
 const { db, schema, getInsertId } = await import('../../src/drama/db/index.js')
@@ -20,10 +26,10 @@ const { toolboxCatalog, getToolDefinition } = await import('../../src/drama/serv
 const { createCreativeRoutes } = await import('../../src/drama/routes/creative.js')
 await fs.mkdir(path.join(dir, 'static'), { recursive: true })
 const services: ReturnType<typeof createToolboxService>[] = []
-function create() {
+async function create() {
   const now = new Date().toISOString(),
     id = getInsertId(
-      db
+      (await db
         .insert(schema.dramas)
         .values({
           title: '工具测试',
@@ -31,17 +37,15 @@ function create() {
           creativeCategory: 'explainer',
           createdAt: now,
           updatedAt: now,
-        })
-        .run(),
-    )
-  db.insert(schema.creativeProjects)
+        }).returning()),
+    );
+  (await db.insert(schema.creativeProjects)
     .values({
       projectId: id,
       document: JSON.stringify(createCreativeDocument()),
       revision: 1,
       updatedAt: now,
-    })
-    .run()
+    }).returning())
   return getCreativeProject(id)
 }
 function service(executor: Parameters<typeof createToolboxService>[0]) {
@@ -63,7 +67,7 @@ const deferred = () => {
   })
   return { resolve, promise }
 }
-after(async () => {
+after(async () => { process.env.DATABASE_URL = __base; await __admin.query(`DROP DATABASE IF EXISTS "${__dbName}"`); await __admin.end();
   for (const s of services) s.dispose()
   await fs.rm(dir, { recursive: true, force: true })
 })
@@ -84,7 +88,7 @@ test('full inventory resolves, dependencies are explicit, retired APIs are ident
   assert.match(c.tools.find((t) => t.id === 'sora_video')!.name, /接口已停用/)
 })
 test('duplicate submission executes once and never changes the document automatically', async () => {
-  const p = create(),
+  const p = await create(),
     gate = deferred()
   let calls = 0
   const s = service(async (ctx) => {
@@ -103,7 +107,7 @@ test('duplicate submission executes once and never changes the document automati
   assert.equal(getCreativeProject(p.id).revision, 1)
 })
 test('cancelled work cannot publish a late completion', async () => {
-  const p = create(),
+  const p = await create(),
     gate = deferred(),
     entered = deferred()
   const s = service(async (ctx) => {
@@ -120,7 +124,7 @@ test('cancelled work cannot publish a late completion', async () => {
   assert.deepEqual(listToolboxJobs(p.id)[0].result, {})
 })
 test('unknown submission requires explicit acknowledgement before resubmitting', async () => {
-  const p = create()
+  const p = await create()
   let calls = 0
   const s = service(async (ctx) => {
     calls++
@@ -141,7 +145,7 @@ test('unknown submission requires explicit acknowledgement before resubmitting',
   assert.equal(listToolboxJobs(p.id)[0].status, 'completed')
 })
 test('remote recovery retains its ID and refuses another identifier', async () => {
-  const p = create()
+  const p = await create()
   let calls = 0
   const s = service(async (ctx) => {
     calls++
@@ -160,7 +164,7 @@ test('remote recovery retains its ID and refuses another identifier', async () =
   assert.equal(listToolboxJobs(p.id)[0].status, 'completed')
 })
 test('import enforces ownership and CAS, preserves attribution and deduplicates', async () => {
-  const p = create(),
+  const p = await create(),
     other = create(),
     s = service(async (ctx) => ({ ...(await output(ctx)), data: { attribution: '作者与许可' } }))
   const j = await s.start(p.id, { revision: 1, toolId: 'showcase_card', args: { title: '导入' } })
@@ -178,7 +182,7 @@ test('import enforces ownership and CAS, preserves attribution and deduplicates'
   )
 })
 test('output symlinks cannot escape the job directory', async () => {
-  const p = create(),
+  const p = await create(),
     outside = path.join(dir, 'private.png')
   await sharp({ create: { width: 16, height: 16, channels: 3, background: 'red' } })
     .png()
@@ -193,7 +197,7 @@ test('output symlinks cannot escape the job directory', async () => {
   assert.equal(listToolboxJobs(p.id)[0].status, 'failed')
 })
 test('credentials are rejected in tool parameters', async () => {
-  const p = create(),
+  const p = await create(),
     s = service(output)
   await assert.rejects(
     s.start(p.id, {
@@ -205,15 +209,15 @@ test('credentials are rejected in tool parameters', async () => {
   )
   assert.equal(listToolboxJobs(p.id).length, 0)
 })
-test('interrupted submission is retained without automatic execution', () => {
-  const p = create()
+test('interrupted submission is retained without automatic execution', async () => {
+  const p = await create()
   let calls = 0
   const s = service(async (ctx) => {
       calls++
       return output(ctx)
     }),
-    now = new Date().toISOString()
-  db.insert(schema.productionToolJobs)
+    now = new Date().toISOString();
+  (await db.insert(schema.productionToolJobs)
     .values({
       projectId: p.id,
       toolId: 'showcase_card',
@@ -224,14 +228,13 @@ test('interrupted submission is retained without automatic execution', () => {
       status: 'running',
       createdAt: now,
       updatedAt: now,
-    })
-    .run()
+    }).returning())
   s.recover()
   assert.equal(listToolboxJobs(p.id)[0].status, 'uncertain')
   assert.equal(calls, 0)
 })
 test('upload accepts structured input and rejects executable SVG and invalid projects', async () => {
-  const p = create(),
+  const p = await create(),
     app = createCreativeRoutes()
   async function upload(name: string, bytes: string, id = p.id) {
     const form = new FormData()
@@ -248,10 +251,10 @@ test('upload accepts structured input and rejects executable SVG and invalid pro
   assert.equal((await upload('missing.txt', 'test', 999999)).status, 404)
 })
 test('default changes do not change the pinned account, and job history redacts secrets', async () => {
-  const p = create(),
+  const p = await create(),
     now = new Date().toISOString(),
     a = getInsertId(
-      db
+      (await db
         .insert(schema.aiServiceConfigs)
         .values({
           serviceType: 'image',
@@ -263,8 +266,7 @@ test('default changes do not change the pinned account, and job history redacts 
           priority: 3,
           createdAt: now,
           updatedAt: now,
-        })
-        .run(),
+        }).returning()),
     )
   let fail = true
   const s = service(async (ctx) => {
@@ -277,8 +279,8 @@ test('default changes do not change the pinned account, and job history redacts 
     return output(ctx)
   })
   const j = await s.start(p.id, { revision: 1, toolId: 'image_selector', args: { prompt: '画面' } })
-  await s.idle(j.id)
-  db.insert(schema.aiServiceConfigs)
+  await s.idle(j.id);
+  (await db.insert(schema.aiServiceConfigs)
     .values({
       serviceType: 'image',
       provider: 'openai',
@@ -289,8 +291,7 @@ test('default changes do not change the pinned account, and job history redacts 
       priority: 99,
       createdAt: now,
       updatedAt: now,
-    })
-    .run()
+    }).returning())
   fail = false
   s.resume(p.id, j.id)
   await s.idle(j.id)
@@ -299,10 +300,10 @@ test('default changes do not change the pinned account, and job history redacts 
 })
 
 test('shared selectors use the actual keyless provider for availability and execution', async () => {
-  const p = create(),
+  const p = await create(),
     now = new Date().toISOString()
   const configId = getInsertId(
-    db
+    (await db
       .insert(schema.aiServiceConfigs)
       .values({
         serviceType: 'image',
@@ -315,8 +316,7 @@ test('shared selectors use the actual keyless provider for availability and exec
         isActive: true,
         createdAt: now,
         updatedAt: now,
-      })
-      .run(),
+      }).returning()),
   )
   try {
     assert.equal(getToolDefinition('image_selector').available, true)
@@ -333,13 +333,13 @@ test('shared selectors use the actual keyless provider for availability and exec
       assert.equal(listToolboxJobs(p.id).find((item) => item.id === job.id)?.status, 'completed')
     }
   } finally {
-    db.delete(schema.aiServiceConfigs).where(eq(schema.aiServiceConfigs.id, configId)).run()
+    (await db.delete(schema.aiServiceConfigs).where(eq(schema.aiServiceConfigs.id, configId)))
   }
 })
 
 test('cached synchronous responses survive failure, restart and legacy uncertain recovery without resubmission', async () => {
   for (const key of ['syncResult', 'searchResult', 'transcriptionResult']) {
-    const p = create(),
+    const p = await create(),
       cached = { value: `cached-${key}` }
     let submissions = 0
     const s = service(async (ctx) => {
@@ -353,18 +353,16 @@ test('cached synchronous responses survive failure, restart and legacy uncertain
     })
     const job = await s.start(p.id, { revision: 1, toolId: 'showcase_card', args: { title: key } })
     await s.idle(job.id)
-    assert.equal(listToolboxJobs(p.id)[0].status, 'failed')
-    db.update(schema.productionToolJobs)
+    assert.equal(listToolboxJobs(p.id)[0].status, 'failed');
+    (await db.update(schema.productionToolJobs)
       .set({ status: 'running' })
-      .where(eq(schema.productionToolJobs.id, job.id))
-      .run()
+      .where(eq(schema.productionToolJobs.id, job.id)))
     s.recover()
     assert.equal(listToolboxJobs(p.id)[0].status, 'failed')
     // Old versions classified this exact state as uncertain; it must still be recoverable.
-    db.update(schema.productionToolJobs)
+    (await db.update(schema.productionToolJobs)
       .set({ status: 'uncertain' })
-      .where(eq(schema.productionToolJobs.id, job.id))
-      .run()
+      .where(eq(schema.productionToolJobs.id, job.id)))
     s.resume(p.id, job.id)
     await s.idle(job.id)
     assert.equal(listToolboxJobs(p.id)[0].status, 'completed')
@@ -373,7 +371,7 @@ test('cached synchronous responses survive failure, restart and legacy uncertain
 })
 
 test('JSON caption import validates cues and VTT minute timestamps convert to SRT', async () => {
-  const p = create(),
+  const p = await create(),
     uploads = path.join(dir, 'static', 'uploads')
   await fs.mkdir(uploads, { recursive: true })
   const wav = Buffer.alloc(44 + 6000)

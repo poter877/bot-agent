@@ -6,7 +6,13 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 const folder = await fs.mkdtemp(path.join(os.tmpdir(), 'pipeline-automation-'))
-process.env.SQLITE_PATH = path.join(folder, 'test.sqlite')
+import { Pool } from 'pg'
+const __base = process.env.DATABASE_URL
+if (!__base) throw new Error('tests need DATABASE_URL (point at the test cluster, e.g. bot_backend_test)')
+const __admin = new Pool({ connectionString: __base })
+const __dbName = 'drama_' + process.pid + '_' + (Date.now() % 1000000)
+await __admin.query(`CREATE DATABASE "${__dbName}" TEMPLATE bot_backend_test`)
+process.env.DATABASE_URL = __base.replace(/\/[^/?]+$/, `/${__dbName}`)
 process.env.STORAGE_PATH = path.join(folder, 'static')
 process.env.MYSQL_AUTO_IMPORT = 'false'
 const { db, schema, getInsertId } = await import('../../src/drama/db/index.js')
@@ -63,7 +69,7 @@ before(async () => {
 
 for (const composer of ['video_compose', 'hyperframes_compose', 'video_stitch', 'bgm_montage_lite'])
   test(`${composer} runs inside compose with actual audio, and post-caption video reaches QA and delivery`, async () => {
-    let project = create('cinematic')
+    let project = await create('cinematic')
     const automation = {
       postTools: [composer, 'remotion_caption_burn'],
       toolParameters:
@@ -73,7 +79,7 @@ for (const composer of ['video_compose', 'hyperframes_compose', 'video_stitch', 
             ? { bgm_montage_lite: { shot_duration: 0.5 } }
             : {},
     }
-    project = saveCreativeProject(project.id, {
+    project = (await saveCreativeProject(project.id, {
       ...project,
       shots: [project.shots[0], { ...project.shots[0], id: 'two', title: '第二段' }],
       audio: { ...project.audio, musicUrl: '/static/uploads/music.wav' },
@@ -81,8 +87,8 @@ for (const composer of ['video_compose', 'hyperframes_compose', 'video_stitch', 
         ...project.production,
         fields: { ...project.production.fields, automation: JSON.stringify(automation) },
       },
-    })
-    const runner = createPipelineRunner(
+    }))
+    const runner = await createPipelineRunner(
       createStageExecutor({
         ...pipelineTools,
         narrative: async () => ({ summary: '主题', content: '保持实际媒体', checks: [] }),
@@ -92,18 +98,18 @@ for (const composer of ['video_compose', 'hyperframes_compose', 'video_stitch', 
     )
     runners.push(runner)
     runner.start(project.id, project.revision)
-    for (let n = 0; n < 160 && getPipelineState(project.id).run!.status !== 'completed'; n++) {
-      const run = getPipelineState(project.id).run!
+    for (let n = 0; n < 160 && (await getPipelineState(project.id)).run!.status !== 'completed'; n++) {
+      const run = (await getPipelineState(project.id)).run!
       assert.notEqual(run.status, 'failed', run.error || 'workflow failed')
       if (run.status === 'review') runner.approve(project.id, run.id, run.version)
       else {
         runner.continue(project.id, run.id, run.version)
         await runner.idle(run.id)
       }
-      for (const job of listToolboxJobs(project.id))
+      for (const job of (await listToolboxJobs(project.id)))
         if (['queued', 'running'].includes(job.status)) await toolboxService.idle(job.id)
     }
-    const run = getPipelineState(project.id).run!
+    const run = (await getPipelineState(project.id)).run!
     assert.equal(run.status, 'completed')
     const composed = run.stages.find((stage) => stage.id === 'compose')!.artifact!
     const steps = (composed.data!.toolRuntime as PipelineToolRuntime).steps
@@ -124,7 +130,7 @@ for (const composer of ['video_compose', 'hyperframes_compose', 'video_stitch', 
   })
 
 test('base task checkpoints preserve before-tool traces, and post-processing polls do not rerun the base', async () => {
-  const project = create('cinematic'),
+  const project = await create('cinematic'),
     definition = pipelineDefinitions.find((item) => item.category === 'cinematic')!,
     stage = definition.stages.find((item) => item.id === 'assets')!
   let previous: any = null,
@@ -161,7 +167,7 @@ test('base task checkpoints preserve before-tool traces, and post-processing pol
   let done = false
   for (let i = 0; i < 20 && !done; i++) {
     const result = await execute({
-      project: getCreativeProject(project.id),
+      project: (await getCreativeProject(project.id)),
       definition,
       stage,
       artifacts: {},
@@ -173,20 +179,20 @@ test('base task checkpoints preserve before-tool traces, and post-processing pol
     })
     previous = result.artifact
     done = !result.waiting
-    for (const job of listToolboxJobs(project.id))
+    for (const job of (await listToolboxJobs(project.id)))
       if (['queued', 'running'].includes(job.status)) await toolboxService.idle(job.id)
   }
   assert.equal(done, true)
   assert.equal(baseCalls, 2)
   assert.equal((previous.data.toolRuntime as PipelineToolRuntime).steps.length, 2)
-  assert.equal(listToolboxJobs(project.id).length, 2)
+  assert.equal((await listToolboxJobs(project.id)).length, 2)
 })
-after(async () => {
+after(async () => { process.env.DATABASE_URL = __base; await __admin.query(`DROP DATABASE IF EXISTS "${__dbName}"`); await __admin.end();
   runners.forEach((r) => r.dispose())
   toolboxService.dispose()
   await fs.rm(folder, { recursive: true, force: true })
 })
-function create(category: Parameters<typeof createCreativeDocument>[0]) {
+async function create(category: Parameters<typeof createCreativeDocument>[0]) {
   const doc = createCreativeDocument(category)
   doc.brief.idea = '沿用真实来源制作并检查实际产物'
   doc.brief.targetDuration = 5
@@ -235,8 +241,8 @@ function create(category: Parameters<typeof createCreativeDocument>[0]) {
     },
   ]
   const timestamp = new Date().toISOString()
-  const id = getInsertId(
-    db
+  const id = (await (await getInsertId(
+    (await db
       .insert(schema.dramas)
       .values({
         title: '完整流程测试',
@@ -245,19 +251,17 @@ function create(category: Parameters<typeof createCreativeDocument>[0]) {
         aspectRatio: category === 'localization' ? '1:1' : '16:9',
         createdAt: timestamp,
         updatedAt: timestamp,
-      })
-      .run(),
-  )
-  db.insert(schema.creativeProjects)
-    .values({ projectId: id, document: JSON.stringify(doc), revision: 1, updatedAt: timestamp })
-    .run()
+      }).returning().returning().returning().returning().returning().returning().returning().returning()),
+  ))
+  (await db.insert(schema.creativeProjects)
+    .values({ projectId: id, document: JSON.stringify(doc), revision: 1, updatedAt: timestamp }).returning().returning().returning().returning().returning().returning().returning().returning()))
   return getCreativeProject(id)
 }
 for (const definition of pipelineDefinitions)
-  test(`${definition.id} invokes native tools, chains results, writes media back and delivers real playable video`, async () => {
-    const project = create(definition.category),
+  (await test(`${definition.id} invokes native tools, chains results, writes media back and delivers real playable video`, async () => {
+    const project = await create(definition.category),
       seen: string[] = []
-    const execute = createStageExecutor({
+    const execute = (await createStageExecutor({
       ...pipelineTools,
       narrative: async (context) => {
         seen.push(context.stage.id)
@@ -268,13 +272,13 @@ for (const definition of pipelineDefinitions)
         ...document,
         shots: document.shots.map((shot) => ({ ...shot, caption: 'Translated' })),
       }),
-    })
-    const runner = createPipelineRunner(execute, 100000)
+    }))
+    const runner = await createPipelineRunner(execute, 100000)
     runners.push(runner)
     runner.start(project.id, project.revision)
     let iterations = 0
-    while (getPipelineState(project.id).run!.status !== 'completed' && iterations++ < 160) {
-      const run = getPipelineState(project.id).run!
+    while ((await getPipelineState(project.id)).run!.status !== 'completed' && iterations++ < 160) {
+      const run = (await getPipelineState(project.id)).run!
       assert.notEqual(run.status, 'failed', run.error || 'workflow failed')
       if (run.status === 'review') runner.approve(project.id, run.id, run.version)
       else {
@@ -291,7 +295,7 @@ for (const definition of pipelineDefinitions)
       )
         await new Promise((resolve) => setTimeout(resolve, 40))
     }
-    const run = getPipelineState(project.id).run!
+    const run = (await getPipelineState(project.id)).run!
     assert.equal(
       run.status,
       'completed',
@@ -328,7 +332,7 @@ for (const definition of pipelineDefinitions)
           traces.find((candidate) => candidate.key === dependency && candidate.status === 'completed'),
         )
     const final = getCreativeProject(project.id),
-      render = final.renders.find((render) => render.status === 'completed')!
+      render = (await final).renders.find((render) => render.status === 'completed')!
     assert.ok(render)
     const video = render.videoUrl || render.outputs[0]?.videoUrl
     assert.ok((await fs.stat(path.join(folder, 'static', video!.replace(/^\/?static\//, '')))).size > 100)
@@ -336,13 +340,13 @@ for (const definition of pipelineDefinitions)
       .find((step) => step.toolId === 'export_bundle')!
       .files!.find((file) => file.kind === 'archive')!
     assert.ok((await fs.stat(path.join(folder, 'static', bundle.url.slice('/static/'.length)))).size > 100)
-    if (definition.category === 'explainer') assert.ok(final.shots[0].imageUrl?.includes('/toolbox/'))
+    if (definition.category === 'explainer') assert.ok((await final).shots[0].imageUrl?.includes('/toolbox/'))
     if (definition.category === 'character_animation') {
-      assert.ok(final.shots[0].videoUrl?.includes('/toolbox/'))
+      assert.ok((await final).shots[0].videoUrl?.includes('/toolbox/'))
       assert.ok(traces.some((step) => step.toolId === 'svg_rig_builder'))
       assert.ok(traces.some((step) => step.toolId === 'action_timeline_compiler'))
       assert.ok(traces.some((step) => step.toolId === 'character_animation_reviewer'))
     }
     // Waiting for tools must not generate a new narrative for the same stage.
     assert.equal(new Set(seen).size, seen.length)
-  })
+  }))

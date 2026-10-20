@@ -7,7 +7,13 @@ import { execFileSync } from 'node:child_process'
 import sharp from 'sharp'
 
 const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'production-browser-'))
-process.env.SQLITE_PATH = path.join(directory, 'test.sqlite')
+import { Pool } from 'pg'
+const __base = process.env.DATABASE_URL
+if (!__base) throw new Error('tests need DATABASE_URL (point at the test cluster, e.g. bot_backend_test)')
+const __admin = new Pool({ connectionString: __base })
+const __dbName = 'drama_' + process.pid + '_' + (Date.now() % 1000000)
+await __admin.query(`CREATE DATABASE "${__dbName}" TEMPLATE bot_backend_test`)
+process.env.DATABASE_URL = __base.replace(/\/[^/?]+$/, `/${__dbName}`)
 process.env.HUOBAO_DATA_DIR = directory
 process.env.STORAGE_PATH = path.join(directory, 'static')
 process.env.MYSQL_AUTO_IMPORT = 'false'
@@ -92,7 +98,7 @@ before(async () => {
   await fs.mkdir(path.join(root, 'creative', '1'), { recursive: true })
   await fs.writeFile(path.join(root, 'creative', '1', 'actor.glb'), animatedGlb())
 })
-after(async () => {
+after(async () => { process.env.DATABASE_URL = __base; await __admin.query(`DROP DATABASE IF EXISTS "${__dbName}"`); await __admin.end();
   await fs.rm(directory, { recursive: true, force: true })
 })
 

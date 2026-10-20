@@ -11,13 +11,17 @@ const read = (path) => readFileSync(new URL(path, root), 'utf8')
 
 // 行为测试共用一个临时 SQLite 库（模块缓存的 db 实例只绑定首个 SQLITE_PATH，
 // 故 env 必须先于第一个动态导入设置；hermes 客户端 env 为惰性读取，指到 invalid 即可）
-const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'final-prompt-'))
-process.env.SQLITE_PATH = path.join(directory, 'test.sqlite')
-process.env.MYSQL_AUTO_IMPORT = 'false'
+import { Pool } from 'pg'
+const __base = process.env.DATABASE_URL
+if (!__base) throw new Error('tests need DATABASE_URL (point at the test cluster, e.g. bot_backend_test)')
+const __admin = new Pool({ connectionString: __base })
+const __dbName = 'drama_' + process.pid + '_' + (Date.now() % 1000000)
+await __admin.query(`CREATE DATABASE "${__dbName}" TEMPLATE bot_backend_test`)
+process.env.DATABASE_URL = __base.replace(/\/[^/?]+$/, `/${__dbName}`)
 process.env.HERMES_AGENT_URL = 'https://hermes.invalid'
 process.env.HERMES_AGENT_KEY = 'hermes-token'
 const { db, schema, getInsertId } = await import('../../src/drama/db/index.js')
-after(async () => { await fs.rm(directory, { recursive: true, force: true }) })
+after(async () => { process.env.DATABASE_URL = __base; await __admin.query(`DROP DATABASE IF EXISTS "${__dbName}"`); await __admin.end() })
 
 test('characters and scenes tables store the agent-written final prompt', () => {
   const schema = read('src/drama/db/schema.ts')
@@ -47,7 +51,7 @@ test('grid prompt agent tools save agent-written final prompts with style inject
   assert.doesNotMatch(tools, /generate_scene_prompt/)
 })
 
-test('prompt agent instructions are assembled per request from the workspace prompt file plus skill files', async () => {
+await test('prompt agent instructions are assembled per request from the workspace prompt file plus skill files', async () => {
   // hermes 编排后 instructions 不再是代码常量：按请求解析
   // workspace/prompts/prompt_generator.md（缺失时回退 DEFAULT_PROMPTS）+ 技能全文拼接。
   // 拦截 hermes gateway fetch，捕获实际下发的 system 消息锁装配结果。
@@ -56,7 +60,7 @@ test('prompt agent instructions are assembled per request from the workspace pro
   const captured = []
   const originalFetch = globalThis.fetch
   globalThis.fetch = (async (_input, init) => {
-    captured.push(JSON.parse(init?.body))
+    captured.push(JSON.parse((await init)?.body))
     return Response.json({ choices: [{ message: { role: 'assistant', content: 'ok' } }] })
   })
   try {
@@ -94,24 +98,24 @@ test('prompt agent instructions are assembled per request from the workspace pro
   assert.match(agents, /角色三视图/)
 })
 
-test('image generation prefers the stored final prompt with agent generation and legacy fallback', async () => {
+(await test('image generation prefers the stored final prompt with agent generation and legacy fallback', async () => {
   const { ensureCharacterFinalPrompt, ensureSceneFinalPrompt } = await import('../../src/drama/services/final-prompt.js')
 
   const ts = new Date().toISOString()
-  const dramaId = getInsertId(db.insert(schema.dramas).values({ title: '最终提示词剧', createdAt: ts, updatedAt: ts }).run())
-  const episodeId = getInsertId(db.insert(schema.episodes).values({ dramaId, episodeNumber: 1, title: '第1集', createdAt: ts, updatedAt: ts }).run())
-  const charWithPrompt = getInsertId(db.insert(schema.characters).values({
+  const dramaId = (await getInsertId((await db.insert(schema.dramas).values({ title: '最终提示词剧', createdAt: ts, updatedAt: ts }).returning().returning().returning().returning().returning().returning().returning().returning())))
+  const episodeId = (await getInsertId((await db.insert(schema.episodes).values({ dramaId, episodeNumber: 1, title: '第1集', createdAt: ts, updatedAt: ts }).returning().returning().returning().returning().returning().returning().returning().returning())))
+  const charWithPrompt = (await getInsertId((await db.insert(schema.characters).values({
     dramaId, name: '已生成角色', finalPrompt: '角色已存最终提示词', createdAt: ts, updatedAt: ts,
-  }).run())
-  const charWithoutPrompt = getInsertId(db.insert(schema.characters).values({
+  }).returning().returning().returning().returning().returning().returning().returning().returning())))
+  const charWithoutPrompt = (await getInsertId((await db.insert(schema.characters).values({
     dramaId, name: '未生成角色', createdAt: ts, updatedAt: ts,
-  }).run())
-  const sceneWithPrompt = getInsertId(db.insert(schema.scenes).values({
+  }).returning().returning().returning().returning().returning().returning().returning().returning())))
+  const sceneWithPrompt = (await getInsertId((await db.insert(schema.scenes).values({
     dramaId, location: '已生成场景', time: '日', prompt: 'p', finalPrompt: '场景已存最终提示词', createdAt: ts, updatedAt: ts,
-  }).run())
-  const char = db.select().from(schema.characters).where(eq(schema.characters.id, charWithPrompt)).get()
-  const bareChar = db.select().from(schema.characters).where(eq(schema.characters.id, charWithoutPrompt)).get()
-  const scene = db.select().from(schema.scenes).where(eq(schema.scenes.id, sceneWithPrompt)).get()
+  }).returning().returning().returning().returning().returning().returning().returning().returning())))
+  const char = (await (await db.select().from(schema.characters).where((await eq(schema.characters.id, charWithPrompt))))[0])
+  const bareChar = (await (await db.select().from(schema.characters).where((await eq(schema.characters.id, charWithoutPrompt))))[0])
+  const scene = (await (await db.select().from(schema.scenes).where((await eq(schema.scenes.id, sceneWithPrompt))))[0])
 
   const gatewayCalls = []
   const originalFetch = globalThis.fetch
@@ -145,7 +149,7 @@ test('image generation prefers the stored final prompt with agent generation and
   assert.match(service, /调用 save_scene_final_prompt 保存/)
 
   // 路由回退链：生图优先最终提示词，缺失回退本地拼接；文本模型覆盖（text_model/text_config_id）透传
-  const characters = read('src/drama/routes/characters.ts')
+  const characters = await read('src/drama/routes/characters.ts')
   const scenes = read('src/drama/routes/scenes.ts')
   assert.match(characters, /ensureCharacterFinalPrompt\(char, ep\.id, /)
   assert.match(characters, /model: body\.text_model, configId: body\.text_config_id/)
@@ -158,4 +162,4 @@ test('image generation prefers the stored final prompt with agent generation and
   assert.match(scenes, /body\.final_prompt !== undefined\) updates\.finalPrompt = body\.final_prompt \|\| null/)
   assert.doesNotMatch(characters, /updates\.finalPrompt = null/)
   assert.doesNotMatch(scenes, /updates\.finalPrompt = null/)
-})
+}))

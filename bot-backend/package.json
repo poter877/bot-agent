@@ -18,7 +18,7 @@
     "db:migrate": "drizzle-kit migrate",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:drama": "tsx --test --test-force-exit --test-timeout=15000 tests/drama/creative-renderer.test.ts tests/drama/film-blender.test.ts tests/drama/asset-extract-structure.test.mjs tests/drama/character-image-generation.test.mjs tests/drama/episode-auto-config-structure.test.mjs tests/drama/episode-delete-structure.test.mjs tests/drama/merge-direct-video-structure.test.mjs tests/drama/official-provider-adapters.test.mjs tests/drama/remove-audio-tts-structure.test.mjs tests/drama/remove-grid-feature-structure.test.mjs tests/drama/style-presets-structure.test.mjs tests/drama/video-prompt-batch-structure.test.mjs tests/drama/video-prompt-references-structure.test.mjs"
+    "test:drama": "tsx --test --test-force-exit --test-timeout=15000 tests/drama/hermes-agent.test.ts tests/drama/creative-renderer.test.ts tests/drama/film-blender.test.ts tests/drama/film-build-agent.test.ts tests/drama/ai-registry.test.ts tests/drama/creative-chat.test.ts tests/drama/mcp-server.test.ts tests/drama/production-providers.test.ts tests/drama/production-local.test.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.82",
@@ -57,6 +57,7 @@
     "vitest": "^5.0.4"
   },
   "allowScripts": {
-    "better-sqlite3@12.11.1": true
+    "better-sqlite3@12.11.1": true,
+    "ffmpeg-static@5.3.0": true
   }
 }

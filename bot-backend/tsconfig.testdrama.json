@@ -15,11 +15,10 @@
     ],
     "noEmit": true,
     "allowJs": true,
-    "checkJs": false
+    "checkJs": true
   },
   "include": [
-    "tests/drama/creative-renderer.test.ts",
-    "tests/drama/film-blender.test.ts",
+    "tests/drama/**/*.ts",
     "tests/drama/**/*.mjs",
     "src/drama/**/*.ts"
   ]

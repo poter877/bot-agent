@@ -11,7 +11,7 @@ import { redactUrl, logTaskError, logTaskProgress, logTaskSuccess } from '../uti
 import { migrateServiceConfigs, configModels, validateServiceConfig, toolServices } from '../services/ai-registry.js'
 
 const app = new Hono()
-app.use('*', async (_c, next) => { migrateServiceConfigs(); await next() })
+app.use('*', async (_c, next) => { await migrateServiceConfigs(); await next() })
 
 /** 归一化 temperature 入参：null=未设置；合法值 0~2；非法抛错 */
 function normalizeTemperature(v: any): number | null {

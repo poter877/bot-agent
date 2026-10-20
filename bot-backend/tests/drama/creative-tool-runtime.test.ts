@@ -5,7 +5,13 @@ import os from 'node:os'
 import path from 'node:path'
 import sharp from 'sharp'
 const folder = await fs.mkdtemp(path.join(os.tmpdir(), 'pipeline-tools-'))
-process.env.SQLITE_PATH = path.join(folder, 'runtime.sqlite')
+import { Pool } from 'pg'
+const __base = process.env.DATABASE_URL
+if (!__base) throw new Error('tests need DATABASE_URL (point at the test cluster, e.g. bot_backend_test)')
+const __admin = new Pool({ connectionString: __base })
+const __dbName = 'drama_' + process.pid + '_' + (Date.now() % 1000000)
+await __admin.query(`CREATE DATABASE "${__dbName}" TEMPLATE bot_backend_test`)
+process.env.DATABASE_URL = __base.replace(/\/[^/?]+$/, `/${__dbName}`)
 process.env.STORAGE_PATH = path.join(folder, 'static')
 process.env.MYSQL_AUTO_IMPORT = 'false'
 const { db, schema, getInsertId } = await import('../../src/drama/db/index.js')
@@ -28,10 +34,10 @@ import type { StageContext, PipelineArtifact } from '../../src/drama/services/cr
 import type { PipelineToolStep } from '../../src/drama/services/creative-pipeline/tool-contracts.js'
 const services: ReturnType<typeof createToolboxService>[] = []
 await fs.mkdir(path.join(folder, 'static'), { recursive: true })
-function create() {
+async function create() {
   const date = new Date().toISOString()
-  const id = getInsertId(
-    db
+  const id = await getInsertId(
+    (await db
       .insert(schema.dramas)
       .values({
         title: '流程串联验证',
@@ -39,8 +45,7 @@ function create() {
         creativeCategory: 'explainer',
         createdAt: date,
         updatedAt: date,
-      })
-      .run(),
+      }).returning().returning().returning().returning().returning().returning().returning().returning()),
   )
   const document = createCreativeDocument()
   document.brief.idea = '验证工具真实串联'
@@ -63,9 +68,8 @@ function create() {
       originalVolume: 1,
     },
   ]
-  db.insert(schema.creativeProjects)
-    .values({ projectId: id, revision: 1, document: JSON.stringify(document), updatedAt: date })
-    .run()
+  (await db.insert(schema.creativeProjects)
+    .values({ projectId: id, revision: 1, document: JSON.stringify(document), updatedAt: date }).returning().returning().returning().returning().returning().returning().returning().returning())
   return approveCreativeProject(id, 1)
 }
 const step = (
@@ -84,14 +88,14 @@ const step = (
   dependsOn: [],
   ...rest,
 })
-function context(
+async function context(
   projectId: number,
   state: { artifact: PipelineArtifact | null },
   retry = false,
-): StageContext {
+): Promise<StageContext> {
   const definition = getPipelineDefinition('explainer')!
   return {
-    project: getCreativeProject(projectId),
+    project: (await getCreativeProject(projectId)),
     definition,
     stage: definition.stages.find((stage) => stage.id === 'assets')!,
     artifacts: {},
@@ -102,21 +106,20 @@ function context(
     },
   }
 }
-function service(executor = executeTool) {
-  const result = createToolboxService(executor)
+async function service(executor = executeTool) {
+  const result = await createToolboxService(executor)
   services.push(result)
   return result
 }
-function deps(s: ReturnType<typeof createToolboxService>) {
+async function deps(s: ReturnType<typeof createToolboxService>) {
   return {
     start: s.start,
     resume: s.resume,
-    read(projectId: number, id: number) {
-      const row = db
+    async read(projectId: number, id: number) {
+      const row = (await (await db
         .select()
         .from(schema.productionToolJobs)
-        .where(eq(schema.productionToolJobs.id, id))
-        .get()!
+        .where((await eq(schema.productionToolJobs.id, id))))[0])!
       assert.equal(row.projectId, projectId)
       return publicToolboxJob(row)
     },
@@ -130,22 +133,22 @@ async function drain(
   retry = false,
 ) {
   for (let index = 0; index < 30; index++) {
-    const result = await runPipelineTools(context(id, state, retry), planned, 'before', deps(s))
+    const result = await runPipelineTools((await context(id, state, retry)), planned, 'before', deps(s))
     if (!result.waiting) return result
     for (const task of result.runtime.steps) if (task.jobId) await s.idle(task.jobId)
   }
   assert.fail('流程工具未在预期轮询次数内完成')
 }
-after(async () => {
+after(async () => { process.env.DATABASE_URL = __base; await __admin.query(`DROP DATABASE IF EXISTS "${__dbName}"`); await __admin.end();
   for (const s of services) s.dispose()
   await fs.rm(folder, { recursive: true, force: true })
 })
 
 test('real local tools chain files, replace the shot, and retain approval without duplicate tasks', async () => {
-  const p = create(),
+  const p = await create(),
     state = { artifact: null as PipelineArtifact | null },
     calls: string[] = []
-  const s = service(async (ctx) => {
+  const s = await service(async (ctx) => {
     calls.push(ctx.toolId)
     return executeTool(ctx)
   })
@@ -170,7 +173,7 @@ test('real local tools chain files, replace the shot, and retain approval withou
     result.runtime.steps.every((item) => item.status === 'completed'),
     true,
   )
-  const current = getCreativeProject(p.id),
+  const current = (await getCreativeProject(p.id)),
     final = result.runtime.steps[2].files!.find((file) => file.kind === 'image')!
   assert.equal(current.shots[0].imageUrl, final.url)
   assert.equal(current.revision, 3)
@@ -184,12 +187,12 @@ test('real local tools chain files, replace the shot, and retain approval withou
     result.runtime.steps[0].files!.find((file) => file.kind === 'image')!.url,
   )
   await drain(p.id, planned, s, state)
-  assert.equal(listToolboxJobs(p.id).length, 3)
+  assert.equal((await listToolboxJobs(p.id)).length, 3)
   assert.equal(calls.length, 3)
 })
 
 test('structured character outputs feed subsequent tools through native data bindings', async () => {
-  const p = create(),
+  const p = await create(),
     state = { artifact: null as PipelineArtifact | null },
     s = service()
   const planned = [
@@ -216,7 +219,7 @@ test('structured character outputs feed subsequent tools through native data bin
 })
 
 test('unknown submissions stay uncertain on retries and never automatically repost', async () => {
-  const p = create(),
+  const p = await create(),
     state = { artifact: null as PipelineArtifact | null }
   let calls = 0
   const s = service(async (ctx) => {
@@ -225,14 +228,14 @@ test('unknown submissions stay uncertain on retries and never automatically repo
     throw new Error('network lost')
   })
   const planned = [step('request', 'showcase_card', { title: '未知提交' })]
-  const started = await runPipelineTools(context(p.id, state), planned, 'before', deps(s))
+  const started = await runPipelineTools((await context(p.id, state)), planned, 'before', deps(s))
   await s.idle(started.runtime.steps[0].jobId!)
   await assert.rejects(
-    runPipelineTools(context(p.id, state, true), planned, 'before', deps(s)),
+    (await runPipelineTools(context(p.id, state, true), planned, 'before', deps(s))),
     /提交结果未知/,
   )
   await assert.rejects(
-    runPipelineTools(context(p.id, state, true), planned, 'before', deps(s)),
+    (await runPipelineTools(context(p.id, state, true), planned, 'before', deps(s))),
     /提交结果未知/,
   )
   assert.equal(calls, 1)
@@ -259,14 +262,14 @@ test('a failed known remote task resumes the same durable ID and imports its res
   const planned = [
     step('remote', 'showcase_card', { title: '远程恢复' }, { apply: { target: 'source', kind: 'image' } }),
   ]
-  const started = await runPipelineTools(context(p.id, state), planned, 'before', deps(s)),
+  const started = await runPipelineTools((await context(p.id, state)), planned, 'before', deps(s)),
     jobId = started.runtime.steps[0].jobId!
   await s.idle(jobId)
-  const done = await drain(p.id, planned, s, state, true)
+  const done = await drain((await p).id, planned, s, state, true)
   assert.equal(done.runtime.steps[0].jobId, jobId)
-  assert.equal(listToolboxJobs(p.id).length, 1)
+  assert.equal((await listToolboxJobs((await p).id)).length, 1)
   assert.equal(calls, 2)
-  assert.equal(getCreativeProject(p.id).production.sources.length, 1)
+  assert.equal((await getCreativeProject((await p).id)).production.sources.length, 1)
 })
 
 test('external edits are not overwritten while a tool result waits for writeback', async () => {
@@ -281,16 +284,16 @@ test('external edits are not overwritten while a tool result waits for writeback
       { shotId: 'shot-one', apply: { target: 'shot', kind: 'image' } },
     ),
   ]
-  const initialContext = context(p.id, state),
+  const initialContext = (await context((await p).id, state)),
     started = await runPipelineTools(initialContext, planned, 'before', deps(s))
   await s.idle(started.runtime.steps[0].jobId!)
-  saveCreativeProject(p.id, { ...getCreativeProject(p.id), title: '用户修改的名称' })
+  (await saveCreativeProject((await p).id, { ...(await getCreativeProject((await p).id)), title: '用户修改的名称' }))
   await assert.rejects(
-    runPipelineTools({ ...initialContext, previous: state.artifact }, planned, 'before', deps(s)),
+    (await runPipelineTools({ ...initialContext, previous: state.artifact }, planned, 'before', deps(s))),
     /项目被修改/,
   )
-  assert.equal(getCreativeProject(p.id).title, '用户修改的名称')
-  assert.equal(getCreativeProject(p.id).shots[0].imageUrl, null)
+  assert.equal((await getCreativeProject((await p).id)).title, '用户修改的名称')
+  assert.equal((await getCreativeProject((await p).id)).shots[0].imageUrl, null)
 })
 
 test('interruption after apply reconciles exactly our write and rejects unrelated edits', async () => {
@@ -305,29 +308,29 @@ test('interruption after apply reconciles exactly our write and rejects unrelate
       { shotId: 'shot-one', apply: { target: 'shot', kind: 'image' } },
     ),
   ]
-  const started = await runPipelineTools(context(p.id, state), planned, 'before', deps(s))
+  const started = await runPipelineTools((await context(p.id, state)), planned, 'before', deps(s))
   await s.idle(started.runtime.steps[0].jobId!)
   await assert.rejects(
-    runPipelineTools(context(p.id, state), planned, 'before', {
+    (await runPipelineTools(context(p.id, state), planned, 'before', {
       ...deps(s),
       async apply(...args: Parameters<typeof applyToolboxOutput>) {
         await applyToolboxOutput(...args)
         throw new Error('simulated process loss')
       },
-    }),
+    })),
   )
-  assert.equal(getCreativeProject(p.id).revision, 2)
-  assert.equal(reconcilePipelineToolRevision(p.id, 1, state.artifact), 2)
-  assert.equal(getCreativeProject(p.id).approvedRevision, 2)
-  const p2 = create(),
+  assert.equal((await getCreativeProject((await p).id)).revision, 2)
+  assert.equal((await reconcilePipelineToolRevision((await p).id, 1, state.artifact)), 2)
+  assert.equal((await getCreativeProject((await p).id)).approvedRevision, 2)
+  const p2 = await create(),
     state2 = { artifact: null as PipelineArtifact | null }
-  const run2 = await runPipelineTools(context(p2.id, state2), planned, 'before', deps(s))
+  const run2 = await runPipelineTools((await context(p2.id, state2)), planned, 'before', deps(s))
   await s.idle(run2.runtime.steps[0].jobId!)
-  saveCreativeProject(p2.id, { ...getCreativeProject(p2.id), title: '无关手工修改' })
-  assert.equal(reconcilePipelineToolRevision(p2.id, 1, state2.artifact), null)
+  (await saveCreativeProject(p2.id, { ...(await getCreativeProject(p2.id)), title: '无关手工修改' }))
+  assert.equal((await reconcilePipelineToolRevision(p2.id, 1, state2.artifact)), null)
 })
 
-test('binding lookup rejects prototype paths and treats output as plain data', () => {
+test('binding lookup rejects prototype paths and treats output as plain data', async () => {
   const record = {
     ...step('x', 'showcase_card', {}),
     status: 'completed' as const,
@@ -349,7 +352,7 @@ test('tool dependency cycles and missing prerequisites stop before any request',
     state = { artifact: null as PipelineArtifact | null },
     s = service()
   await assert.rejects(
-    runPipelineTools(
+    (await runPipelineTools(
       context(p.id, state),
       [
         step('a', 'showcase_card', { title: 'a' }, { dependsOn: ['b'] }),
@@ -357,19 +360,19 @@ test('tool dependency cycles and missing prerequisites stop before any request',
       ],
       'before',
       deps(s),
-    ),
+    )),
     /依赖存在循环/,
   )
   await assert.rejects(
-    runPipelineTools(
+    (await runPipelineTools(
       context(p.id, state),
       [step('a', 'showcase_card', { title: 'a' }, { dependsOn: ['missing'] })],
       'before',
       deps(s),
-    ),
+    )),
     /缺少前序/,
   )
-  assert.equal(listToolboxJobs(p.id).length, 0)
+  assert.equal((await listToolboxJobs((await p).id)).length, 0)
 })
 
 test('explicit failed quality reports persist and prevent dependent delivery', async () => {
@@ -384,10 +387,10 @@ test('explicit failed quality reports persist and prevent dependent delivery', a
     step('qa', 'visual_qa', { sourceUrl: '/static/placeholder.mp4' }, { role: 'analysis' }),
     step('delivery', 'export_bundle', { sourceUrls: [] }, { dependsOn: ['qa'], role: 'delivery' }),
   ]
-  const started = await runPipelineTools(context(p.id, state), planned, 'before', deps(s))
+  const started = await runPipelineTools((await context(p.id, state)), planned, 'before', deps(s))
   await s.idle(started.runtime.steps[0].jobId!)
-  await assert.rejects(runPipelineTools(context(p.id, state), planned, 'before', deps(s)), /检查未通过/)
-  assert.equal(listToolboxJobs(p.id).length, 1)
+  await assert.rejects((await runPipelineTools(context(p.id, state), planned, 'before', deps(s))), /检查未通过/)
+  assert.equal((await listToolboxJobs((await p).id)).length, 1)
   assert.deepEqual((state.artifact!.data!.toolRuntime as any).steps[0].data.issues, ['编码尺寸不符'])
 })
 
@@ -433,8 +436,8 @@ test('generated narration and music automatically enter global audio tracks and 
       { role: 'music', apply: { target: 'music', kind: 'audio' } },
     ),
   ]
-  const done = await drain(p.id, planned, s, state),
-    current = getCreativeProject(p.id)
+  const done = await drain((await p).id, planned, s, state),
+    current = (await getCreativeProject((await p).id))
   assert.equal(current.audio.narrationUrl, done.runtime.steps[0].files![0].url)
   assert.equal(current.audio.musicUrl, done.runtime.steps[1].files![0].url)
   assert.equal(current.approvedRevision, 3)
@@ -444,8 +447,8 @@ test('generated narration and music automatically enter global audio tracks and 
 test('real generated VTT subtitles automatically write timed transcript into their source', async () => {
   const p = create(),
     sourceId = (await import('node:crypto')).randomUUID(),
-    relative = `creative/${p.id}/source.wav`
-  await fs.mkdir(path.join(folder, 'static', 'creative', String(p.id)), { recursive: true })
+    relative = `creative/${(await p).id}/source.wav`
+  await fs.mkdir(path.join(folder, 'static', 'creative', String((await p).id)), { recursive: true })
   await fs.writeFile(path.join(folder, 'static', relative), wave())
   const source = {
     id: sourceId,
@@ -457,11 +460,11 @@ test('real generated VTT subtitles automatically write timed transcript into the
     transcript: '',
     attribution: '',
   }
-  saveCreativeProject(p.id, { ...p, production: { ...p.production, sources: [source] } }, source)
+  saveCreativeProject((await p).id, { ...p, production: { ...(await p).production, sources: [source] } }, source)
   const state = { artifact: null as PipelineArtifact | null },
     s = service()
   const done = await drain(
-    p.id,
+    (await p).id,
     [
       step(
         'subtitles',
@@ -474,11 +477,11 @@ test('real generated VTT subtitles automatically write timed transcript into the
     state,
   )
   assert.equal(done.runtime.steps[0].writeback, 'transcript')
-  assert.match(getCreativeProject(p.id).production.sources[0].transcript, /00:00:00,000 --> 00:00:01,800/)
-  assert.match(getCreativeProject(p.id).production.sources[0].transcript, /真实时码字幕/)
-  const before = getCreativeProject(p.id).revision
+  assert.match(getCreativeProject((await p).id).production.sources[0].transcript, /00:00:00,000 --> 00:00:01,800/)
+  assert.match(getCreativeProject((await p).id).production.sources[0].transcript, /真实时码字幕/)
+  const before = getCreativeProject((await p).id).revision
   await drain(
-    p.id,
+    (await p).id,
     [
       step(
         'subtitles',
@@ -490,7 +493,7 @@ test('real generated VTT subtitles automatically write timed transcript into the
     s,
     state,
   )
-  assert.equal(getCreativeProject(p.id).revision, before)
+  assert.equal(getCreativeProject((await p).id).revision, before)
 })
 
 test('a real video passes native QA, writes a render record, and feeds a downloadable delivery archive', async () => {
@@ -521,8 +524,8 @@ test('a real video passes native QA, writes a render record, and feeds a downloa
       { role: 'delivery', dependsOn: ['qa'], apply: { target: 'delivery', kind: 'archive' } },
     ),
   ]
-  const result = await drain(p.id, planned, s, state),
-    renders = getCreativeProject(p.id).renders
+  const result = await drain((await p).id, planned, s, state),
+    renders = (await getCreativeProject((await p).id)).renders
   assert.equal(renders.length, 1)
   assert.equal(renders[0].status, 'completed')
   assert.equal(renders[0].videoUrl, result.runtime.steps[0].files!.find((file) => file.kind === 'video')!.url)
@@ -531,8 +534,8 @@ test('a real video passes native QA, writes a render record, and feeds a downloa
   delete persisted.appliedRevision
   delete persisted.writeback
   persisted.data = {}
-  const recovered = await drain(p.id, planned, s, state)
-  assert.equal(getCreativeProject(p.id).renders.length, 1)
+  const recovered = await drain((await p).id, planned, s, state)
+  assert.equal((await getCreativeProject((await p).id)).renders.length, 1)
   assert.equal(recovered.runtime.steps[0].data!.renderId, renders[0].id)
   const archive = result.runtime.steps[2].files!.find((file) => file.kind === 'archive')!
   assert.equal(
@@ -548,20 +551,20 @@ test('a durable submission lost before its stage ID checkpoint is recovered inst
   let requests = 0
   const planned = [step('once', 'showcase_card', { title: '提交后中断', width: 64, height: 64 })]
   await assert.rejects(
-    runPipelineTools(context(p.id, state), planned, 'before', {
+    (await runPipelineTools(context(p.id, state), planned, 'before', {
       ...deps(s),
       async start(...args: Parameters<typeof s.start>) {
         requests++
         await s.start(...args)
         throw new Error('lost before ID checkpoint')
       },
-    }),
+    })),
   )
-  const job = listToolboxJobs(p.id)[0]
+  const job = (await listToolboxJobs((await p).id))[0]
   await s.idle(job.id)
-  const done = await drain(p.id, planned, s, state, true)
+  const done = await drain((await p).id, planned, s, state, true)
   assert.equal(done.runtime.steps[0].jobId, job.id)
-  assert.equal(listToolboxJobs(p.id).length, 1)
+  assert.equal((await listToolboxJobs((await p).id)).length, 1)
   assert.equal(requests, 1)
 })
 
@@ -570,7 +573,7 @@ test('a dependency graph is executed topologically even when declarations are re
     state = { artifact: null as PipelineArtifact | null },
     s = service()
   const result = await drain(
-    p.id,
+    (await p).id,
     [
       step(
         'second',
@@ -587,14 +590,14 @@ test('a dependency graph is executed topologically even when declarations are re
     result.runtime.steps.every((item) => item.status === 'completed'),
     true,
   )
-  assert.equal(listToolboxJobs(p.id).length, 2)
+  assert.equal((await listToolboxJobs((await p).id)).length, 2)
 })
 
 test('untimed recognition writes real transcript text without creating subtitle timing', async () => {
   const p = create(),
     sourceId = (await import('node:crypto')).randomUUID(),
-    relative = `creative/${p.id}/original.wav`
-  await fs.mkdir(path.join(folder, 'static', 'creative', String(p.id)), { recursive: true })
+    relative = `creative/${(await p).id}/original.wav`
+  await fs.mkdir(path.join(folder, 'static', 'creative', String((await p).id)), { recursive: true })
   await fs.writeFile(path.join(folder, 'static', relative), wave())
   const source = {
     id: sourceId,
@@ -606,7 +609,7 @@ test('untimed recognition writes real transcript text without creating subtitle 
     transcript: '',
     attribution: '',
   }
-  saveCreativeProject(p.id, { ...p, production: { ...p.production, sources: [source] } }, source)
+  saveCreativeProject((await p).id, { ...p, production: { ...(await p).production, sources: [source] } }, source)
   const state = { artifact: null as PipelineArtifact | null },
     s = service(async (ctx) => {
       const file = path.join(ctx.outputDir, 'transcription.json')
@@ -618,7 +621,7 @@ test('untimed recognition writes real transcript text without creating subtitle 
       }
     })
   const done = await drain(
-    p.id,
+    (await p).id,
     [
       step(
         'text-transcript',
@@ -630,14 +633,14 @@ test('untimed recognition writes real transcript text without creating subtitle 
     s,
     state,
   )
-  assert.equal(getCreativeProject(p.id).production.sources[0].transcript, '实际识别的文本原稿')
+  assert.equal(getCreativeProject((await p).id).production.sources[0].transcript, '实际识别的文本原稿')
   assert.equal(done.runtime.steps[0].data!.transcriptTiming, 'untimed')
-  assert.equal(getCreativeProject(p.id).shots[0].caption, '')
+  assert.equal(getCreativeProject((await p).id).shots[0].caption, '')
 })
 
 test('real silence cutting updates video and shot duration together while preserving source transcript', async () => {
   const p = create(),
-    root = path.join(folder, 'static', 'creative', String(p.id)),
+    root = path.join(folder, 'static', 'creative', (await String((await p).id))),
     sourceId = (await import('node:crypto')).randomUUID()
   await fs.mkdir(root, { recursive: true })
   const pcm = wave(2)
@@ -677,26 +680,26 @@ test('real silence cutting updates video and shot duration together while preser
       transcript: '原片完整原稿不改动',
       attribution: '',
     }
-  const updated = saveCreativeProject(
-    p.id,
+  const updated = (await saveCreativeProject(
+    (await p).id,
     {
       ...p,
-      shots: p.shots.map((shot) => ({
+      shots: (await p).shots.map((shot) => ({
         ...shot,
         mediaType: 'video',
         videoUrl: url,
         caption: '保留完整原句',
         duration: 2,
       })),
-      production: { ...p.production, sources: [source] },
+      production: { ...(await p).production, sources: [source] },
     },
     source,
-  )
-  approveCreativeProject(p.id, updated.revision)
+  ))
+  (await approveCreativeProject((await p).id, (await updated).revision))
   const state = { artifact: null as PipelineArtifact | null },
     s = service()
   const done = await drain(
-    p.id,
+    (await p).id,
     [
       step(
         'silence',
@@ -708,7 +711,7 @@ test('real silence cutting updates video and shot duration together while preser
     s,
     state,
   )
-  const current = getCreativeProject(p.id),
+  const current = (await getCreativeProject((await p).id)),
     shot = current.shots[0]
   assert.ok(shot.duration < 1.5 && shot.duration > 0.5, `实际裁切时长: ${shot.duration}`)
   assert.equal(shot.duration, done.runtime.steps[0].data!.appliedDuration)
@@ -720,12 +723,12 @@ test('real silence cutting updates video and shot duration together while preser
 })
 
 test('short TTS is padded to the approved shot and stays audible when original video sound is muted', async () => {
-  const p = create(),
-    initial = saveCreativeProject(p.id, {
+  const p = (await create()),
+    initial = (await saveCreativeProject((await p).id, {
       ...p,
-      shots: p.shots.map((shot) => ({ ...shot, narration: '短配音', originalVolume: 0 })),
-    })
-  approveCreativeProject(p.id, initial.revision)
+      shots: (await p).shots.map((shot) => ({ ...shot, narration: '短配音', originalVolume: 0 })),
+    }))
+  (await approveCreativeProject((await p).id, (await initial).revision))
   const state = { artifact: null as PipelineArtifact | null }
   let speechCalls = 0
   const s = service(async (ctx) => {
@@ -749,8 +752,8 @@ test('short TTS is padded to the approved shot and stays audible when original v
       { role: 'voice', shotId: 'shot-one', apply: { target: 'shot', kind: 'audio' } },
     ),
   ]
-  const done = await drain(p.id, planned, s, state),
-    current = getCreativeProject(p.id),
+  const done = await drain((await p).id, planned, s, state),
+    current = (await getCreativeProject((await p).id)),
     voice = done.runtime.steps[1]
   assert.equal((voice.data!.speechFit as any).targetDuration, 2)
   assert.equal((voice.data!.speechFit as any).padded, true)
@@ -785,9 +788,9 @@ test('short TTS is padded to the approved shot and stays audible when original v
   let energy = 0
   for (let sample = 0; sample < 4800; sample++) energy += pcm.readInt16LE(sample * 2) ** 2
   assert.ok(Math.sqrt(energy / 4800) > 100, '新增配音应保留真实可听声音，不能被原声音量0静音')
-  await drain(p.id, planned, s, state)
+  await drain((await p).id, planned, s, state)
   assert.equal(speechCalls, 1)
-  assert.equal(getCreativeProject(p.id).approvedRevision, current.revision)
+  assert.equal((await getCreativeProject((await p).id)).approvedRevision, current.revision)
 })
 
 test('TTS up to 1.5x is fitted locally and excessive speech pauses without another generation', async () => {
@@ -808,7 +811,7 @@ test('TTS up to 1.5x is fitted locally and excessive speech pauses without anoth
       { role: 'voice', shotId: 'shot-one', apply: { target: 'shot', kind: 'audio' } },
     ),
   ]
-  const done = await drain(p.id, planned, s, state)
+  const done = await drain((await p).id, planned, s, state)
   assert.ok(Math.abs((done.runtime.steps[0].data!.speechFit as any).speed - 1.2) < 0.01)
   assert.equal(calls, 1)
   const p2 = create(),
@@ -818,36 +821,36 @@ test('TTS up to 1.5x is fitted locally and excessive speech pauses without anoth
     await fs.writeFile(file, wave(3.2))
     return { summary: '过长配音', files: [{ path: file, name: 'long.wav', kind: 'audio' }] }
   })
-  const started = await runPipelineTools(context(p2.id, state2), planned, 'before', deps(long))
+  const started = await runPipelineTools((await context((await p2).id, state2)), planned, 'before', deps(long))
   await long.idle(started.runtime.steps[0].jobId!)
   await assert.rejects(
-    runPipelineTools(context(p2.id, state2), planned, 'before', deps(long)),
+    (await runPipelineTools(context((await p2).id, state2), planned, 'before', deps(long))),
     /超过1.5倍语速/,
   )
   await assert.rejects(
-    runPipelineTools(context(p2.id, state2, true), planned, 'before', deps(long)),
+    (await runPipelineTools(context((await p2).id, state2, true), planned, 'before', deps(long))),
     /超过1.5倍语速/,
   )
-  assert.equal(listToolboxJobs(p2.id).length, 1)
-  assert.equal(getCreativeProject(p2.id).shots[0].audioUrl, null)
+  assert.equal((await listToolboxJobs((await p2).id)).length, 1)
+  assert.equal((await getCreativeProject((await p2).id)).shots[0].audioUrl, null)
 })
 
 test('native avatar video adopts actual duration, recovers its write, extracts original voice and renders audible speech', async () => {
-  const p = create(),
-    changed = saveCreativeProject(p.id, {
+  const p = (await create()),
+    changed = (await saveCreativeProject((await p).id, {
       ...p,
-      shots: p.shots.map((shot) => ({
+      shots: (await p).shots.map((shot) => ({
         ...shot,
         duration: 5,
         mediaType: 'video',
         narration: '原生数字人实际讲稿',
         originalVolume: 0,
       })),
-    })
-  approveCreativeProject(p.id, changed.revision)
+    }))
+  (await approveCreativeProject((await p).id, (await changed).revision))
   const date = new Date().toISOString(),
-    configId = getInsertId(
-      db
+    configId = (await getInsertId(
+      (await db
         .insert(schema.aiServiceConfigs)
         .values({
           serviceType: 'avatar',
@@ -859,9 +862,8 @@ test('native avatar video adopts actual duration, recovers its write, extracts o
           isActive: true,
           createdAt: date,
           updatedAt: date,
-        })
-        .run(),
-    )
+        }).returning().returning().returning().returning().returning().returning().returning().returning()),
+    ))
   const state = { artifact: null as PipelineArtifact | null }
   let providerCalls = 0
   const { execFile } = await import('node:child_process'),
@@ -923,14 +925,14 @@ test('native avatar video adopts actual duration, recovers its write, extracts o
       },
     ),
   ]
-  const started = await runPipelineTools(context(p.id, state), planned, 'before', deps(s))
+  const started = await runPipelineTools((await context(p.id, state)), planned, 'before', deps(s))
   await s.idle(started.runtime.steps[0].jobId!)
-  const baseContext = context(p.id, state)
+  const baseContext = (await context((await p).id, state))
   await assert.rejects(
     runPipelineTools(
       {
         ...baseContext,
-        checkpoint: (artifact, revision) => {
+        checkpoint: async (artifact, revision) => {
           if (revision === changed.revision + 1) throw new Error('simulated loss after avatar save')
           baseContext.checkpoint(artifact, revision)
         },
@@ -940,17 +942,17 @@ test('native avatar video adopts actual duration, recovers its write, extracts o
       deps(s),
     ),
   )
-  assert.ok(Math.abs(getCreativeProject(p.id).shots[0].duration - 3) < 0.1)
-  assert.equal(reconcilePipelineToolRevision(p.id, changed.revision, state.artifact), changed.revision + 1)
-  const done = await drain(p.id, planned, s, state),
-    current = getCreativeProject(p.id)
+  assert.ok(Math.abs((await getCreativeProject((await p).id)).shots[0].duration - 3) < 0.1)
+  assert.equal((await reconcilePipelineToolRevision((await p).id, changed.revision, state.artifact)), changed.revision + 1)
+  const done = await drain((await p).id, planned, s, state),
+    current = (await getCreativeProject((await p).id))
   assert.equal(done.runtime.steps[0].data!.nativeAvatar, true)
   assert.ok(Math.abs(current.shots[0].duration - 3) < 0.1)
   assert.equal(current.shots[0].trimStart, 0)
   assert.ok(current.shots[0].audioUrl?.includes('voice-fitted-'))
   assert.ok(Math.abs((done.runtime.steps[1].data!.speechFit as any).targetDuration - 3) < 0.1)
   assert.equal(providerCalls, 1)
-  assert.equal(listToolboxJobs(p.id).length, 2)
+  assert.equal((await listToolboxJobs((await p).id)).length, 2)
   const { renderCreativeVideo } = await import('../../src/drama/services/creative-renderer.js')
   const render = await renderCreativeVideo({ ...current, projectId: current.id })
   assert.ok(Math.abs(render.duration - 3) < 0.15)
@@ -980,10 +982,10 @@ test('native avatar video adopts actual duration, recovers its write, extracts o
   assert.equal(current.approvedRevision, current.revision)
 })
 test('unified kling speech tool rides the configured company speech service', async () => {
-  const p = create(),
+  const p = (await create()),
     now = new Date().toISOString(),
-    configId = getInsertId(
-      db
+    configId = (await getInsertId(
+      (await db
         .insert(schema.aiServiceConfigs)
         .values({
           serviceType: 'speech',
@@ -995,9 +997,8 @@ test('unified kling speech tool rides the configured company speech service', as
           isActive: true,
           createdAt: now,
           updatedAt: now,
-        })
-        .run(),
-    )
+        }).returning().returning().returning().returning().returning().returning().returning().returning()),
+    ))
   const { execFile } = await import('node:child_process'),
     { promisify } = await import('node:util'),
     { ffmpegPath } = await import('../../src/drama/utils/ffmpeg.js')
@@ -1031,7 +1032,7 @@ test('unified kling speech tool rides the configured company speech service', as
       configId,
     })
     await s.idle(job.id)
-    const finished = listToolboxJobs(p.id)[0]
+    const finished = (await listToolboxJobs((await p).id))[0]
     assert.equal(finished.status, 'completed')
     assert.equal(calls.length, 1)
     assert.equal(calls[0].url, 'https://company.invalid/api/media/speech')

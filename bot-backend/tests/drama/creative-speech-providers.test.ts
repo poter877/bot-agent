@@ -8,7 +8,13 @@ import { randomUUID } from "node:crypto";
 const directory = await fs.mkdtemp(
   path.join(os.tmpdir(), "vf-speech-providers-"),
 );
-process.env.SQLITE_PATH = path.join(directory, "db.sqlite");
+import { Pool } from 'pg'
+const __base = process.env.DATABASE_URL
+if (!__base) throw new Error('tests need DATABASE_URL (point at the test cluster, e.g. bot_backend_test)')
+const __admin = new Pool({ connectionString: __base })
+const __dbName = 'drama_' + process.pid + '_' + (Date.now() % 1000000)
+await __admin.query(`CREATE DATABASE "${__dbName}" TEMPLATE bot_backend_test`)
+process.env.DATABASE_URL = __base.replace(/\/[^/?]+$/, `/${__dbName}`)
 process.env.HUOBAO_DATA_DIR = directory;
 process.env.STORAGE_PATH = path.join(directory, "static");
 process.env.MYSQL_AUTO_IMPORT = "false";
@@ -47,11 +53,11 @@ before(async () => {
   ]);
   wav = await fs.readFile(file);
 });
-after(async () => {
-  db.$client.close();
+await after(async () => { process.env.DATABASE_URL = __base; await __admin.query(`DROP DATABASE IF EXISTS "${__dbName}"`); await __admin.end();
+  await db.$client.close();
   await fs.rm(directory, { recursive: true, force: true });
 });
-function project() {
+async function project() {
   const document = createCreativeDocument("talking_head");
   document.production.fields.speechVoice = "coral";
   document.brief.idea = "场景";
@@ -88,8 +94,8 @@ function project() {
     },
   ];
   const ts = new Date().toISOString(),
-    id = getInsertId(
-      db
+    id = (await getInsertId(
+      (await db
         .insert(schema.dramas)
         .values({
           title: "配音测试",
@@ -97,22 +103,20 @@ function project() {
           creativeCategory: "talking_head",
           createdAt: ts,
           updatedAt: ts,
-        })
-        .run(),
-    );
-  db.insert(schema.creativeProjects)
+        }).returning().returning().returning().returning().returning().returning().returning().returning()),
+    ));
+  await db.insert(schema.creativeProjects)
     .values({
       projectId: id,
       document: JSON.stringify(document),
       revision: 1,
       updatedAt: ts,
-    })
-    .run();
+    }).returning().returning().returning().returning().returning().returning().returning().returning();
   return getCreativeProject(id);
 }
-test("pipeline company speech posts the OpenAI-compatible contract and retains fitting/approval cache", async () => {
-  let p = project();
-  p = approveCreativeProject(p.id, p.revision);
+(await test("pipeline company speech posts the OpenAI-compatible contract and retains fitting/approval cache", async () => {
+  let p = await project();
+  p = (await approveCreativeProject(p.id, p.revision));
   let calls = 0;
   const deps = {
     config: async () => ({
@@ -139,8 +143,8 @@ test("pipeline company speech posts the OpenAI-compatible contract and retains f
   };
   const saved = await synthesizeCreativeShot(
     p.id,
-    p.revision,
-    p.shots[0].id,
+    await p.revision,
+    await p.shots[0].id,
     deps,
   );
   assert.equal(saved.approvedRevision, saved.revision);
@@ -150,19 +154,19 @@ test("pipeline company speech posts the OpenAI-compatible contract and retains f
     false,
   );
   assert.ok(Math.abs(info.duration! - 3) < 0.04);
-  const cleared = saveCreativeProject(p.id, {
+  const cleared = (await saveCreativeProject(p.id, {
       ...saved,
       shots: saved.shots.map((shot) => ({ ...shot, audioUrl: null })),
-    }),
+    })),
     cached = await synthesizeCreativeShot(
       p.id,
-      cleared.revision,
-      cleared.shots[0].id,
+      await cleared.revision,
+      await cleared.shots[0].id,
       deps,
     );
   assert.equal(calls, 1);
   assert.equal(cached.shots[0].audioUrl, saved.shots[0].audioUrl);
-});
+}));
 test("external speech caches completed provider audio across concurrent project edits", async () => {
   const p = project();
   let calls = 0;
@@ -177,8 +181,8 @@ test("external speech caches completed provider audio across concurrent project 
     }),
     fetch: async () => {
       calls++;
-      saveCreativeProject(p.id, {
-        ...getCreativeProject(p.id),
+      await saveCreativeProject((await p).id, {
+        ...(await getCreativeProject((await p).id)),
         title: "保留并发修改",
       });
       return Response.json({
@@ -188,20 +192,20 @@ test("external speech caches completed provider audio across concurrent project 
     },
   };
   await assert.rejects(
-    synthesizeCreativeShot(p.id, p.revision, p.shots[0].id, deps),
+    synthesizeCreativeShot((await p).id, (await p).revision, (await p).shots[0].id, deps),
     /修改|更新|版本/,
   );
-  const current = getCreativeProject(p.id),
+  const current = (await getCreativeProject((await p).id)),
     saved = await synthesizeCreativeShot(
-      p.id,
-      current.revision,
-      current.shots[0].id,
+      (await p).id,
+      await current.revision,
+      await current.shots[0].id,
       deps,
     );
   assert.equal(saved.title, "保留并发修改");
   assert.equal(calls, 1);
 });
-test("a failed Fal queue call resolves its attempt and the retry posts a fresh job", async () => {
+await test("a failed Fal queue call resolves its attempt and the retry posts a fresh job", async () => {
   const p = project();
   let posts = 0;
   const deps = {
@@ -228,25 +232,25 @@ test("a failed Fal queue call resolves its attempt and the retry posts a fresh j
     },
   };
   await assert.rejects(
-    synthesizeCreativeShot(p.id, p.revision, p.shots[0].id, deps),
+    synthesizeCreativeShot((await p).id, (await p).revision, (await p).shots[0].id, deps),
     /连接中断/,
   );
   assert.equal(posts, 1);
   const saved = await synthesizeCreativeShot(
-    p.id,
-    p.revision,
-    p.shots[0].id,
+    (await p).id,
+    await p.revision,
+    await p.shots[0].id,
     deps,
   );
   assert.equal(posts, 2);
   const info = await inspectCreativeSource(
-    p.id,
+    (await p).id,
     saved.shots[0].audioUrl!,
     false,
   );
   assert.ok(info.duration! > 0);
 });
-test("pipeline rejects text-only ASR output and never creates synthetic subtitle timing", async () => {
+await test("pipeline rejects text-only ASR output and never creates synthetic subtitle timing", async () => {
   const p = project();
   let calls = 0;
   const deps = {
@@ -263,14 +267,14 @@ test("pipeline rejects text-only ASR output and never creates synthetic subtitle
     },
   };
   await assert.rejects(
-    transcribeCreativeSource(
+    (await transcribeCreativeSource(
       p.id,
-      p.revision,
-      p.production.sources[0].id,
+      await p.revision,
+      await p.production.sources[0].id,
       deps,
-    ),
+    )),
     /未返回有效的逐字稿与时码/,
   );
   assert.equal(calls, 1);
-  assert.equal(getCreativeProject(p.id).production.sources[0].transcript, "");
+  assert.equal((await getCreativeProject(p.id)).production.sources[0].transcript, "");
 });

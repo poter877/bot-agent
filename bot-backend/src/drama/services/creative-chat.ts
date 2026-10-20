@@ -107,9 +107,15 @@ const activeChats = new Set<number>()
 export async function chatWithCreativeProject(id: number, revision: number, message: string,
   generate: typeof generateReply = generateReply) {
   if (activeChats.has(id)) throw new CreativeError('助手正在处理上一条消息，请稍候', 409)
-  const project = await requireCreativeRevision(id, revision)
-  if (await hasRunningCreativeTask(id)) throw new CreativeError('素材仍在生成，请完成后再通过对话修改方案', 409)
   activeChats.add(id)
+  let project
+  try {
+    project = await requireCreativeRevision(id, revision)
+    if (await hasRunningCreativeTask(id)) throw new CreativeError('素材仍在生成，请完成后再通过对话修改方案', 409)
+  } catch (err) {
+    activeChats.delete(id)
+    throw err
+  }
   let userId: number | undefined
   try {
     const history = await listCreativeMessages(id)

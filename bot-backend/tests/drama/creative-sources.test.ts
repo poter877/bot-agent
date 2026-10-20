@@ -29,22 +29,22 @@ test('catalog covers every production flow with fields, steps and no server prom
   assert.deepEqual(creativeDocumentSchema.parse(legacy).production, {fields: {}, sources: []})
 })
 
-test('SRT import preserves gaps, source offsets and total duration', () => {
+await test('SRT import preserves gaps, source offsets and total duration', async () => {
   const project = sourceProject()
   const ranges = parseCreativeSrt('1\n00:00:01,000 --> 00:00:02,000\n<b>第一句</b>\n\n2\n00:00:03,000 --> 00:00:04,000\n第二句')
   const shots = sourceSelectionsToShots(project, project.production.sources[0].id, ranges, true)
-  assert.deepEqual(shots.map(s => [s.trimStart, s.duration, s.caption]), [[0,1,''],[1,1,'第一句'],[2,1,''],[3,1,'第二句'],[4,1,'']])
-  assert.ok(shots.every(s => s.videoUrl === project.production.sources[0].url))
-  assert.equal(new Set(shots.map(s => s.id)).size, 5)
+  assert.deepEqual((await shots).map(s => [s.trimStart, s.duration, s.caption]), [[0,1,''],[1,1,'第一句'],[2,1,''],[3,1,'第二句'],[4,1,'']])
+  assert.ok((await shots).every(s => s.videoUrl === project.production.sources[0].url))
+  assert.equal(new Set((await shots).map(s => s.id)).size, 5)
   assert.throws(() => parseCreativeSrt('1\n00:00:02,000 --> 00:00:01,000\n错误'), /时码/)
   assert.throws(() => parseCreativeSrt('1\n00:61:00,000 --> 00:62:00,000\n错误'), /时间/)
   assert.throws(() => sourceSelectionsToShots(project, project.production.sources[0].id, [{start:4,end:6,title:'越界',caption:''}]), /超出/)
   assert.throws(() => sourceSelectionsToShots(project, randomUUID(), ranges), /不存在/)
 })
 
-test('podcast excerpts retain independently trimmed audio and waveform cover', () => {
+await test('podcast excerpts retain independently trimmed audio and waveform cover', async () => {
   const project = sourceProject('audio'), source = project.production.sources[0]
-  const [shot] = sourceSelectionsToShots(project, source.id, [{start:2,end:4,title:'观点',caption:'原话'}])
+  const [shot] = (await sourceSelectionsToShots(project, source.id, [{start:2,end:4,title:'观点',caption:'原话'}]))
   assert.equal(shot.audioUrl, source.url)
   assert.equal(shot.audioTrimStart, 2)
   assert.equal(shot.imageUrl, source.coverUrl)
@@ -62,11 +62,11 @@ test('planning resolves known source IDs server-side and rejects invented or out
   assert.throws(() => parseGeneratedPlan(JSON.stringify({...plan,shots:[{...plan.shots[0],trimStart:2}]}),project), /超出/)
 })
 
-test('caption translation changes only text and retains original identity, media and timing', () => {
-  const project = sourceProject()
-  project.shots = sourceSelectionsToShots(project, project.production.sources[0].id, [{start:1,end:4,title:'原片',caption:'原话'}])
+await test('caption translation changes only text and retains original identity, media and timing', async () => {
+  const project = (await sourceProject())
+  (await project).shots = sourceSelectionsToShots(project, (await project).production.sources[0].id, [{start:1,end:4,title:'原片',caption:'原话'}])
   const translated = parseCaptionTranslation(JSON.stringify([{id:project.shots[0].id,caption:'Translation',narration:''}]), project)
-  assert.deepEqual(translated.shots[0], {...project.shots[0],caption:'Translation'})
+  assert.deepEqual(translated.shots[0], {...(await project).shots[0],caption:'Translation'})
   assert.throws(() => parseCaptionTranslation('[]', project), /缺少/)
   assert.throws(() => parseCaptionTranslation(JSON.stringify([{id:'invented',caption:'x',narration:''}]), project), /未知/)
   assert.throws(() => parseCaptionTranslation(JSON.stringify([{id:project.shots[0].id,caption:'x',narration:'',duration:1}]), project))

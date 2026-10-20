@@ -17,7 +17,13 @@ process.env.HERMES_AGENT_URL = BASE_URL
 process.env.HERMES_AGENT_KEY = 'hermes-token'
 
 const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'film-build-agent-'))
-process.env.SQLITE_PATH = path.join(dir, 'test.sqlite')
+import { Pool } from 'pg'
+const __base = process.env.DATABASE_URL
+if (!__base) throw new Error('tests need DATABASE_URL (point at the test cluster, e.g. bot_backend_test)')
+const __admin = new Pool({ connectionString: __base })
+const __dbName = 'drama_' + process.pid + '_' + (Date.now() % 1000000)
+await __admin.query(`CREATE DATABASE "${__dbName}" TEMPLATE bot_backend_test`)
+process.env.DATABASE_URL = __base.replace(/\/[^/?]+$/, `/${__dbName}`)
 process.env.STORAGE_PATH = path.join(dir, 'static')
 process.env.MYSQL_AUTO_IMPORT = 'false'
 if (process.env.BLENDER_PATH) delete process.env.BLENDER_PATH
@@ -161,3 +167,5 @@ test('collectWrittenFiles：write_file/generate_texture 行收集、归一化、
 test('超时预算：对齐原本地循环的 30 分钟（分钟级长任务预算）', () => {
   assert.equal(BUILD_AGENT_TIMEOUT_MS, 30 * 60_000)
 })
+
+after(async () => { process.env.DATABASE_URL = __base; await __admin.query(`DROP DATABASE IF EXISTS "${__dbName}"`); await __admin.end(); })

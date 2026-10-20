@@ -4,7 +4,13 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import os from 'node:os'
 const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'production-transcription-'))
-process.env.SQLITE_PATH = path.join(dir, 'test.sqlite')
+import { Pool } from 'pg'
+const __base = process.env.DATABASE_URL
+if (!__base) throw new Error('tests need DATABASE_URL (point at the test cluster, e.g. bot_backend_test)')
+const __admin = new Pool({ connectionString: __base })
+const __dbName = 'drama_' + process.pid + '_' + (Date.now() % 1000000)
+await __admin.query(`CREATE DATABASE "${__dbName}" TEMPLATE bot_backend_test`)
+process.env.DATABASE_URL = __base.replace(/\/[^/?]+$/, `/${__dbName}`)
 process.env.STORAGE_PATH = path.join(dir, 'static')
 process.env.MYSQL_AUTO_IMPORT = 'false'
 const { db, schema, getInsertId } = await import('../../src/drama/db/index.js')
@@ -16,7 +22,7 @@ const originalFetch = providerDependencies.fetch
 const services: ReturnType<typeof createToolboxService>[] = []
 const now = new Date().toISOString()
 const configId = getInsertId(
-  db
+  (await db
     .insert(schema.aiServiceConfigs)
     .values({
       serviceType: 'transcription',
@@ -27,12 +33,11 @@ const configId = getInsertId(
       model: '["catalog-asr"]',
       createdAt: now,
       updatedAt: now,
-    })
-    .run(),
+    }).returning()),
 )
 async function project() {
   const id = getInsertId(
-    db
+    (await db
       .insert(schema.dramas)
       .values({
         title: '字幕测试',
@@ -40,17 +45,15 @@ async function project() {
         creativeCategory: 'explainer',
         createdAt: now,
         updatedAt: now,
-      })
-      .run(),
-  )
-  db.insert(schema.creativeProjects)
+      }).returning()),
+  );
+  (await db.insert(schema.creativeProjects)
     .values({
       projectId: id,
       document: JSON.stringify(createCreativeDocument()),
       revision: 1,
       updatedAt: now,
-    })
-    .run()
+    }).returning())
   // One second of valid mono PCM, decoded and converted by the real FFmpeg path.
   const wave = Buffer.alloc(44 + 16000)
   wave.write('RIFF')
@@ -80,7 +83,7 @@ async function project() {
     },
   }
 }
-after(async () => {
+after(async () => { process.env.DATABASE_URL = __base; await __admin.query(`DROP DATABASE IF EXISTS "${__dbName}"`); await __admin.end();
   providerDependencies.fetch = originalFetch
   for (const service of services) service.dispose()
   await fs.rm(dir, { recursive: true, force: true })

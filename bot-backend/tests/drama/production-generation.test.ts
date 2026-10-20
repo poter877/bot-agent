@@ -8,7 +8,13 @@ import { execFileSync } from 'node:child_process'
 import { eq } from 'drizzle-orm'
 import { ffmpegPath } from '../../src/drama/utils/ffmpeg.js'
 const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'production-generation-'))
-process.env.SQLITE_PATH = path.join(dir, 'test.sqlite')
+import { Pool } from 'pg'
+const __base = process.env.DATABASE_URL
+if (!__base) throw new Error('tests need DATABASE_URL (point at the test cluster, e.g. bot_backend_test)')
+const __admin = new Pool({ connectionString: __base })
+const __dbName = 'drama_' + process.pid + '_' + (Date.now() % 1000000)
+await __admin.query(`CREATE DATABASE "${__dbName}" TEMPLATE bot_backend_test`)
+process.env.DATABASE_URL = __base.replace(/\/[^/?]+$/, `/${__dbName}`)
 process.env.STORAGE_PATH = path.join(dir, 'static')
 process.env.MYSQL_AUTO_IMPORT = 'false'
 process.env.COMPANY_BACKEND_URL = 'https://company.invalid'
@@ -20,13 +26,13 @@ const { providerToolSpecs } = await import('../../src/drama/services/production-
 const { runUnifiedGeneration } = await import('../../src/drama/services/production-tools/executor.js')
 await fs.mkdir(path.join(dir, 'static'), { recursive: true })
 const original = { ...providerDependencies }
-after(async () => {
+after(async () => { process.env.DATABASE_URL = __base; await __admin.query(`DROP DATABASE IF EXISTS "${__dbName}"`); await __admin.end();
   Object.assign(providerDependencies, original)
   await fs.rm(dir, { recursive: true, force: true })
 })
 async function terminal(id: number) {
   for (let n = 0; n < 100; n++) {
-    const row = db.select().from(schema.sysTask).where(eq(schema.sysTask.id, id)).get()!
+    const row = (await (await db.select().from(schema.sysTask).where((await eq(schema.sysTask.id, id))))[0])!
     if (['failed', 'completed'].includes(row.status!)) return row
     await new Promise((r) => setTimeout(r, 20))
   }
@@ -35,18 +41,17 @@ async function terminal(id: number) {
 
 test('new model providers use the original image task lifecycle and write back real assets', async () => {
   const now = new Date().toISOString(),
-    projectId = getInsertId(
-      db.insert(schema.dramas).values({ title: '模型共享', createdAt: now, updatedAt: now }).run(),
-    )
-  const characterId = getInsertId(
-    db
+    projectId = (await getInsertId(
+      (await db.insert(schema.dramas).values({ title: '模型共享', createdAt: now, updatedAt: now }).returning().returning().returning().returning().returning().returning().returning().returning()),
+    ))
+  const characterId = (await getInsertId(
+    (await db
       .insert(schema.characters)
-      .values({ dramaId: projectId, name: '角色', createdAt: now, updatedAt: now })
-      .run(),
-  )
+      .values({ dramaId: projectId, name: '角色', createdAt: now, updatedAt: now }).returning().returning().returning().returning().returning().returning().returning().returning()),
+  ))
   const model = providerToolSpecs.flux_image.model
-  const configId = getInsertId(
-    db
+  const configId = (await getInsertId(
+    (await db
       .insert(schema.aiServiceConfigs)
       .values({
         serviceType: 'image',
@@ -57,9 +62,8 @@ test('new model providers use the original image task lifecycle and write back r
         model: JSON.stringify([model]),
         createdAt: now,
         updatedAt: now,
-      })
-      .run(),
-  )
+      }).returning().returning().returning().returning().returning().returning().returning().returning()),
+  ))
   const image = await sharp({ create: { width: 64, height: 64, channels: 3, background: '#556677' } })
     .png()
     .toBuffer()
@@ -85,15 +89,15 @@ test('new model providers use the original image task lifecycle and write back r
   assert.equal(row.taskId, 'known-job')
   assert.match(row.localPath!, /^static\/production\//)
   assert.equal(
-    db.select().from(schema.characters).where(eq(schema.characters.id, characterId)).get()!.imageUrl,
+    (await (await db.select().from(schema.characters).where((await eq(schema.characters.id, characterId))))[0])!.imageUrl,
     row.localPath,
   )
   assert.equal(JSON.parse(row.params!).snapshotConfigId, configId)
   assert.equal((await fs.stat(path.join(dir, row.localPath!))).size, image.length)
 })
 
-test('rerunning a failed queue generation uses its saved account snapshot and posts afresh', async () => {
-  const previous = db.select().from(schema.aiServiceConfigs).get()!,
+await test('rerunning a failed queue generation uses its saved account snapshot and posts afresh', async () => {
+  const previous = (await (await db.select().from(schema.aiServiceConfigs))[0])!,
     now = new Date().toISOString()
   const image = await sharp({ create: { width: 48, height: 48, channels: 3, background: '#123321' } })
     .png()
@@ -116,8 +120,8 @@ test('rerunning a failed queue generation uses its saved account snapshot and po
   let row = await terminal(id)
   assert.equal(row.status, 'failed')
   // 同步队列失败没有远端任务号：恢复走明确重发，而不是续查
-  await assert.rejects(resumeGenerationTask(id), /没有服务商编号/)
-  db.insert(schema.aiServiceConfigs)
+  await assert.rejects((await resumeGenerationTask(id)), /没有服务商编号/)
+  (await db.insert(schema.aiServiceConfigs)
     .values({
       serviceType: 'image',
       provider: 'fal',
@@ -128,8 +132,7 @@ test('rerunning a failed queue generation uses its saved account snapshot and po
       priority: 100,
       createdAt: now,
       updatedAt: now,
-    })
-    .run()
+    }).returning().returning().returning().returning().returning().returning().returning().returning())
   const rerun = await generateImage({ prompt: '恢复', configId: previous.id })
   row = await terminal(rerun)
   assert.equal(row.status, 'completed')
@@ -137,17 +140,16 @@ test('rerunning a failed queue generation uses its saved account snapshot and po
   assert.equal(row.taskId, 'retry-job-2')
 })
 
-test('unified generation keeps the snapshotted model when the saved account model changes', async () => {
-  const config = db.select().from(schema.aiServiceConfigs).get()!,
-    project = db.select().from(schema.dramas).get()!,
+await test('unified generation keeps the snapshotted model when the saved account model changes', async () => {
+  const config = (await (await db.select().from(schema.aiServiceConfigs))[0])!,
+    project = (await (await db.select().from(schema.dramas))[0])!,
     model = providerToolSpecs.flux_image.model,
     state: Record<string, unknown> = {},
     outputDir = path.join(dir, 'snapshot-output')
   await fs.mkdir(outputDir)
-  db.update(schema.aiServiceConfigs)
+  (await db.update(schema.aiServiceConfigs)
     .set({ model: '["changed-model"]' })
-    .where(eq(schema.aiServiceConfigs.id, config.id))
-    .run()
+    .where((await eq(schema.aiServiceConfigs.id, config.id))))
   providerDependencies.fetch = async (url, init) => {
     if (init?.method === 'POST') {
       assert.match(String(url), /\/api\/media\/queue$/)
@@ -178,23 +180,22 @@ test('unified generation keeps the snapshotted model when the saved account mode
     },
     'image',
   )
-  const task = db
+  const task = (await (await db
     .select()
     .from(schema.sysTask)
-    .where(eq(schema.sysTask.id, Number(state.taskId)))
-    .get()!
+    .where((await eq(schema.sysTask.id, Number(state.taskId)))))[0])!
   assert.equal(task.model, model)
   assert.equal(result.files.length, 1)
   assert.ok((await fs.stat(result.files[0].path)).size > 0)
 })
 
-test('company image generation posts the media contract and writes back the base64 asset', async () => {
+await test('company image generation posts the media contract and writes back the base64 asset', async () => {
   const now = new Date().toISOString(),
-    projectId = getInsertId(
-      db.insert(schema.dramas).values({ title: '公司图片', createdAt: now, updatedAt: now }).run(),
-    )
-  const configId = getInsertId(
-    db
+    projectId = (await getInsertId(
+      (await db.insert(schema.dramas).values({ title: '公司图片', createdAt: now, updatedAt: now }).returning().returning().returning().returning().returning().returning().returning().returning()),
+    ))
+  const configId = (await getInsertId(
+    (await db
       .insert(schema.aiServiceConfigs)
       .values({
         serviceType: 'image',
@@ -206,9 +207,8 @@ test('company image generation posts the media contract and writes back the base
         priority: 200,
         createdAt: now,
         updatedAt: now,
-      })
-      .run(),
-  )
+      }).returning().returning().returning().returning().returning().returning().returning().returning()),
+  ))
   const image = await sharp({ create: { width: 32, height: 32, channels: 3, background: '#123456' } })
     .png()
     .toBuffer()
@@ -228,8 +228,8 @@ test('company image generation posts the media contract and writes back the base
     assert.equal(JSON.parse(String(request!.init.body)).model, 'catalog-image')
     assert.equal((await fs.stat(path.join(dir, row.localPath!))).size, image.length)
   } finally {
-    globalThis.fetch = original
-    db.delete(schema.aiServiceConfigs).where(eq(schema.aiServiceConfigs.id, configId)).run()
+    globalThis.fetch = (await original
+    (await db.delete(schema.aiServiceConfigs).where(eq(schema.aiServiceConfigs.id, configId))))
   }
 })
 
@@ -237,12 +237,12 @@ test('company image tasks with no explicit model fall back to the catalog defaul
   const { resetCompanyModelCatalogCache } = await import('../../src/drama/services/company-model-catalog.js')
   resetCompanyModelCatalogCache()
   const now = new Date().toISOString(),
-    projectId = getInsertId(
-      db.insert(schema.dramas).values({ title: '目录默认', createdAt: now, updatedAt: now }).run(),
-    )
+    projectId = (await getInsertId(
+      (await db.insert(schema.dramas).values({ title: '目录默认', createdAt: now, updatedAt: now }).returning().returning().returning().returning().returning().returning().returning().returning()),
+    ))
   // 迁移后的常态：company 行 model 为空数组，模型 id 的真相源在公司目录
-  const configId = getInsertId(
-    db
+  const configId = (await getInsertId(
+    (await db
       .insert(schema.aiServiceConfigs)
       .values({
         serviceType: 'image',
@@ -254,9 +254,8 @@ test('company image tasks with no explicit model fall back to the catalog defaul
         priority: 200,
         createdAt: now,
         updatedAt: now,
-      })
-      .run(),
-  )
+      }).returning().returning().returning().returning().returning().returning().returning().returning()),
+  ))
   const image = await sharp({ create: { width: 32, height: 32, channels: 3, background: '#654321' } })
     .png()
     .toBuffer()
@@ -285,19 +284,19 @@ test('company image tasks with no explicit model fall back to the catalog defaul
     assert.equal((post!.body as Record<string, unknown>).model, 'seedream-catalog')
     assert.deepEqual(gets, ['https://company.invalid/api/media/models'])
   } finally {
-    globalThis.fetch = original
-    resetCompanyModelCatalogCache()
-    db.delete(schema.aiServiceConfigs).where(eq(schema.aiServiceConfigs.id, configId)).run()
+    globalThis.fetch = (await original
+    (await resetCompanyModelCatalogCache()))
+    (await db.delete(schema.aiServiceConfigs).where(eq(schema.aiServiceConfigs.id, configId)))
   }
 })
 
-test('company video generation sends reference fields as JSON arrays and decodes the base64 video', async () => {
+await test('company video generation sends reference fields as JSON arrays and decodes the base64 video', async () => {
   const now = new Date().toISOString(),
-    projectId = getInsertId(
-      db.insert(schema.dramas).values({ title: '公司视频', createdAt: now, updatedAt: now }).run(),
-    )
-  const configId = getInsertId(
-    db
+    projectId = (await getInsertId(
+      (await db.insert(schema.dramas).values({ title: '公司视频', createdAt: now, updatedAt: now }).returning().returning().returning().returning().returning().returning().returning().returning()),
+    ))
+  const configId = (await getInsertId(
+    (await db
       .insert(schema.aiServiceConfigs)
       .values({
         serviceType: 'video',
@@ -309,9 +308,8 @@ test('company video generation sends reference fields as JSON arrays and decodes
         priority: 200,
         createdAt: now,
         updatedAt: now,
-      })
-      .run(),
-  )
+      }).returning().returning().returning().returning().returning().returning().returning().returning()),
+  ))
   await fs.mkdir(path.join(dir, 'static'), { recursive: true })
   const videoFile = path.join(dir, 'static', 'video-fixture.mp4')
   execFileSync(ffmpegPath!, [
@@ -356,7 +354,7 @@ test('company video generation sends reference fields as JSON arrays and decodes
     assert.equal(body.resolution, '720p')
     assert.equal((await fs.readFile(path.join(dir, row.localPath!))).length, video.length)
   } finally {
-    globalThis.fetch = original
-    db.delete(schema.aiServiceConfigs).where(eq(schema.aiServiceConfigs.id, configId)).run()
+    globalThis.fetch = (await original
+    (await db.delete(schema.aiServiceConfigs).where(eq(schema.aiServiceConfigs.id, configId))))
   }
 })
