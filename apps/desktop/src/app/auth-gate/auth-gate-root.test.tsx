@@ -78,6 +78,67 @@ describe('AuthGate', () => {
     expect(transport.signIn).toHaveBeenCalledWith({ email: 'user@test.local', password: 'secret-pass' })
   })
 
+
+  it('self-heals an unreachable service: unavailable rechecks automatically and recovers', async () => {
+    vi.useFakeTimers()
+
+    const status = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('backend still spawning'))
+      .mockResolvedValue({ authenticated: true, user: USER })
+
+    const transport = fakeTransport({ status })
+
+    render(
+      <AuthGate transport={transport}>
+        <div>business-shell</div>
+      </AuthGate>
+    )
+
+    // The first probe failed; the gate sits on the unavailable state...
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    expect(status).toHaveBeenCalledTimes(1)
+    expect(screen.queryByText('business-shell')).toBeNull()
+
+    // ...and rechecks on its own once the retry delay passes.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4_000)
+    })
+    expect(status).toHaveBeenCalledTimes(2)
+    expect(screen.getByText('business-shell')).toBeTruthy()
+    vi.useRealTimers()
+  })
+
+  it('stops self-healing after the bounded retries; the manual button still works', async () => {
+    vi.useFakeTimers()
+    const status = vi.fn().mockRejectedValue(new Error('still down'))
+    const transport = fakeTransport({ status })
+
+    render(
+      <AuthGate transport={transport}>
+        <div>business-shell</div>
+      </AuthGate>
+    )
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+
+    // Initial probe + the bounded budget of automatic rechecks, nothing more.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4_000 * 3)
+    })
+    expect(status).toHaveBeenCalledTimes(4)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4_000 * 5)
+    })
+    expect(status).toHaveBeenCalledTimes(4)
+
+    vi.useRealTimers()
+  })
+
   it('keeps the gate with a retry affordance when the account service is unreachable', async () => {
     const transport = fakeTransport({ status: vi.fn().mockRejectedValue(new AccountAuthUnavailableError()) })
 

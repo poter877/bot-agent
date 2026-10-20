@@ -13,6 +13,14 @@ import {
   createGatewayAccountAuthTransport
 } from './account-auth-transport'
 
+/** Self-heal cadence for an unreachable account service: the first probes of
+ *  a cold boot race the local backend's spawn (a renderer reload retires the
+ *  old backend; the replacement needs seconds to listen), and a live session
+ *  can lose its socket the same way. Bounded retries with the manual button
+ *  as the way out — never an unbounded loop. */
+const UNAVAILABLE_RETRY_DELAY_MS = 4_000
+const UNAVAILABLE_RETRY_LIMIT = 3
+
 /**
  * The login gate (doc《用户认证》§2/§4): while the account session is
  * unconfirmed the renderer shows ONLY this window — the business shell (and
@@ -55,6 +63,39 @@ export function AuthGate({
       window.removeEventListener('online', revalidate)
       window.removeEventListener('offline', offline)
       lifecycle.stop()
+    }
+  }, [lifecycle])
+
+  // Bounded self-heal: an `unavailable` verdict rechecks after a short delay,
+  // up to UNAVAILABLE_RETRY_LIMIT times; success resets the budget (a later
+  // drop earns a fresh round). The manual 重试 always works regardless.
+  useEffect(() => {
+    let autoRetries = 0
+    let timer: number | undefined
+
+    const stop = $accountAuth.subscribe(state => {
+      if (timer !== undefined) {
+        window.clearTimeout(timer)
+        timer = undefined
+      }
+
+      if (state.phase === 'unavailable' && autoRetries < UNAVAILABLE_RETRY_LIMIT) {
+        autoRetries += 1
+        timer = window.setTimeout(() => {
+          timer = undefined
+          void lifecycle.check()
+        }, UNAVAILABLE_RETRY_DELAY_MS)
+      } else if (state.phase === 'authenticated') {
+        autoRetries = 0
+      }
+    })
+
+    return () => {
+      stop()
+
+      if (timer !== undefined) {
+        window.clearTimeout(timer)
+      }
     }
   }, [lifecycle])
 
