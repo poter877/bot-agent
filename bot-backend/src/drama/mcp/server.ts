@@ -23,6 +23,7 @@ import { z } from 'zod'
 import type { AgentToolContext, AgentToolSet } from '../agents/context.js'
 import { extractTools } from '../agents/tools/extract-tools.js'
 import { imagePromptTools } from '../agents/tools/image-prompt-tools.js'
+import { creativeTools } from '../agents/tools/creative-tools.js'
 import { scriptTools } from '../agents/tools/script-tools.js'
 import { storyboardTools } from '../agents/tools/storyboard-tools.js'
 import { db, schema } from '../db/index.js'
@@ -229,6 +230,7 @@ function registerBuildTools(server: McpServer) {
 export function buildMcpServer(): McpServer {
   const server = new McpServer({ name: 'ai-drama', version: '1.0.0' })
   registerAgentToolSet(server, scriptTools)
+  registerAgentToolSet(server, creativeTools)
   registerAgentToolSet(server, extractTools)
   registerAgentToolSet(server, storyboardTools)
   registerAgentToolSet(server, imagePromptTools)

@@ -1,15 +1,15 @@
 # hermes 编排集成（drama profile 装配指南）
 
-统一后的编排拓扑：**hermes 是唯一 agent 大脑，ai-drama 是领域服务 + 显示面**。
+统一后的编排拓扑（《重构》2026-10-20 定稿）：**hermes 是唯一 agent 大脑——视频工厂
+的 Agent 会话跑在桌面 app 的本地 serve 里；bot-backend 不再调用 Hermes**。
 
 ```
-ai-drama 前端 ──HTTP──→ ai-drama 后端（领域服务 + 任务队列 + MCP 工具服务）
-                          │  chat/completions（system=agent 指令，Bearer HERMES_AGENT_KEY）
-                          ▼
-                    hermes gateway（drama profile：模型=company，工具=ai_drama MCP）
-                          │  模型调用
-                          ▼
-                    bot-backend /api/llm/stream（模型网关，全仓唯一模型出入口）
+视频工厂页面（桌面 app 内嵌）
+  ├─ 业务/媒体/上传 → serve 的 video-studio 插件 → 账号桥 → bot-backend
+  └─ Agent 会话 → 本地 serve（session/prompt/event 流）
+        ├─ 模型调用 → bot-backend /api/llm/stream（当前用户）
+        └─ 领域工具 → MCP 桥（插件 /mcp）→ bot-backend /mcp（用户会话鉴权）
+bot-backend（服务器）：模型出口 + 账号库 + 领域数据 + 媒体作业（纯后端，不调 Hermes）
 ```
 
 - **工具循环在 hermes**：模型要调工具时，hermes 经 MCP（streamable HTTP）调

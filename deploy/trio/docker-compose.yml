@@ -6,10 +6,7 @@
 #   docker compose --profile hermes up -d --build   # 连 hermes gateway 一起起（首次构建较重）
 #   ./smoke.sh                            # 联调冒烟
 #
-# 说明：hermes-gateway 用仓库根 Dockerfile 构建（含公司模式代码），默认放在
-# `hermes` profile 里——基础设施栈不依赖它也能起来。drama profile 的
-# HERMES_HOME 挂在命名卷上，首次启动后把 config.yaml 放进去（模板见
-# ../../ai-drama/docs/hermes-integration.md）再重启该服务。
+# 编排说明：视频工厂的 Agent 会话走桌面宿主（本地 serve）；本堆不含 gateway。
 
 name: hermes-trio
 
@@ -64,11 +61,9 @@ services:
       # 视频工厂子应用：本地作业（ffmpeg/sharp）与媒体落盘
       AI_DRAMA_DATA_ROOT: /data/drama-media
       AI_DRAMA_MCP_TOKEN: ${AI_DRAMA_MCP_TOKEN:?set a token for hermes<->ai-drama}
-      # 公司模型网关与编排（drama 运行时）
+      # 公司模型网关（编排已迁桌面宿主 Agent —— 视频工厂会话走用户本地 serve）
       COMPANY_BACKEND_URL: http://bot-backend:30172
       COMPANY_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:?}
-      HERMES_AGENT_URL: http://hermes-gateway:30175
-      HERMES_AGENT_KEY: ${API_SERVER_KEY:?set the gateway API key}
       # 视频工厂前端静态托管（宿主构建 dist 挂载进容器）
       FRONTEND_DIST: /app/frontend-dist
       WORKSPACE_PATH: /app/workspace
@@ -94,62 +89,9 @@ services:
       RATE_LIMIT_LLM_STREAM_WINDOW_SECONDS: ${RATE_LIMIT_LLM_STREAM_WINDOW_SECONDS:-60}
 
 
-  # drama-home 一次性播种：把随仓库的 config（模型出口 + ai_drama MCP）与
-  # 服务令牌凭据写进命名卷；幂等（已存在则跳过），gateway 等它完成才启动。
-  drama-home-init:
-    image: node:22-alpine
-    volumes:
-      - trio-drama-home:/data/drama-home
-      - ./drama-home/config.yaml:/seed/config.yaml:ro
-    environment:
-      SEED_MCP_URL: http://bot-backend:30172/mcp
-      SEED_MCP_TOKEN: ${AI_DRAMA_MCP_TOKEN:?}
-      SEED_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:?}
-    command:
-      - sh
-      - -c
-      - |
-        mkdir -p /data/drama-home
-        if [ ! -f /data/drama-home/config.yaml ]; then
-          sed -e "s#__MCP_URL__#$$SEED_MCP_URL#" -e "s#__MCP_TOKEN__#$$SEED_MCP_TOKEN#" /seed/config.yaml > /data/drama-home/config.yaml
-          echo "seeded drama-home config.yaml"
-        fi
-        # 服务令牌作为网关的账号凭据（/api/llm/models 收 INTERNAL_SERVICE_TOKEN；
-        # 生产账号线如需用户会话再按文档换 cookie jar 方案）
-        printf '%s' "$$SEED_SERVICE_TOKEN" > /data/drama-home/account-auth-token.txt
-        chmod 600 /data/drama-home/account-auth-token.txt
-        echo "drama-home ready"
-    restart: "no"
-
-  hermes-gateway:
-    build:
-      context: ../..
-      dockerfile: Dockerfile
-    depends_on:
-      bot-backend:
-        condition: service_started
-      drama-home-init:
-        condition: service_completed_successfully
-    ports:
-      - "${GATEWAY_HOST_PORT:-30175}:30175"
-    environment:
-      HERMES_HOME: /data/drama-home
-      API_SERVER_KEY: ${API_SERVER_KEY:?}
-      # 统一认证：dashboard 的 company provider 指向 bot-backend 账号库
-      HERMES_BOT_BACKEND_URL: http://bot-backend:30172
-      HERMES_DASHBOARD_COMPANY_SECRET: ${HERMES_DASHBOARD_COMPANY_SECRET:-${BETTER_AUTH_SECRET:?reuse the auth secret}}
-      # 网关容器同时拉起 dashboard（s6 服务）；公司认证 provider 经 bot-backend
-      HERMES_DASHBOARD: 1
-      HERMES_DASHBOARD_PORT: "9119"
-      # 容器内默认绑 127.0.0.1，端口映射会连不通；对外服务必须绑全网卡。
-      API_SERVER_HOST: 0.0.0.0
-    command: ["hermes", "gateway"]
-    volumes:
-      - trio-drama-home:/data/drama-home
 
 
 volumes:
   trio-drama-media:
   trio-postgres:
   trio-redis:
-  trio-drama-home:

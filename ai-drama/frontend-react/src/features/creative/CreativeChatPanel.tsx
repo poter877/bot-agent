@@ -8,6 +8,9 @@ import { creativeQueries } from '@/entities/creative/queries'
 import { Button } from '@/shared/ui/button'
 import { Textarea } from '@/shared/ui/input'
 import { cn } from '@/shared/lib/cn'
+import { useStudioAgentChat } from '@/shared/studio/agent-chat'
+import { studioSessions } from '@/shared/studio/sessions'
+import { studioHost } from '@/shared/studio/host'
 
 const labels = {
   zh: { title: '制作对话', intro: '说说你想做的视频，或告诉我需要怎样修改方案。', hint: '例如：制作一支 60 秒的黑洞科普视频，先提出问题，再用三个画面解释。', placeholder: '描述想法，或修改某个镜头…', send: '发送', user: '你', assistant: '制作助手', waiting: '正在整理方案…', failed: '未完成', retry: '重试这条消息', loadFailed: '对话暂时无法加载', reload: '重新加载', locked: '请先保存当前修改，或等待当前操作完成。', note: '对话修改会保存到方案；确认、生成和导出可在右侧操作。', error: '未能完成，请检查文本模型设置后重试。', plan: '打开创作要求', review: '查看并确认方案', generate: '打开素材制作', audio: '编辑声音字幕', render: '打开成片导出' },
@@ -23,12 +26,71 @@ interface Props {
   onGoToStage: (stage: 'brief' | 'shots' | 'audio' | 'export') => void
   onBusyChange?: (busy: boolean) => void
 }
+/** 嵌入模式的宿主车道面板：流式渲染 + 工具活动 + 停止。 */
+function StudioChatPanel({ project, disabled, onBusyChange }: { project: CreativeProject; disabled: boolean; onBusyChange?: (b: boolean) => void }) {
+  const { i18n } = useTranslation()
+  const lang = i18n.language.split('-')[0] as keyof typeof labels
+  const copy = labels[lang] ?? labels.en
+  const client = useQueryClient()
+  const [input, setInput] = useState('')
+  const listRef = useRef<HTMLDivElement>(null)
+  const chat = useStudioAgentChat(studioSessions.key('creative', project.id), project.title, {
+    onSettled: () => {
+      // 方案可能被模型经 MCP 工具改写——刷新业务快照（不串改本地编辑态，
+      // 由外层 detail 查询自然合并）。
+      void client.invalidateQueries({ queryKey: ['workspace', 'default', 'creative', 'detail', String(project.id)] })
+    }
+  })
+  useEffect(() => {
+    const list = listRef.current
+    if (list) list.scrollTop = list.scrollHeight
+  }, [chat?.messages.length])
+  useEffect(() => { onBusyChange?.(Boolean(chat?.busy)) }, [chat?.busy, onBusyChange])
+  const busy = disabled || (chat?.busy ?? false)
+  if (!chat) return null
+  function send(message: string) {
+    if (busy || !message.trim()) return
+    chat?.send(message.trim())
+    setInput('')
+  }
+  return (
+    <section className="flex min-h-[360px] flex-col gap-3 p-4" aria-label={copy.title}>
+      <div ref={listRef} role="log" aria-live="polite" className="flex max-h-[52vh] min-h-40 flex-1 flex-col gap-3 overflow-y-auto pr-1">
+        {!chat.messages.length && <div className="rounded-xl bg-hover-overlay p-4 text-sm text-content-muted">
+          <MessageSquare className="mb-3 size-5 text-brand-content" aria-hidden />
+          <p>{copy.intro}</p><p className="mt-3 text-xs leading-relaxed text-content-subtle">{copy.hint}</p>
+        </div>}
+        {chat.messages.map(m => <article key={m.id} className={cn('rounded-xl p-3 text-sm', m.role === 'user' ? 'ml-5 bg-brand-soft' : 'mr-2 border border-outline bg-surface')}>
+          <div className="mb-1 text-xs font-semibold text-content-subtle">{m.role === 'user' ? copy.user : copy.assistant}</div>
+          <p className="whitespace-pre-wrap break-words leading-relaxed text-content">{m.content || (m.status === 'streaming' ? copy.waiting : '')}</p>
+          {!!m.toolActivity?.length && <ul className="mt-2 space-y-0.5 font-mono text-[11px] text-content-subtle">{m.toolActivity.map((t, i) => <li key={i}>{t}</li>)}</ul>}
+          {m.status === 'failed' && <p className="mt-2 text-xs text-danger">{copy.failed}</p>}
+        </article>)}
+      </div>
+      <form onSubmit={event => { event.preventDefault(); send(input) }} className="space-y-2">
+        <Textarea aria-label={copy.placeholder} value={input} maxLength={8000} rows={3}
+          disabled={busy} onChange={event => setInput(event.target.value)} placeholder={copy.placeholder} />
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[11px] leading-relaxed text-content-subtle">{copy.note}</span>
+          {chat.busy
+            ? <Button type="button" size="sm" onClick={() => chat.stop()}>■ 停止</Button>
+            : <Button type="submit" variant="primary" size="sm" disabled={busy || !input.trim()}><ArrowUp size={14} />{copy.send}</Button>}
+        </div>
+      </form>
+    </section>
+  )
+}
+
 export function CreativeChatPanel({ project, disabled, onProjectUpdated, onGoToStage, onBusyChange }: Props) {
+  const embedded = Boolean(studioHost()?.agent)
   const { i18n } = useTranslation()
   const lang = i18n.language.split('-')[0] as keyof typeof labels
   const copy = labels[lang] ?? labels.en
   const [input, setInput] = useState('')
   const client = useQueryClient()
+  if (embedded) {
+    return <StudioChatPanel disabled={disabled} onBusyChange={onBusyChange} project={project} />
+  }
   const listRef = useRef<HTMLDivElement>(null)
   const wasProcessing = useRef(false)
   const queryKey = ['workspace', 'default', 'creative', project.id, 'messages']
