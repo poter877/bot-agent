@@ -108,6 +108,33 @@ hermes 桌面 app（`apps/desktop`）侧边栏有「视频工厂」入口，打�
 - **实现**：`apps/desktop/src/app/drama/`（页面 + 贡献注册），仿 `cloud-computer`
   的 ROUTES_AREA/SIDEBAR_NAV_AREA 模式。
 
+### 宿主机 dev 网关（不走 trio 容器时）
+
+trio 之外，宿主机直跑（本机现状，端口 30179）：
+
+```bash
+# 1. drama profile home（~/hermes-dev-data/drama-home）：
+#    config.yaml → model.provider=hono + mcp_servers.ai_drama(localhost:30172/mcp)
+#    .env → API_SERVER_KEY=<key>、API_SERVER_PORT=30179、HERMES_BOT_BACKEND_URL
+HERMES_HOME=~/hermes-dev-data/drama-home hermes gateway
+# 2. bot-backend/.env：HERMES_AGENT_URL=http://127.0.0.1:30179 + HERMES_AGENT_KEY=<同 key>
+```
+
+三个踩过的坑（2026-10-20 排障记录）：
+
+- **`HERMES_BOT_BACKEND_URL` 只读进程 env**（secret_scope 的 `_GLOBAL_ENV_EXACT`，
+  不读 home 的 .env）；桌面 app spawn 的 serve 拿不到启动 shell 的 env 时，回退
+  `config.yaml providers.hono.base_url` —— 那里钉 `http://127.0.0.1:30172` 最稳。
+- **Python cookiejar 不给 `localhost` 发 host-only cookie**（单标签字母域），
+  服务端 Better Auth 的 set-cookie 域跟随请求 host —— 所以 hermes→bot-backend 的
+  URL 一律用 `127.0.0.1`（IP 域 cookie 正常收发）。smoke 时代 jar 里的
+  `localhost.local` 域就是同一个坑的历史 workaround。
+- **`account-auth-token.txt`（Bearer）优先于 cookie jar 且劫持整条账号线**：
+  网关只需要模型目录时可以放服务令牌（`INTERNAL_SERVICE_TOKEN`，`/api/llm/models`
+  收它）；但需要 Better Auth 登录态的进程（桌面 serve 的 accountAuth 桥）**不能放**，
+  否则 signIn 成功而 get-session 判空，登录永远失败。网关（drama-home）放 token、
+  桌面 serve（hermes-dev-data）只放 cookie jar，各用各的 home。
+
 ### 并发标定（drama 账号是所有 agent turn 的主体）
 
 | 旋钮 | 位置 | 默认 | 说明 |
