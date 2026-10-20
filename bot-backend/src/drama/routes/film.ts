@@ -49,22 +49,22 @@ film.get('/projects/:id', async (c) => {
   return success(c, await getFilmProject(id))
 })
 
-film.post('/projects/:id/run', (c) => {
+film.post('/projects/:id/run', async (c) => {
   const id = Number(c.req.param('id'))
   if (!Number.isInteger(id) || id <= 0) return badRequest(c, '无效项目 id')
-  return success(c, startFilmRun(id))
+  return success(c, await startFilmRun(id))
 })
 
-film.post('/projects/:id/approve', (c) => {
+film.post('/projects/:id/approve', async (c) => {
   const id = Number(c.req.param('id'))
   if (!Number.isInteger(id) || id <= 0) return badRequest(c, '无效项目 id')
-  return success(c, approveFilmStage(id))
+  return success(c, await approveFilmStage(id))
 })
 
-film.post('/projects/:id/retry', (c) => {
+film.post('/projects/:id/retry', async (c) => {
   const id = Number(c.req.param('id'))
   if (!Number.isInteger(id) || id <= 0) return badRequest(c, '无效项目 id')
-  return success(c, retryFilmStage(id))
+  return success(c, await retryFilmStage(id))
 })
 
 film.get('/projects/:id/files', async (c) => {

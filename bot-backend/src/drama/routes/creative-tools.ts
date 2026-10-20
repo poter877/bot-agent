@@ -19,13 +19,13 @@ import {
 } from '../services/creative-tools/jobs.js'
 export function createToolRoutes(service: ReturnType<typeof createToolService> = creativeToolService) {
   const app = new Hono()
-  app.get('/tool-settings', (c) => success(c, publicToolSettings()))
+  app.get('/tool-settings', async (c) => success(c, await publicToolSettings()))
   app.put('/tool-settings/:provider', async (c) =>
-    success(c, saveToolSettings(providerSchema.parse(c.req.param('provider')), await c.req.json())),
+    success(c, await saveToolSettings(providerSchema.parse(c.req.param('provider')), await c.req.json())),
   )
-  app.get('/:id/tools', (c) => {
+  app.get('/:id/tools', async (c) => {
     const id = Number(c.req.param('id'))
-    return success(c, { jobs: listToolJobs(id), models: listCreativeModels(id) })
+    return success(c, { jobs: await listToolJobs(id), models: await listCreativeModels(id) })
   })
   app.post('/:id/tools', async (c) => {
     const body = z
@@ -42,8 +42,8 @@ export function createToolRoutes(service: ReturnType<typeof createToolService> =
       await service.start(Number(c.req.param('id')), body.revision, body.kind, body.input, body.force),
     )
   })
-  app.get('/:id/tools/:jobId', (c) =>
-    success(c, getToolJob(Number(c.req.param('id')), Number(c.req.param('jobId')))),
+  app.get('/:id/tools/:jobId', async (c) =>
+    success(c, await getToolJob(Number(c.req.param('id')), Number(c.req.param('jobId')))),
   )
   app.post('/:id/tools/:jobId/resume', async (c) => {
     const { remoteId } = z
@@ -57,7 +57,7 @@ export function createToolRoutes(service: ReturnType<typeof createToolService> =
       })
       .strict()
       .parse(await c.req.json())
-    return success(c, service.resume(Number(c.req.param('id')), Number(c.req.param('jobId')), remoteId))
+    return success(c, await service.resume(Number(c.req.param('id')), Number(c.req.param('jobId')), remoteId))
   })
   app.post('/:id/tools/:jobId/apply', async (c) => {
     const { revision } = z

@@ -22,7 +22,7 @@ const actionSchema = z
   .strict()
 export function createPipelineRoutes(runner: ReturnType<typeof createPipelineRunner> = pipelineRunner) {
   const app = new Hono()
-  app.get('/:id/pipeline', (c) => success(c, getPipelineState(Number(c.req.param('id')))))
+  app.get('/:id/pipeline', async (c) => success(c, await getPipelineState(Number(c.req.param('id')))))
   // 《重构》§6：客户端 Agent 认领（读准备好的提示词）与回交（产物注入后续跑）
   app.get('/:id/pipeline/:runId/agent-pending', async (c) =>
     success(c, await runner.pendingAgentStage(Number(c.req.param('id')), Number(c.req.param('runId')))))
@@ -65,23 +65,23 @@ export function createPipelineRoutes(runner: ReturnType<typeof createPipelineRun
             })
           }
         }
-    return (await success(c, {
+    return success(c, {
       steps,
       issues,
-      policies: Object.values(pipelineToolPolicies).filter(async (policy) =>
+      policies: Object.values(pipelineToolPolicies).filter((policy) =>
         policy.categories.includes(project.category),
       ),
-    }))
+    })
   })
-  app.get('/:id/pipeline/runs/:runId', (c) =>
-    success(c, getPipelineRun(Number(c.req.param('id')), Number(c.req.param('runId')))),
+  app.get('/:id/pipeline/runs/:runId', async (c) =>
+    success(c, await getPipelineRun(Number(c.req.param('id')), Number(c.req.param('runId')))),
   )
   app.post('/:id/pipeline', async (c) => {
     const { revision } = z
       .object({ revision: z.number().int().positive() })
       .strict()
       .parse(await c.req.json())
-    return success(c, runner.start(Number(c.req.param('id')), revision))
+    return success(c, await runner.start(Number(c.req.param('id')), revision))
   })
   app.post('/:id/pipeline/:runId/actions', async (c) => {
     const id = Number(c.req.param('id')),
@@ -90,19 +90,19 @@ export function createPipelineRoutes(runner: ReturnType<typeof createPipelineRun
       args = [id, runId, input.version] as const
     switch (input.action) {
       case 'continue':
-        return success(c, runner.continue(...args))
+        return success(c, await runner.continue(...args))
       case 'retry':
-        return success(c, runner.continue(...args, true))
+        return success(c, await runner.continue(...args, true))
       case 'pause':
-        return success(c, runner.pause(...args))
+        return success(c, await runner.pause(...args))
       case 'approve':
-        return success(c, runner.approve(...args, input.edited))
+        return success(c, await runner.approve(...args, input.edited))
       case 'rewind':
-        return success(c, runner.rewind(...args, input.stageId ?? ''))
+        return success(c, await runner.rewind(...args, input.stageId ?? ''))
       case 'sync':
-        return success(c, runner.sync(...args))
+        return success(c, await runner.sync(...args))
       case 'cancel':
-        return success(c, runner.cancel(...args))
+        return success(c, await runner.cancel(...args))
     }
   })
   app.post('/:id/pipeline/:runId/tools/:jobId/resume', async (c) => {
@@ -116,7 +116,7 @@ export function createPipelineRoutes(runner: ReturnType<typeof createPipelineRun
       .parse(await c.req.json())
     return success(
       c,
-      runner.resumeTool(
+      await runner.resumeTool(
         Number(c.req.param('id')),
         Number(c.req.param('runId')),
         input.version,

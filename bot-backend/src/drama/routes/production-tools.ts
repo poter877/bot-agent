@@ -22,7 +22,7 @@ export function createProductionToolRoutes(
 ) {
   const app = new Hono()
   app.get('/toolbox/catalog', async (c) => success(c, await toolboxCatalog()))
-  app.get('/:id/toolbox', (c) => success(c, listToolboxJobs(Number(c.req.param('id')))))
+  app.get('/:id/toolbox', async (c) => success(c, await listToolboxJobs(Number(c.req.param('id')))))
   app.post('/:id/toolbox', async (c) =>
     success(c, await service.start(Number(c.req.param('id')), await c.req.json())),
   )
@@ -33,7 +33,7 @@ export function createProductionToolRoutes(
       .parse(await c.req.json())
     return success(
       c,
-      service.resume(
+      await service.resume(
         Number(c.req.param('id')),
         Number(c.req.param('jobId')),
         input.remoteId,
@@ -41,8 +41,8 @@ export function createProductionToolRoutes(
       ),
     )
   })
-  app.post('/:id/toolbox/:jobId/cancel', (c) =>
-    success(c, service.cancel(Number(c.req.param('id')), Number(c.req.param('jobId')))),
+  app.post('/:id/toolbox/:jobId/cancel', async (c) =>
+    success(c, await service.cancel(Number(c.req.param('id')), Number(c.req.param('jobId')))),
   )
   app.post('/:id/toolbox/:jobId/apply', async (c) =>
     success(

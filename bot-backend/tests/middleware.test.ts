@@ -53,12 +53,12 @@ describe('production request boundary', () => {
 
   it('relaxes CSP only for HTML navigation; JSON stays default-src none', async () => {
     // 视频工厂 SPA 兜底壳（Accept: text/html）曾是 default-src 'none' 白屏。
-    const html = await testApp.request.get('/').set('Accept', 'text/html')
+    const html = await testApp.app.request('/', { headers: { accept: 'text/html' } })
     expect(html.status).toBeGreaterThanOrEqual(200)
-    expect(html.headers['content-security-policy']).toContain("default-src 'self'")
+    expect(html.headers.get('content-security-policy')).toContain("default-src 'self'")
 
-    const api = await testApp.request.get('/api/v1/health').set('Accept', 'application/json')
-    expect(api.headers['content-security-policy']).toBe("default-src 'none'")
+    const api = await testApp.app.request('/api/v1/health', { headers: { accept: 'application/json' } })
+    expect(api.headers.get('content-security-policy')).toBe("default-src 'none'")
   })
 
   it('mints its own request id and ignores a client-supplied one', async () => {

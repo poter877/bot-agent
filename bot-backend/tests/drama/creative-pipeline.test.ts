@@ -25,46 +25,46 @@ const {CreativeError}=await import('../../src/drama/services/creative-model.js')
 type Category=Parameters<typeof createCreativeDocument>[0]
 const runners:ReturnType<typeof createPipelineRunner>[]=[]
 function runner(execute:Parameters<typeof createPipelineRunner>[0]) {const result=createPipelineRunner(execute,100000);runners.push(result);return result}
-(await before(async()=>{
+before(async()=>{
   await fs.mkdir(path.join(directory,'static','uploads'),{recursive:true})
-  (await execFileSync(ffmpegPath!,['-hide_banner','-loglevel','error','-y','-f','lavfi','-i','color=c=blue:s=64x64:r=30','-f','lavfi','-i','sine=frequency=440','-t','6','-c:v','libx264','-pix_fmt','yuv420p','-c:a','aac',path.join(directory,'static','uploads','source.mp4')]))
-}))
-(await after(async()=>{runners.forEach(r=>r.dispose());(await db).$client.close();await fs.rm(directory,{recursive:true,force:true})}))
+  execFileSync(ffmpegPath!,['-hide_banner','-loglevel','error','-y','-f','lavfi','-i','color=c=blue:s=64x64:r=30','-f','lavfi','-i','sine=frequency=440','-t','6','-c:v','libx264','-pix_fmt','yuv420p','-c:a','aac',path.join(directory,'static','uploads','source.mp4')])
+})
+after(async()=>{runners.forEach(r=>r.dispose());(await db).$client.close();await fs.rm(directory,{recursive:true,force:true})})
 async function create(category:Category='cinematic') {
   const document=createCreativeDocument(category)
   document.brief.idea='解释一个制作主题';document.brief.targetDuration=5
   document.production.sources=[{id:randomUUID(),name:'原片',kind:'video',url:'/static/uploads/source.mp4',duration:6,coverUrl:null,transcript:'00:00-00:05 这是原片中的内容',attribution:'测试素材'}]
   document.shots=[{id:'shot-one',title:'片段',duration:5,visualPrompt:'使用原片',narration:'',caption:'原文',mediaType:'video',imageUrl:null,videoUrl:'/static/uploads/source.mp4',audioUrl:null,audioTrimStart:0,trimStart:0,originalVolume:1,imageTaskId:null,videoTaskId:null}]
   const ts=new Date().toISOString()
-  const id=(await (await getInsertId((await db.insert(schema.dramas).values({title:'流程测试',projectType:'creative',creativeCategory:category,createdAt:ts,updatedAt:ts}).returning().returning().returning().returning().returning().returning().returning().returning())))
-  (await db.insert(schema.creativeProjects).values({projectId:id,document:JSON.stringify(document),revision:1,updatedAt:ts}).returning().returning().returning().returning().returning().returning().returning().returning()))
+  const id=getInsertId(await (await db).insert(schema.dramas).values({title:'流程测试',projectType:'creative',creativeCategory:category,createdAt:ts,updatedAt:ts}).returning())
+  await (await db).insert(schema.creativeProjects).values({projectId:id,document:JSON.stringify(document),revision:1,updatedAt:ts}).returning()
   return getCreativeProject(id)
 }
 const narrative={summary:'阶段成果',content:'可审阅的阶段内容',checks:['检查事实']}
 async function runFor(projectId:number) {return (await getPipelineState(projectId)).run!}
 async function tick(r:ReturnType<typeof runner>,projectId:number) {
-  const state=runFor(projectId)
-  if((await state).status==='review') r.approve(projectId,(await state).id,(await state).version)
+  const s=await runFor(projectId)
+  if(s.status==='review') await r.approve(projectId,s.id,s.version)
   else {
-    r.continue(projectId,(await state).id,(await state).version,(await state).status==='failed')
-    await r.idle((await state).id)
+    await r.continue(projectId,s.id,s.version,s.status==='failed')
+    await r.idle(s.id)
   }
 }
 
 for(const definition of pipelineDefinitions) test(`${definition.id} executes its own ordered stages, passes artifacts and produces a delivery`,async()=>{
-  const project=create(definition.category),executed:string[]=[]
+  const project=await create(definition.category),executed:string[]=[]
   const execute=(await createStageExecutor({...pipelineTools,toolPlan:()=>[],
     narrative:async context=>{executed.push(context.stage.id);assert.ok(context.stage.requires.every(id=>!!context.artifacts[id]));return {...narrative,content:`${context.stage.id}: ${context.stage.instruction}`}},
     plan:async context=>{executed.push('scene_plan');assert.ok(Object.keys(context.artifacts).length>0);return context.project},
     translate:async document=>({...document,shots:document.shots.map(s=>({...s,caption:'Translated'}))}),
     render:async(id,input)=>{
       assert.equal(input.individual,definition.delivery==='clips')
-      const p=getCreativeProject(id)
-      db.insert(schema.creativeRenders).values({projectId:id,revision:(await p).revision,snapshot:'{}',status:'completed',progress:100,videoUrl:'/static/uploads/source.mp4',subtitleUrl:null,duration:5,warnings:'[]',outputs:definition.delivery==='clips'?JSON.stringify([{shotId:'shot-one',title:'片段',videoUrl:'/static/uploads/source.mp4',subtitleUrl:null,duration:5}]):'[]',createdAt:new Date().toISOString()}).returning().returning().returning().returning().returning().returning().returning().returning()
+      const p=await getCreativeProject(id)
+      ;(await db).insert(schema.creativeRenders).values({projectId:id,revision:p.revision,snapshot:'{}',status:'completed',progress:100,videoUrl:'/static/uploads/source.mp4',subtitleUrl:null,duration:5,warnings:'[]',outputs:definition.delivery==='clips'?JSON.stringify([{shotId:'shot-one',title:'片段',videoUrl:'/static/uploads/source.mp4',subtitleUrl:null,duration:5}]):'[]',createdAt:new Date().toISOString()}).returning()
       return getCreativeProject(id)
     },
   }))
-  const r=runner(execute);r.start(project.id,1)
+  const r=runner(execute);await r.start(project.id,1)
   for(let i=0;i<30&&(await runFor(project.id)).status!=='completed';i++) {
     await tick(r,project.id)
     assert.notEqual((await runFor(project.id)).status,'failed',(await runFor(project.id)).error??'stage failed')
@@ -85,12 +85,12 @@ for(const definition of pipelineDefinitions) test(`${definition.id} executes its
 await test('review edits are persisted and passed to the next stage; stale actions cannot approve',async()=>{
   const p=create('talking_head'),seen:string[]=[]
   const r=runner(async ctx=>{seen.push(ctx.artifacts.idea?.content??'');return {artifact:narrative}})
-  r.start((await p).id,1);await tick(r,(await p).id)
-  const review=runFor((await p).id)
+  await r.start((await p).id,1);await tick(r,(await p).id)
+  const review=await runFor((await p).id)
   assert.equal(review.status,'review')
-  assert.throws(async ()=>r.continue((await p).id,review.id,review.version),/审阅/)
-  r.approve((await p).id,review.id,review.version,{...narrative,content:'用户确认后的内容'})
-  assert.throws(async ()=>r.approve((await p).id,review.id,review.version),/状态已变化/)
+  await assert.rejects(r.continue((await p).id,review.id,review.version),/审阅/)
+  await r.approve((await p).id,review.id,review.version,{...narrative,content:'用户确认后的内容'})
+  await assert.rejects(r.approve((await p).id,review.id,review.version),/状态已变化/)
   await tick(r,(await p).id)
   assert.equal(seen[1],'用户确认后的内容')
 })
@@ -98,12 +98,12 @@ await test('review edits are persisted and passed to the next stage; stale actio
 await test('pause waits for in-flight output, keeps it, and does not start the next stage',async()=>{
   const p=create();let release!:(value:{artifact:typeof narrative})=>void;let calls=0
   const r=runner(async()=>{calls++;return new Promise(resolve=>{release=resolve})})
-  r.start((await p).id,1);let s=runFor((await p).id);r.continue((await p).id,(await s).id,(await s).version)
-  s=runFor((await p).id);r.pause((await p).id,(await s).id,(await s).version)
-  assert.equal(runFor((await p).id).status,'pausing')
-  release({artifact:narrative});await r.idle((await s).id)
-  assert.equal(runFor((await p).id).status,'paused')
-  assert.equal(runFor((await p).id).stages[0].status,'completed')
+  await r.start((await p).id,1);await r.continue((await p).id,(await runFor((await p).id)).id,(await runFor((await p).id)).version)
+  await r.pause((await p).id,(await runFor((await p).id)).id,(await runFor((await p).id)).version)
+  assert.equal((await runFor((await p).id)).status,'pausing')
+  release({artifact:narrative});await r.idle((await runFor((await p).id)).id)
+  assert.equal((await runFor((await p).id)).status,'paused')
+  assert.equal((await runFor((await p).id)).stages[0].status,'completed')
   assert.equal(calls,1)
 })
 
@@ -116,71 +116,91 @@ await test('failed stages retain checkpoints, and explicit retries reuse them',a
     assert.equal(ctx.retry,true)
     return {artifact:narrative,waiting:true}
   })
-  r.start((await p).id,1);await tick(r,(await p).id)
-  assert.equal(runFor((await p).id).status,'failed')
+  await r.start((await p).id,1);await tick(r,(await p).id)
+  assert.equal((await runFor((await p).id)).status,'failed')
   await tick(r,(await p).id)
-  assert.equal(runFor((await p).id).status,'waiting')
-  assert.equal(runFor((await p).id).stages[0].attempt,2)
+  assert.equal((await runFor((await p).id)).status,'waiting')
+  assert.equal((await runFor((await p).id)).stages[0].attempt,2)
 })
 
 await test('rewind invalidates downstream artifacts and preserves their audit history',async()=>{
   const p=create('talking_head'),r=runner(async()=>({artifact:narrative}))
-  r.start((await p).id,1);await tick(r,(await p).id);await tick(r,(await p).id);await tick(r,(await p).id)
-  const s=runFor((await p).id)
-  r.rewind((await p).id,(await s).id,(await s).version,'idea')
-  const next=runFor((await p).id)
-  assert.equal((await next).cursor,0)
-  assert.ok((await next).stages.every(s=>s.status==='pending'&&s.artifact===null))
-  const event=getPipelineState((await p).id).events.find(e=>e.kind==='rewound')!
+  await r.start((await p).id,1);await tick(r,(await p).id);await tick(r,(await p).id);await tick(r,(await p).id)
+  const s=await runFor((await p).id)
+  await r.rewind((await p).id,s.id,s.version,'idea')
+  const next=await runFor((await p).id)
+  assert.equal(next.cursor,0)
+  assert.ok(next.stages.every(s=>s.status==='pending'&&s.artifact===null))
+  const state=await getPipelineState((await p).id)
+  const event=state.events.find(e=>e.kind==='rewound')!
   assert.ok((event.payload as any).invalidated[0].artifact)
 })
 
 await test('external edits prevent stale stage output and sync invalidates affected stages',async()=>{
   const p=create('talking_head');let release!:(value:{artifact:typeof narrative})=>void
   const r=runner(async()=>new Promise(resolve=>{release=resolve}))
-  r.start((await p).id,1);let s=runFor((await p).id);r.continue((await p).id,(await s).id,(await s).version)
-  saveCreativeProject((await p).id,{...p,title:'新的项目标题'})
-  release({artifact:narrative});await r.idle((await s).id)
-  s=runFor((await p).id);assert.equal((await s).status,'failed');assert.equal((await s).stale,true)
-  r.sync((await p).id,(await s).id,(await s).version)
-  s=runFor((await p).id);assert.equal((await s).revision,2);assert.equal((await s).cursor,0);assert.equal((await s).stale,false)
+  await r.start((await p).id,1)
+  let s=await runFor((await p).id)
+  await r.continue((await p).id,s.id,s.version)
+  await saveCreativeProject((await p).id,{...(await p),title:'新的项目标题'})
+  release({artifact:narrative});await r.idle(s.id)
+  s=await runFor((await p).id);assert.equal(s.status,'failed');assert.equal(s.stale,true)
+  await r.sync((await p).id,s.id,s.version)
+  s=await runFor((await p).id);assert.equal(s.revision,2);assert.equal(s.cursor,0);assert.equal(s.stale,false)
 })
 
 await test('restart recovery pauses waiting work and preserves submitted task IDs',async()=>{
   const p=create(),r=runner(async()=>({artifact:{...narrative,data:{renderId:88}},waiting:true}))
-  r.start((await p).id,1);await tick(r,(await p).id);r.dispose()
+  await r.start((await p).id,1);await tick(r,(await p).id);r.dispose()
   assert.ok((await recoverCreativePipelines())>=1)
-  const s=runFor((await p).id)
-  assert.equal((await s).status,'paused');assert.equal((await s).stages[0].artifact?.data?.renderId,88)
+  const s=await runFor((await p).id)
+  assert.equal(s.status,'paused');assert.equal(s.stages[0].artifact?.data?.renderId,88)
 })
 
 await test('only one unfinished run per project; APIs enforce project ownership and action version',async()=>{
   const p=create(),other=create(),r=runner(async()=>({artifact:narrative}))
   const app=new Hono().onError((error,c)=>c.json({message:error.message},error instanceof CreativeError?error.status:400)).route('/creative',createPipelineRoutes(r))
-  r.start((await p).id,1);const s=runFor((await p).id)
-  assert.throws(async ()=>r.start((await p).id,1),/已有/)
-  const request=async(id:number,version:number)=>app.request(`/creative/${id}/pipeline/${(await s).id}/actions`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'continue',version})})
-  assert.equal((await request((await other).id,(await s).version)).status,404)
+  await r.start((await p).id,1);const s=await runFor((await p).id)
+  await assert.rejects(r.start((await p).id,1),/已有/)
+  const request=async(id:number,version:number)=>app.request(`/creative/${id}/pipeline/${s.id}/actions`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'continue',version})})
+  assert.equal((await request((await other).id,s.version)).status,404)
   assert.equal((await request((await p).id,999)).status,409)
-  r.cancel((await p).id,(await s).id,(await s).version)
-  assert.equal(r.start((await p).id,1).run!.status,'ready')
+  await r.cancel((await p).id,s.id,s.version)
+  const restarted=await r.start((await p).id,1)
+  assert.equal(restarted.run!.status,'ready')
+})
+
+await test('pipeline state route returns the run, not a serialized Promise',async()=>{
+  // 路由曾把 getPipelineState 的 Promise 直接传给 success()，data 恒为 {}，
+  // 前端因此把所有项目当成“旧项目无流程”。契约：GET 返回真实 run。
+  const p=create(),r=runner(async()=>({artifact:narrative}))
+  const app=new Hono().onError((error,c)=>c.json({message:error.message},error instanceof CreativeError?error.status:400)).route('/creative',createPipelineRoutes(r))
+  await r.start((await p).id,1)
+  const res=await app.request(`/creative/${(await p).id}/pipeline`)
+  assert.equal(res.status,200)
+  const body=await res.json() as {data:{run:{status:string}|null,definition?:unknown}}
+  assert.ok(body.data.run,'GET /:id/pipeline 必须返回真实 run 状态')
+  assert.notDeepEqual(body.data,{})
+  r.dispose()
 })
 
 await test('sync reviews the manually edited timeline instead of regenerating it',async()=>{
   const p=create('talking_head'),r=runner(async()=>({artifact:narrative}))
-  r.start((await p).id,1)
+  await r.start((await p).id,1)
   for(let i=0;i<6;i++)await tick(r,(await p).id)
-  const before=runFor((await p).id)
-  assert.equal((await before).stages[(await before).cursor].id,'assets')
-  const changed=saveCreativeProject((await p).id,{...getCreativeProject((await p).id),shots:(await p).shots.map(s=>({...s,caption:'手动字幕',duration:4}))})
-  r.sync((await p).id,(await before).id,(await before).version)
-  const synced=runFor((await p).id),entry=(await synced).stages[(await synced).cursor]
-  assert.equal(entry.id,'scene_plan');assert.equal((await synced).status,'review')
+  const before=await runFor((await p).id)
+  assert.equal(before.stages[before.cursor].id,'assets')
+  const current=await getCreativeProject((await p).id)
+  const changed=await saveCreativeProject((await p).id,{...current,shots:current.shots.map(s=>({...s,caption:'手动字幕',duration:4}))})
+  await r.sync((await p).id,before.id,before.version)
+  const synced=await runFor((await p).id),entry=synced.stages[synced.cursor]
+  assert.equal(entry.id,'scene_plan');assert.equal(synced.status,'review')
   assert.equal((entry.artifact!.data!.shots as any[])[0].caption,'手动字幕')
   assert.equal(entry.artifact!.data!.manual,true)
-  r.approve((await p).id,(await synced).id,(await synced).version)
-  assert.equal(getCreativeProject((await p).id).approvedRevision,(await changed).revision)
-  assert.equal(getCreativeProject((await p).id).shots[0].duration,4)
+  await r.approve((await p).id,synced.id,synced.version)
+  const after=await getCreativeProject((await p).id)
+  assert.equal(after.approvedRevision,changed.revision)
+  assert.equal(after.shots[0].duration,4)
 })
 
 await test('ASR stores real SRT, preserves concurrent edits and reuses cached output',async()=>{

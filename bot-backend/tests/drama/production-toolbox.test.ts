@@ -243,12 +243,21 @@ test('upload accepts structured input and rejects executable SVG and invalid pro
   }
   assert.equal((await upload('good.json', '{"actions":[]}')).status, 200)
   assert.equal(
-    (await upload('bad.svg', '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'))
-      .status,
+    (await upload('bad.svg', '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>')).status,
     400,
   )
   assert.equal((await upload('bad.json', 'not json')).status, 400)
   assert.equal((await upload('missing.txt', 'test', 999999)).status, 404)
+})
+test('toolbox routes return real payloads, not a serialized Promise', async () => {
+  // 路由曾把 async 结果直接传给 success()，data 被序列化成 {}，
+  // 前端 jobs.data?.map 直接崩页。契约：列表必须是数组。
+  const p = await create(),
+    app = createCreativeRoutes()
+  const res = await app.request(`/${p.id}/toolbox`)
+  assert.equal(res.status, 200)
+  const body = (await res.json()) as { data: unknown }
+  assert.ok(Array.isArray(body.data), 'GET /:id/toolbox 的 data 必须是数组')
 })
 test('default changes do not change the pinned account, and job history redacts secrets', async () => {
   const p = await create(),
