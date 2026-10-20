@@ -81,19 +81,32 @@ fail-closed → gateway `/v1/models` → 可选端到端一次真实 turn，需�
 `DRAMA_ACCOUNT_EMAIL/PASSWORD`，脚本会登录 bot-backend 并把会话写进 drama home
 的 `account-auth-cookies.txt`）。
 
-### 桌面 app 入口（视频工厂页）
+### 桌面 app 入口（视频工厂页，原生挂载）
 
-hermes 桌面 app（`apps/desktop`）侧边栏有「视频工厂」入口，打开 `/drama` 工作区页面：
-Electron `<webview>` 直接嵌入 bot-backend 根路径上的 drama SPA，与 hermes 聊天同窗切换。
+hermes 桌面 app（`apps/desktop`）侧边栏有「视频工厂」入口，打开 `/drama` 工作区页面。
+页面**原生挂载** ai-drama 前端的 React 树（同一份代码，不用 webview/iframe）：
 
-- **服务地址**：默认 `http://localhost:30172`（dev 与 trio 相同）；页面内「更改地址」
-  可改，存于桌面端 localStorage（`hermes.desktop.drama.baseUrl`，机器级）。
-- **登录**：webview 与 app 内置浏览器共用 `persist:hermes-preview` 分区——Better Auth
-  cookie 一处登录，工作室页/内置浏览器/预览互通。
-- **安全契约**：沙箱开、node 关、无弹窗；guest 内 `target="_blank"` 只经预加载的
-  trusted-click 桥（http/https 白名单）走系统浏览器。
-- **实现**：`apps/desktop/src/app/drama/`（页面 + webview guest + 地址 store +
-  贡献注册），仿 `cloud-computer` 的 ROUTES_AREA/SIDEBAR_NAV_AREA 模式。
+- **嵌入方式**：`ai-drama/frontend-react/src/embed.tsx`（`DramaApp`：memory router +
+  embed 模式 Provider 栈）；桌面端 `apps/desktop/src/app/drama/page.tsx` 在**独立
+  React root** 中渲染它（react-router 拒绝在宿主 `<Routes>` 子树里再嵌 Router）。
+  vite 的 `hermes:drama-source` resolver 把 `@drama/...` 与 drama 源内的 `@/...`
+  指到 drama 源码树；react/react-dom 单份共享（alias + dedupe）。
+- **API 通道（dev）**：drama 客户端全是同源相对路径（`/api/v1`、`/api/auth`、
+  `/static`）；桌面 dev server 把这两个前缀代理到 bot-backend（30172），Better Auth
+  cookie 落在渲染进程 origin 上——无 CORS。bot-backend 需把渲染 origin 加入
+  `BETTER_AUTH_TRUSTED_ORIGINS`（本地 dev `.env` 已配 `http://127.0.0.1:5174`）。
+- **登录**：drama 自己的登录页在页面内完成（probeSession 守卫），与桌面 app 自身的
+  账号门（gateway 的 Better Auth 桥）互不影响，同一 bot-backend 账号体系。
+- **样式**：drama 的 Tailwind v4 样式随页面 chunk 编译（无 preflight、分层加载）；
+  两个设计系统仅 `--color-input` 一个变量重名——页面容器内联重申 drama 值，桌面
+  `styles.css` 用 unlayered `html:root` 重申桌面值。
+- **布局**：drama 两个布局根是 `h-full`（独立 SPA 与嵌入通吃，standalone 由
+  `#root{height:100%}` 撑起）。
+- **生产模式注意**：`/api`、`/static` 代理只存在于 `vite dev`；打包后的桌面 app
+  需要给嵌入页另一条传输通道（计划：经本地 gateway 转发到 bot-backend，与
+  accountAuth 桥同一条"桌面只跟 gateway 说话"的车道）。
+- **实现**：`apps/desktop/src/app/drama/`（页面 + 贡献注册），仿 `cloud-computer`
+  的 ROUTES_AREA/SIDEBAR_NAV_AREA 模式。
 
 ### 并发标定（drama 账号是所有 agent turn 的主体）
 

@@ -3886,3 +3886,28 @@ html[data-hud-window] [data-slot='popover-content'] {
 [data-pane-hidden] * {
   visibility: inherit !important;
 }
+
+/* Embedded video studio (ai-drama frontend, /drama page) — its stylesheet
+   loads AFTER ours into the same document and re-declares body tokens in a
+   `layer(base)` of its own. Same-name layers merge by document order, so its
+   body rules would win ours; unlayered declarations always beat layered
+   ones, which is why this block exists (same fight the titlebar codicon
+   sizing wins above). Two reinforcements:
+   1. body: re-pin the desktop chrome's type/palette the studio css would
+      otherwise repaint under the whole app.
+   2. --color-input: the ONE custom property both design systems define; the
+      studio page re-pins its drama value on its own container, and this
+      keeps the desktop value on the rest of the document (html:root outranks
+      the studio's :root declaration regardless of load order). */
+body {
+  font-family: var(--dt-font-sans);
+  font-size: 0.8125rem;
+  background: var(--ui-chat-surface-background);
+  color: var(--dt-foreground);
+  line-height: var(--dt-line-height, 1.55);
+  letter-spacing: var(--dt-letter-spacing, 0);
+}
+
+html:root {
+  --color-input: var(--dt-input);
+}

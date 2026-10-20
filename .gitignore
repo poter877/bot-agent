@@ -109,6 +109,7 @@ apps/desktop/electron/**/*.d.ts
 !apps/desktop/src/plugins/*/plugin.js
 !apps/desktop/src/global.d.ts
 !apps/desktop/src/vite-env.d.ts
+!apps/desktop/src/app/drama/drama-modules.d.ts
 
 # Build/debug artifacts that must never be committed
 /log.txt

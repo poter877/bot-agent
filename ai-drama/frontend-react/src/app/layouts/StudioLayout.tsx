@@ -3,7 +3,7 @@ import { Outlet } from 'react-router'
 
 export function StudioLayout() {
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-app">
+    <div className="flex h-full flex-col overflow-hidden bg-app">
       <Outlet />
     </div>
   )

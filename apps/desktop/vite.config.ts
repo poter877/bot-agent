@@ -59,6 +59,49 @@ const fsAllow = [
   )
 ]
 
+// The video-studio page mounts the ai-drama frontend NATIVELY (same React
+// tree the standalone SPA runs — no webview). Its sources live outside this
+// workspace and use their OWN '@/' alias. `vite:alias` rewrites '@/x' to the
+// desktop src BEFORE any plugin sees the specifier (core alias runs first in
+// the pre chain), so for a drama importer that rewrite must be detected and
+// pointed back at the drama tree — a drama file's '@/' can only ever mean
+// its own src. '@drama/<path>' (the embed entry + stylesheet, imported from
+// desktop code) maps unconditionally. Both hands off to the normal resolver
+// (extensions, index files); desktop files keep the app's own '@' alias;
+// react/react-dom stay single-copy through the pinned aliases and `dedupe`.
+const dramaSrc = path.resolve(__dirname, '../../ai-drama/frontend-react/src')
+const desktopSrc = path.resolve(__dirname, './src')
+
+const dramaSourceResolver = () => ({
+  name: 'hermes:drama-source',
+  enforce: 'pre' as const,
+  async resolveId(source: string, importer: string | undefined, options: Record<string, unknown>) {
+    // Dev ids can carry ?v= queries; strip for the prefix checks.
+    const fromDrama = importer !== undefined && importer.split('?')[0].startsWith(`${dramaSrc}/`)
+
+    let mapped: string | null = null
+
+    if (source.startsWith('@drama/')) {
+      mapped = path.join(dramaSrc, source.slice('@drama/'.length))
+    } else if (fromDrama) {
+      if (source.startsWith(`${desktopSrc}/`)) {
+        // vite:alias already rewrote the drama file's '@/x' to the desktop
+        // src — send it to the drama file's own tree instead.
+        mapped = dramaSrc + source.slice(desktopSrc.length)
+      } else if (source.startsWith('@/')) {
+        // The bare form (vitest pipelines / future alias ordering).
+        mapped = path.join(dramaSrc, source.slice(1))
+      }
+    }
+
+    if (!mapped) {
+      return null
+    }
+
+    return this.resolve(mapped, importer, { ...options, skipSelf: true })
+  }
+})
+
 // React refuses to run when `react` and `react-dom` come from two different
 // installed copies ("Minified React error #527" — a blank window, since it
 // throws before the first paint). Both packages are pinned to one version in
@@ -134,7 +177,7 @@ const emojibaseAssets = () => ({
 
 export default defineConfig(({ command }) => ({
   base: './',
-  plugins: [react(), cachedCompilerPass(command), tailwindcss(), emojibaseAssets()],
+  plugins: [dramaSourceResolver(), react(), cachedCompilerPass(command), tailwindcss(), emojibaseAssets()],
   css: {
     // Pin an explicit (empty) PostCSS config. Tailwind is handled entirely by
     // `@tailwindcss/vite`, so the renderer needs no PostCSS plugins — and
@@ -228,7 +271,11 @@ export default defineConfig(({ command }) => ({
       'driver.js/dist/driver.js.iife.js',
       'driver.js/dist/driver.js.iife.js?raw',
       'driver.js/dist/driver.css?raw'
-    ]
+    ],
+    // Prewarm the studio embed so its out-of-workspace dependency graph
+    // (radix, i18next, …) doesn't trigger a "new dependencies optimized"
+    // full-page reload the first time the page opens.
+    include: ['@drama/embed']
   },
   resolve: {
     alias: {
@@ -263,6 +310,16 @@ export default defineConfig(({ command }) => ({
     host: '127.0.0.1',
     port: 5174,
     strictPort: true,
+    // The embedded video studio speaks SAME-ORIGIN relative paths (/api/v1,
+    // /api/auth, /static). Proxy those prefixes to bot-backend so its session
+    // cookie lands on the renderer origin (no CORS, no cross-site cookie
+    // loss) — exactly what the standalone SPA's own vite dev proxy does.
+    // The desktop's own API traffic rides the gateway WebSocket (hermesApi),
+    // never these paths, so the proxy is free to own them.
+    proxy: {
+      '/api': 'http://localhost:30172',
+      '/static': 'http://localhost:30172'
+    },
     fs: {
       allow: fsAllow
     }

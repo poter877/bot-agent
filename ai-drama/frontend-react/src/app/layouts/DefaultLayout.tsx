@@ -55,7 +55,7 @@ export function DefaultLayout() {
   }, [])
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-app">
+    <div className="flex h-full flex-col overflow-hidden bg-app">
       <header className="relative z-10 flex h-[60px] shrink-0 items-center gap-8 border-b border-outline bg-header px-6 backdrop-blur-[20px] backdrop-saturate-[1.8]">
         <div className="flex items-center">
           <Link

@@ -26,26 +26,31 @@ async function requireSession() {
   return null
 }
 
-export const router = createBrowserRouter([
-  { path: '/login', element: <LoginRoute /> },
-  {
-    element: <DefaultLayout />,
-    errorElement: <RouteError />,
-    loader: requireSession,
-    children: [
-      { path: '/', element: <ProjectsRoute /> },
-      { path: '/settings', element: <SettingsRoute /> },
-      { path: '/drama/:id', element: <DramaDetailRoute /> },
-      { path: '/creative/:id', element: <CreativeRoute /> },
-      { path: '/film/:id', element: <FilmWorkbenchRoute /> },
-    ],
-  },
-  {
-    path: '/drama/:id/episode/:episodeNumber',
-    element: <StudioLayout />,
-    errorElement: <RouteError />,
-    loader: requireSession,
-    children: [{ index: true, element: <EpisodeWorkbenchRoute /> }],
-  },
-  { path: '*', element: <RouteError /> },
-])
+/** 路由树：独立导出供独立 SPA（browser history）与桌面嵌入（memory history）共用。 */
+export function buildRoutes() {
+  return [
+    { path: '/login', element: <LoginRoute /> },
+    {
+      element: <DefaultLayout />,
+      errorElement: <RouteError />,
+      loader: requireSession,
+      children: [
+        { path: '/', element: <ProjectsRoute /> },
+        { path: '/settings', element: <SettingsRoute /> },
+        { path: '/drama/:id', element: <DramaDetailRoute /> },
+        { path: '/creative/:id', element: <CreativeRoute /> },
+        { path: '/film/:id', element: <FilmWorkbenchRoute /> },
+      ],
+    },
+    {
+      path: '/drama/:id/episode/:episodeNumber',
+      element: <StudioLayout />,
+      errorElement: <RouteError />,
+      loader: requireSession,
+      children: [{ index: true, element: <EpisodeWorkbenchRoute /> }],
+    },
+    { path: '*', element: <RouteError /> },
+  ]
+}
+
+export const router = createBrowserRouter(buildRoutes())

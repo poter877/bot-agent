@@ -30,15 +30,16 @@ export function createQueryClient(): QueryClient {
   })
 }
 
-export function AppProviders({ children }: { children: React.ReactNode }) {
+/** embed：桌面嵌入模式 — 不写 document.title（窗口标题归桌面宿主管）。 */
+export function AppProviders({ children, embed = false }: { children: React.ReactNode; embed?: boolean }) {
   const { t } = useTranslation()
   const { resolvedTheme } = useTheme()
   const queryClient = useMemo(createQueryClient, [])
 
-  // 响应式文档标题
+  // 响应式文档标题（独立 SPA）；嵌入模式下窗口标题属于宿主，跳过
   useEffect(() => {
-    document.title = t('app.title')
-  }, [t])
+    if (!embed) document.title = t('app.title')
+  }, [t, embed])
 
   return (
     <QueryClientProvider client={queryClient}>
