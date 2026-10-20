@@ -108,6 +108,33 @@ hermes 桌面 app（`apps/desktop`）侧边栏有「视频工厂」入口，打�
 - **实现**：`apps/desktop/src/app/drama/`（页面 + 贡献注册），仿 `cloud-computer`
   的 ROUTES_AREA/SIDEBAR_NAV_AREA 模式。
 
+### 部署模型：客户端与服务端
+
+```
+客户端（用户机器）                     服务端（我们的服务器）
+┌──────────────────────┐             ┌────────────────────────────────┐
+│ 桌面 app（Hermes）      │             │ bot-backend（:30172）            │
+│  ├ 聊天 → 本地 serve    │             │  ├ 模型出口（全仓唯一）            │
+│  │   （app 私随，随开关） │             │  ├ 账号库（Better Auth）          │
+│  └ 视频工厂（原生内嵌）   │──HTTPS────→ │  └ 视频工厂领域服务               │
+└──────────────────────┘             │ hermes gateway（drama profile）  │
+                                     │  └ 编排大脑（:30179）             │
+                                     │ PostgreSQL / Redis              │
+                                     └────────────────────────────────┘
+```
+
+- **客户端组件**（桌面 app、它的 serve）：随 app 开关生灭——serve 负责"在用户机器上
+  执行工具"（读写本地文件、跑终端），这是桌面聊天的产品特性，必须在用户侧。
+- **服务端组件**（bot-backend、drama gateway、数据库）：部署在服务器，7×24 常驻是
+  服务器的本性，与任何人的 app 开关无关。视频工厂的编排大脑属于这一层——
+  bot-backend 只经 `HERMES_AGENT_URL` 调它（容器间地址），**绝不在 bot-backend
+  进程里拉起任何东西**（bot-backend 是纯后端项目）。
+- **部署产物**：`deploy/trio/docker-compose.yml`（postgres + redis + bot-backend +
+  hermes-gateway），上服务器即此拓扑。
+- **开发机**：客户端在本地跑（桌面 app dev），服务端组件的本地替身 =
+  bot-backend（tsx watch）+ drama gateway（systemd 用户服务）。替身与服务器组件
+  同构，切换到真服务器只需改桌面 app 与 bot-backend 的指向。
+
 ### 宿主机 dev 网关（不走 trio 容器时）
 
 trio 之外，宿主机直跑。**网关是 systemd 用户服务**（`~/.config/systemd/user/
