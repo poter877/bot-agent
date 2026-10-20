@@ -329,15 +329,17 @@ def open_account_backend_stream(
         raise AccountBackendError("Account service is unavailable. Please retry.") from error
 
 
-def request_account_backend(path: str, *, payload: dict | None = None, timeout: float = 10.0):
+def request_account_backend(path: str, *, payload: dict | None = None, timeout: float = 10.0,
+                            method: str | None = None):
     # Logout and late status responses must not race a cookie back onto disk.
     with account_session_lock():
         if (authority := current_account_request_authority()) is not None:
             require_account_session_binding(authority)
-        return _request_account_backend(path, payload=payload, timeout=timeout)
+        return _request_account_backend(path, payload=payload, timeout=timeout, method=method)
 
 
-def _request_account_backend(path: str, *, payload: dict | None, timeout: float):
+def _request_account_backend(path: str, *, payload: dict | None, timeout: float,
+                             method: str | None = None):
     base = bot_backend_base()
     # Device-flow Bearer token outranks the cookie jar: when present it is the
     # ONLY credential sent — no cookie rides along, no jar is persisted.
@@ -357,7 +359,7 @@ def _request_account_backend(path: str, *, payload: dict | None, timeout: float)
         headers[CORRELATION_ID_HEADER] = correlation_id
     request = urllib.request.Request(
         base + path, data=json.dumps(payload).encode() if payload is not None else None,
-        method="POST" if payload is not None else "GET",
+        method=method or ("POST" if payload is not None else "GET"),
         headers=headers,
     )
     try:

@@ -103,14 +103,14 @@ def _request_base(request: Request) -> str:
     return str(request.base_url).rstrip("/")
 
 
-@router.api_route("/api/{path:path}", methods=["GET", "POST"])
+@router.api_route("/api/{path:path}", methods=["GET", "POST", "PUT"])
 async def studio_api(path: str, request: Request) -> object:
     _ensure_studio_assembly(_request_base(request))
     if not path.startswith(_ALLOWED_PREFIXES):
         raise HTTPException(status_code=404, detail="video-studio forwards business API paths only")
 
     payload = None
-    if request.method == "POST":
+    if request.method in ("POST", "PUT"):
         try:
             payload = await request.json()
         except Exception as exc:
@@ -118,7 +118,9 @@ async def studio_api(path: str, request: Request) -> object:
 
     # 账号桥是同步 urllib 实现；在线程池里跑，不占事件循环。
     try:
-        return await asyncio.to_thread(request_account_backend, f"/api/{path}", payload=payload)
+        return await asyncio.to_thread(
+            request_account_backend, f"/api/{path}", payload=payload, method=request.method
+        )
     except AccountBackendError as exc:
         raise _error_response(exc) from exc
 

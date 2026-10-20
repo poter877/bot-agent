@@ -74,23 +74,35 @@ async function patch(
       )
       .returning({ id: schema.creativePipelineRuns.id }))
     if (!result.length) throw new CreativeError('流程状态已变化，请刷新后重试', 409)
+    // CAS 成功即推进内存行的版本——同一调用链上顺序的后续 patch（如
+    // stage_started 之后的 awaiting_agent/checkpoint）不再拿过期版本去撞 409。
+    row.version += 1
     if (kind !== 'poll') log(row, kind, payload, stageId)
   }))
 };
 async function reconcileRowRevision(row: RunRow): Promise<RunRow> {
   const project = await getCreativeProject(row.projectId)
   if (project.revision === row.revision) return row
+  // 活跃 run 的版本同步是「同步修改」动作的事——读路径在这里写库会与
+  // launch/checkpoint 的 CAS 互相顶版本（曾把 checkpoint 顶成 409 未处理
+  // rejection 直接打死进程）。终态 run 才做工具写回恢复。
+  if (!['completed', 'cancelled'].includes(row.status)) return row
   const state = await decode(row),
     entry = state.stages[row.cursor]
   const revision = await reconcilePipelineToolRevision(row.projectId, row.revision, entry?.artifact ?? null)
   if (revision === null) return row
-  patch(
-    row,
-    { revision, snapshot: (await snapshot(project)), stages: JSON.stringify(state.stages) },
-    'tool_writeback_recovered',
-    { revision },
-    entry?.id,
-  )
+  try {
+    await patch(
+      row,
+      { revision, snapshot: (await snapshot(project)), stages: JSON.stringify(state.stages) },
+      'tool_writeback_recovered',
+      { revision },
+      entry?.id,
+    )
+  } catch {
+    // 并发写已推进版本——读回当前行即可，读路径不该因写竞争失败
+    return readRun(row.projectId, row.id)
+  }
   return readRun(row.projectId, row.id)
 }
 export async function getPipelineState(projectId: number) {
@@ -148,22 +160,31 @@ export function createPipelineRunner(execute: StageExecutor = createStageExecuto
     timers.set(row.id, timer)
   };
   async function checkpoint(row: RunRow, index: number, artifact: PipelineArtifact, revision?: number) {
-    const fresh = (await current(row)),
-      state = (await decode(fresh))
     const project = revision === undefined ? null : await getCreativeProject(row.projectId)
     if (project && project.revision !== revision)
       throw new CreativeError('工具写回期间项目已修改，请同步后继续', 409)
-    state.stages[index].artifact = artifact;
-    await patch(
-      fresh,
-      {
-        stages: JSON.stringify(state.stages),
-        ...(project ? { revision: project.revision, snapshot: snapshot(project) } : {}),
-      },
-      'checkpoint',
-      { artifact },
-      state.stages[index].id,
-    )
+    // 读-写之间可能被并发写推进版本（面板轮询、工具回写）：重读一次再试，
+    // 仍冲突才上抛——不让 CAS 竞争以未处理 rejection 打死进程。
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const fresh = (await current(row)),
+        state = (await decode(fresh))
+      state.stages[index].artifact = artifact;
+      try {
+        await patch(
+          fresh,
+          {
+            stages: JSON.stringify(state.stages),
+            ...(project ? { revision: project.revision, snapshot: snapshot(project) } : {}),
+          },
+          'checkpoint',
+          { artifact },
+          state.stages[index].id,
+        )
+        return
+      } catch (error) {
+        if (!(error instanceof CreativeError) || error.status !== 409 || attempt === 1) throw error
+      }
+    }
   };
   async function work(initial: RunRow, retry: boolean) {
     let row = await current(initial)
@@ -235,11 +256,13 @@ export function createPipelineRunner(execute: StageExecutor = createStageExecuto
           })
         } catch (err) {
           if (err instanceof AgentStagePending) {
-            // 《重构》§6：服务端不代调模型——暂存准备好的提示词，等客户端 Agent 回交
+            // 《重构》§6：服务端不代调模型——暂存准备好的提示词，等客户端 Agent 回交。
+            // executor 期间可能有 checkpoint 推进过版本：重读后再写，避免 CAS 409。
             entry.status = 'waiting'
             entry.pendingAgent = err.prepared
+            const fresh = await current(row)
             await patch(
-              row,
+              fresh,
               { status: 'waiting', stages: JSON.stringify(state.stages) },
               'awaiting_agent',
               { stage: stage.id },
@@ -291,6 +314,7 @@ export function createPipelineRunner(execute: StageExecutor = createStageExecuto
         retry = false
       }
     } catch (error) {
+      console.error('[creative-pipeline] stage failed:', row.id, 'cursor', row.cursor, error)
       try {
         row = (await current(row))
         if (row.status === 'cancelled') return
