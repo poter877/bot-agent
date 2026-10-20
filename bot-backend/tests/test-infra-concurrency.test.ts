@@ -16,6 +16,10 @@ import { it, expect } from 'vitest'
 
 const INFRA_FILE_PREFIX = '.bot-backend-test-infra-'
 
+// 外接服务模式（BOT_BACKEND_TEST_DATABASE_URL，CI 同款）没有 per-run 基础设施
+// 文件——initdb 自供集群的并发交接语义只在能自供的宿主机上可验证。
+const EXTERNAL_INFRA = !!process.env.BOT_BACKEND_TEST_DATABASE_URL
+
 function listInfraFiles(): string[] {
   const dir = path.join(process.cwd(), 'node_modules')
   try {
@@ -36,7 +40,7 @@ function runVitestChild(): Promise<{ code: number }> {
   })
 }
 
-it('two concurrent vitest runs each own their infra file', { timeout: 180_000 }, async () => {
+it('two concurrent vitest runs each own their infra file', { timeout: 180_000, skip: EXTERNAL_INFRA && '外部 DB 模式无 per-run 基础设施文件' }, async () => {
   rmSync(path.join(process.cwd(), 'node_modules', '.bot-backend-test-infra.json'), { force: true })
   const observed = new Set<string>()
   const poller = setInterval(() => {
