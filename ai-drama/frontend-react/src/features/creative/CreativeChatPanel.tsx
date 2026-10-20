@@ -81,16 +81,21 @@ function StudioChatPanel({ project, disabled, onBusyChange }: { project: Creativ
   )
 }
 
+/** 分发层：嵌入走宿主车道，独立浏览器走 HTTP 轮询——两个组件各自持有
+ *  完整且无条件的 Hook 链（Rules of Hooks：不得在分支间切换 Hook 结构）。 */
 export function CreativeChatPanel({ project, disabled, onProjectUpdated, onGoToStage, onBusyChange }: Props) {
-  const embedded = Boolean(studioHost()?.agent)
+  if (studioHost()?.agent) {
+    return <StudioChatPanel disabled={disabled} onBusyChange={onBusyChange} project={project} />
+  }
+  return <HttpChatPanel disabled={disabled} onGoToStage={onGoToStage} onProjectUpdated={onProjectUpdated} onBusyChange={onBusyChange} project={project} />
+}
+
+function HttpChatPanel({ project, disabled, onProjectUpdated, onGoToStage, onBusyChange }: Props) {
   const { i18n } = useTranslation()
   const lang = i18n.language.split('-')[0] as keyof typeof labels
   const copy = labels[lang] ?? labels.en
   const [input, setInput] = useState('')
   const client = useQueryClient()
-  if (embedded) {
-    return <StudioChatPanel disabled={disabled} onBusyChange={onBusyChange} project={project} />
-  }
   const listRef = useRef<HTMLDivElement>(null)
   const wasProcessing = useRef(false)
   const queryKey = ['workspace', 'default', 'creative', project.id, 'messages']

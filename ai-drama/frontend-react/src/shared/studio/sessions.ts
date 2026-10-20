@@ -8,7 +8,10 @@
  *
  * storedSessionId 用于持久化恢复；runtime sessionId 用于当次连接控制。
  */
-const STORAGE_KEY = 'huobao:studio-agent-sessions'
+// 版本前缀：映射结构演进时旧数据自然失效（当作无关联 → 新建会话即可，
+// 会话真相在宿主侧，丢失无损）；写入容错：隐私模式/配额超限时静默降级。
+const STORAGE_VERSION = 'v1'
+const STORAGE_KEY = `huobao:studio-agent-sessions:${STORAGE_VERSION}`
 
 type ProjectKey = string // `drama:<id>` | `creative:<id>`
 
@@ -27,7 +30,11 @@ function readAll(): Record<ProjectKey, Association> {
 }
 
 function writeAll(map: Record<ProjectKey, Association>): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(map))
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(map))
+  } catch {
+    // 隐私模式/配额超限/存储被禁：降级为仅内存（本页有效，关页即弃）
+  }
 }
 
 export const studioSessions = {

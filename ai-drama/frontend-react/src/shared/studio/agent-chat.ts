@@ -35,6 +35,10 @@ export function useStudioAgentChat(projectKey: string, projectTitle: string, opt
   const streamingRef = useRef<string | null>(null)
   const restoredRef = useRef(false)
   const sessionRef = useRef<{ sessionId: string } | null>(null)
+  // 回调存 ref：调用方传内联对象/lambda 也不会让订阅 effect 重跑（流式期间
+  // 每次渲染都重订事件流曾是这里的真实热路径）。
+  const settledRef = useRef(opts?.onSettled)
+  settledRef.current = opts?.onSettled
 
   // 历史恢复：有关联会话且本地为空（页面重开）时拉一次持久转录。
   useEffect(() => {
@@ -84,7 +88,7 @@ export function useStudioAgentChat(projectKey: string, projectTitle: string, opt
           setMessages(prev => [...prev, { id: `a-${Date.now()}`, role: 'assistant', content: text, status: 'done' }])
         }
         setBusy(false)
-        opts?.onSettled?.()
+        settledRef.current?.()
       } else if (event.type === 'tool.start' || event.type === 'tool.complete') {
         const id = streamingRef.current
         const name = String(payload.name ?? payload.tool ?? '')
@@ -94,7 +98,7 @@ export function useStudioAgentChat(projectKey: string, projectTitle: string, opt
       }
     })
     return off
-  }, [host, opts])
+  }, [host])
 
   if (!agent) return null
   const lane = agent
@@ -122,7 +126,7 @@ export function useStudioAgentChat(projectKey: string, projectTitle: string, opt
       .catch(() => {
         setBusy(false)
         setMessages(prev => [...prev, { id: `e-${Date.now()}`, role: 'assistant', content: '', status: 'failed' }])
-        opts?.onSettled?.()
+        settledRef.current?.()
       })
   }
 
