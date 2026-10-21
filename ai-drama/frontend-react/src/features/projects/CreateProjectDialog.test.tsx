@@ -265,7 +265,7 @@ it('offers only the twelve reference types and omits the two retired categories'
   const user = userEvent.setup()
   renderDialog()
   await user.click(screen.getByRole('radio', {name:'视频制片'}))
-  await screen.findByText(/种可选/)
+  await screen.findAllByText(/种制作模式/)
   expect(screen.queryByRole('radio',{name:'产品宣传'})).toBeNull()
   expect(screen.queryByRole('radio',{name:'素材混剪'})).toBeNull()
   expect(screen.getAllByRole('radio')).toHaveLength(14) // 2 project kinds + 12 video types
