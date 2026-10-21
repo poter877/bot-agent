@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Loader2, Pencil, Plus, Star, Trash2, X } from 'lucide-react'
+import { Loader2, Star, X } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -95,7 +95,6 @@ const TEST_RESULT_HEAD = 'flex items-center gap-2 text-[12px] text-content-secon
 const TEST_RESULT_META = 'font-code text-[11px] text-content-muted break-all'
 
 // 原全局 .btn-icon.btn-sm 尺寸收窄（30px）
-const ICON_BTN_SM = 'h-[30px] min-h-[30px] w-[30px] min-w-[30px]'
 
 /** 厂商预设模板（配置名持久化进 DB：provider 英文 + 服务类型英文，不随界面语言漂移）。
  *  文本/图像/视频/语音/转写五类收敛到公司后端：不经预设弹窗，改由 CompanyCatalogPicker
@@ -302,14 +301,6 @@ export function AiConfigsPanel() {
     mutationFn: (c: AiConfig) => aiConfigApi.update(c.id, { is_active: !c.isActive }),
     onSuccess: invalidate,
   })
-  const delMutation = useMutation({
-    mutationFn: (id: number) => aiConfigApi.del(id),
-    onSuccess: () => {
-      toast.success(t('index.deleted'))
-      invalidate()
-    },
-    onError: (err) => toastError(err),
-  })
 
   // ===== 配置弹窗（RHF + Zod；模型标签为受控数组） =====
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -345,19 +336,6 @@ export function AiConfigsPanel() {
     setModels([...preset.models])
   }
 
-  function startAddCfg(type: ServiceType) {
-    setEditId(null)
-    setClearKey(false)
-    setTestResult(null)
-    setServiceOptions('')
-    setServiceOptionsError(null)
-    setDialogType(type)
-    form.reset({ name: '', provider: '', priority: 0, api_key: '', base_url: '', temperature: '' })
-    setModels([])
-    const firstPreset = presetsByType(type)[0]
-    if (firstPreset) applyProviderPreset(type, firstPreset.provider)
-    setDialogOpen(true)
-  }
 
   function startEditCfg(c: AiConfig) {
     setEditId(c.id)
@@ -512,12 +490,10 @@ export function AiConfigsPanel() {
               {!COMPANY_TYPES.has(st.type) && countActive(st.type) > 0 && (
                 <Badge tone="brand">{t('settings.ai.activeCount', { n: countActive(st.type) })}</Badge>
               )}
-              {/* 公司五类默认不提供“添加服务”（模型来自目录直选）；仅当目录工具带该类型预设时开放直连工具入口 */}
-              {(!COMPANY_TYPES.has(st.type) || presetsByType(st.type).length > 0) && (
-                <Button variant="ghost" size="sm" className="ml-auto" aria-label={`添加${st.label}服务`} onClick={() => startAddCfg(st.type)}>
-                  <Plus size={13} /> {t('common.add')}
-                </Button>
-              )}
+              {/* 供应商与密钥只在运营管理台（bot-backend /console）配置；此处只做选择与启停 */}
+              <a href="/console" target="_blank" rel="noreferrer" className="ml-auto inline-flex items-center gap-1 text-xs text-brand-content underline underline-offset-2">
+                {t('settings.ai.manageInConsole', '在运营管理台配置')} ↗
+              </a>
             </div>
             {COMPANY_TYPES.has(st.type) && (
               <CompanyCatalogPicker type={st.type} cfgs={byType(st.type)} configsPending={configsQuery.isPending} onChanged={invalidate} />
@@ -574,12 +550,7 @@ export function AiConfigsPanel() {
                   <input type="checkbox" aria-label={`启用 ${c.name}`} className="sr-only peer" checked={c.isActive} onChange={() => toggleMutation.mutate(c)} />
                   <Switch checked={c.isActive} className="peer-focus-visible:shadow-focus" />
                 </label>
-                <Button variant="ghost" size="icon" className={ICON_BTN_SM} aria-label={`编辑 ${c.name}`} onClick={() => startEditCfg(c)}>
-                  <Pencil size={13} />
-                </Button>
-                <Button variant="danger" size="icon" className={ICON_BTN_SM} aria-label={`删除 ${c.name}`} onClick={() => delMutation.mutate(c.id)}>
-                  <Trash2 size={13} />
-                </Button>
+
               </div>
             ))}
             {!COMPANY_TYPES.has(st.type) && !byType(st.type).length && <p className={CONFIG_EMPTY}>{t('settings.common.empty')}</p>}
