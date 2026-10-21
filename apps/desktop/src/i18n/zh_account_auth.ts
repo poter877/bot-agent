@@ -3,6 +3,7 @@ export const zhAccountAuth = {
   signOutAction: '退出登录',
   checking: '正在检查登录状态…',
   unavailableTitle: '认证服务不可用',
+  reconnecting: 'Account service reconnecting — recovering automatically…',
   unavailableBody: '无法连接账号服务，请检查网络后重试。',
   retry: '重试',
   signInTitle: '登录',

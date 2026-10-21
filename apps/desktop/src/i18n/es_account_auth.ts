@@ -3,6 +3,7 @@ export const esAccountAuth = {
   signOutAction: 'Cerrar sesión',
   checking: 'Comprobando tu sesión…',
   unavailableTitle: 'Servicio de autenticación no disponible',
+  reconnecting: 'Account service reconnecting — recovering automatically…',
   unavailableBody: 'No se pudo conectar con el servicio de cuentas. Comprueba tu conexión e inténtalo de nuevo.',
   retry: 'Reintentar',
   signInTitle: 'Iniciar sesión',

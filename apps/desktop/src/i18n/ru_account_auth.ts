@@ -3,6 +3,7 @@ export const ruAccountAuth = {
   signOutAction: 'Выйти',
   checking: 'Проверяем вход…',
   unavailableTitle: 'Сервис аутентификации недоступен',
+  reconnecting: 'Account service reconnecting — recovering automatically…',
   unavailableBody: 'Не удаётся связаться со службой аккаунтов. Проверьте соединение и повторите попытку.',
   retry: 'Повторить',
   signInTitle: 'Вход',

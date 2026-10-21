@@ -3,6 +3,7 @@ export const zh_hantAccountAuth = {
   signOutAction: '登出',
   checking: '正在檢查登入狀態…',
   unavailableTitle: '認證服務不可用',
+  reconnecting: 'Account service reconnecting — recovering automatically…',
   unavailableBody: '無法連線帳號服務，請檢查網路後重試。',
   retry: '重試',
   signInTitle: '登入',

@@ -4,6 +4,7 @@ export const enAccountAuth = {
   signOutAction: 'Sign out',
   checking: 'Checking your sign-in…',
   unavailableTitle: 'Authentication service unavailable',
+  reconnecting: 'Account service reconnecting — recovering automatically…',
   unavailableBody: 'Could not reach the account service. Check your connection and try again.',
   retry: 'Retry',
   signInTitle: 'Sign in',

@@ -3,6 +3,7 @@ export const deAccountAuth = {
   signOutAction: 'Abmelden',
   checking: 'Anmeldung wird überprüft…',
   unavailableTitle: 'Authentifizierungsdienst nicht verfügbar',
+  reconnecting: 'Account service reconnecting — recovering automatically…',
   unavailableBody: 'Der Konto-Dienst ist nicht erreichbar. Prüfe deine Verbindung und versuche es erneut.',
   retry: 'Erneut versuchen',
   signInTitle: 'Anmelden',

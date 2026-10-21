@@ -3,6 +3,7 @@ export const frAccountAuth = {
   signOutAction: 'Se déconnecter',
   checking: 'Vérification de votre session…',
   unavailableTitle: "Service d'authentification indisponible",
+  reconnecting: 'Account service reconnecting — recovering automatically…',
   unavailableBody: 'Impossible de joindre le service de comptes. Vérifiez votre connexion et réessayez.',
   retry: 'Réessayer',
   signInTitle: 'Se connecter',

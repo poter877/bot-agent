@@ -3,6 +3,7 @@ export const arAccountAuth = {
   signOutAction: 'تسجيل الخروج',
   checking: 'جارٍ التحقق من تسجيل الدخول…',
   unavailableTitle: 'خدمة المصادقة غير متاحة',
+  reconnecting: 'Account service reconnecting — recovering automatically…',
   unavailableBody: 'تعذّر الوصول إلى خدمة الحسابات. تحقق من اتصالك وحاول مرة أخرى.',
   retry: 'إعادة المحاولة',
   signInTitle: 'تسجيل الدخول',

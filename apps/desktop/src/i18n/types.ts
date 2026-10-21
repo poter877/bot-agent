@@ -419,6 +419,7 @@ export interface Translations extends NoticeTranslations {
   accountAuth: {
     signOutAction: string
     checking: string
+    reconnecting: string
     unavailableTitle: string
     unavailableBody: string
     retry: string

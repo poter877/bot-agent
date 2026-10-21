@@ -3,6 +3,7 @@ export const jaAccountAuth = {
   signOutAction: 'ログアウト',
   checking: 'サインイン状態を確認しています…',
   unavailableTitle: '認証サービスが利用できません',
+  reconnecting: 'Account service reconnecting — recovering automatically…',
   unavailableBody: 'アカウントサービスに接続できません。ネットワークを確認して再試行してください。',
   retry: '再試行',
   signInTitle: 'サインイン',

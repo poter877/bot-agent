@@ -1,4 +1,5 @@
 import { useStore } from '@nanostores/react'
+import { Loader2 } from 'lucide-react'
 import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -110,8 +111,27 @@ export function AuthGate({
     }
   }, [lifecycle])
 
+  // 曾经认证过的会话：后端重启等瞬时不可用不再卸载业务面——只在顶部
+  // 显示一条自动恢复中的横幅。冷启动（从未认证）仍走完整登录门。
+  const [everAuthenticated, setEverAuthenticated] = useState(false)
+  useEffect(() => {
+    if (state.phase === 'authenticated') { setEverAuthenticated(true) }
+  }, [state.phase])
+
   if (state.phase === 'authenticated') {
     return <>{children}</>
+  }
+
+  if (state.phase === 'unavailable' && everAuthenticated) {
+    return (
+      <>
+        <div className="sticky top-0 z-50 flex items-center justify-center gap-2 bg-warning-soft px-3 py-1.5 text-xs text-warn-text" role="status">
+          <Loader2 aria-hidden className="animate-spin" size={12} />
+          {t.accountAuth.reconnecting}
+        </div>
+        {children}
+      </>
+    )
   }
 
   return (
