@@ -87,9 +87,7 @@ export function CreateProjectDialog({ open, onClose, stylePresets, aspectRatioOp
 
   const styleSelectOptions = stylePresets.map((p) => ({ label: p.name, value: p.value }))
   const selectedStyleDesc = stylePresets.find((p) => p.value === style)?.description || ''
-  const availableRatios = projectType === 'creative'
-    ? aspectRatioOptions.filter((option) => option.value !== 'adaptive')
-    : aspectRatioOptions
+  const availableRatios = aspectRatioOptions
 
   const filteredCategories = catalog.data ?? []
 
@@ -252,6 +250,7 @@ export function CreateProjectDialog({ open, onClose, stylePresets, aspectRatioOp
             {selectedStyleDesc && <span className="text-micro leading-[1.5] text-content-subtle">{selectedStyleDesc}</span>}
           </label>
           )}
+          {projectType === 'drama' && (
           <label className={fieldClass}>
             <span className={fieldLabelClass}>{t('index.createDialog.aspectRatio')}</span>
             <BaseSelect
@@ -263,6 +262,7 @@ export function CreateProjectDialog({ open, onClose, stylePresets, aspectRatioOp
             />
             <span className="text-micro leading-[1.5] text-content-subtle">{t('index.createDialog.aspectRatioHint')}</span>
           </label>
+          )}
         </div>
         {projectType === 'creative' && (
           <p id="creative-project-setup-hint" role="status" className="flex items-start gap-2 rounded-control bg-info-soft px-3 py-2.5 text-xs leading-[1.6] text-content-muted">
