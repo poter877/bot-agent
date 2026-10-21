@@ -54,7 +54,7 @@ export interface ToolboxJob {
   updatedAt: string
 }
 export const toolboxApi = {
-  catalog: (signal?: AbortSignal) => api.get<ToolboxCatalog>('/creative/toolbox/catalog', { signal }),
+  catalog: (category?: string, signal?: AbortSignal) => api.get<ToolboxCatalog>(`/creative/toolbox/catalog${category ? `?category=${encodeURIComponent(category)}` : ''}`, { signal }),
   list: (projectId: number, signal?: AbortSignal) => api.get<ToolboxJob[]>(`/creative/${projectId}/toolbox`, { signal }),
   start: (projectId: number, revision: number, toolId: string, args: Record<string, unknown>, configId?: number) =>
     api.post<ToolboxJob>(`/creative/${projectId}/toolbox`, { revision, toolId, args, ...(configId ? { configId } : {}) }),
@@ -66,9 +66,9 @@ export const toolboxApi = {
   upload: (projectId: number, file: File) => api.upload<ToolboxFile>(`/creative/${projectId}/toolbox/upload`, file, { timeoutMs: 180000 }),
 }
 export const toolboxQueries = {
-  catalog: () => queryOptions({
-    queryKey: ['workspace', WORKSPACE_SCOPE, 'creative-toolbox-catalog'],
-    queryFn: ({ signal }) => toolboxApi.catalog(signal),
+  catalog: (category?: string) => queryOptions({
+    queryKey: ['workspace', WORKSPACE_SCOPE, 'creative-toolbox-catalog', category ?? 'all'],
+    queryFn: ({ signal }) => toolboxApi.catalog(category, signal),
     staleTime: 30_000,
   }),
   project: (projectId: number) => queryOptions({

@@ -21,7 +21,12 @@ export function createProductionToolRoutes(
   service: ReturnType<typeof createToolboxService> = toolboxService,
 ) {
   const app = new Hono()
-  app.get('/toolbox/catalog', async (c) => success(c, await toolboxCatalog()))
+  app.get('/toolbox/catalog', async (c) => {
+    // 按制作模式收敛（对照 OpenMontage pipeline_defs 的 tools_available）；
+    // 不带 category 或模式未定义工具包时回落全量。
+    const category = c.req.query('category') || undefined
+    return success(c, await toolboxCatalog(category))
+  })
   app.get('/:id/toolbox', async (c) => success(c, await listToolboxJobs(Number(c.req.param('id')))))
   app.post('/:id/toolbox', async (c) =>
     success(c, await service.start(Number(c.req.param('id')), await c.req.json())),

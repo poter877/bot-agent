@@ -56,7 +56,7 @@ it('preserves editing when catalog and task queries refresh', async () => {
   fireEvent.click(await screen.findByRole('button', { name: /调整视频画幅/ }))
   fireEvent.change(screen.getByLabelText('宽度'), { target: { value: '731' } })
   act(() => {
-    client.setQueryData(toolboxQueries.catalog().queryKey, { tools: [{ ...localTool, description: '新目录说明' }, remoteTool], providers: [] })
+    client.setQueryData(toolboxQueries.catalog('explainer').queryKey, { tools: [{ ...localTool, description: '新目录说明' }, remoteTool], providers: [] })
     client.setQueryData(toolboxQueries.project(9).queryKey, [{ ...job, status: 'running', progress: 50 }])
   })
   expect((screen.getByLabelText('宽度') as HTMLInputElement).value).toBe('731')

@@ -153,7 +153,8 @@ export function CreativeToolboxPanel({ project, disabled, canRun, onProjectUpdat
   onProjectUpdated: (project: CreativeProject) => void; onBusyChange: (busy: boolean) => void
 }) {
   const client = useQueryClient()
-  const catalog = useQuery(toolboxQueries.catalog())
+  // 按制作模式收敛（对照 OpenMontage tools_available）；遗留品类回落全量
+  const catalog = useQuery(toolboxQueries.catalog(project.category))
   const jobs = useQuery(toolboxQueries.project(project.id))
   const configs = useQuery({ queryKey: qk.aiConfigs(), queryFn: ({ signal }) => aiConfigApi.list(undefined, signal) })
   const [search, setSearch] = useState('')

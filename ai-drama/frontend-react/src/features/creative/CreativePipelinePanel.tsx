@@ -69,7 +69,7 @@ export function CreativePipelinePanel({
     message: string
   } | null>(null)
   const toolPlan = useQuery(pipelineQueries.toolPlan(project.id, project.revision))
-  const toolbox = useQuery(toolboxQueries.catalog())
+  const toolbox = useQuery(toolboxQueries.catalog(project.category))
   const capabilities = useQuery({
     queryKey: ['creative-capabilities', project.id, project.revision],
     queryFn: () => pipelineApi.capabilities(project.id),

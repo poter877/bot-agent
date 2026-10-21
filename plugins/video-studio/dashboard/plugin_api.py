@@ -116,10 +116,14 @@ async def studio_api(path: str, request: Request) -> object:
         except Exception as exc:
             raise HTTPException(status_code=400, detail="JSON body required") from exc
 
+    # query 随转发（FastAPI 的 {path:path} 不含 query string，须显式拼回；
+    # 工具目录的模式收敛等过滤参数曾在此丢失）
+    forwarded = f"/api/{path}" + (f"?{request.url.query}" if request.url.query else "")
+
     # 账号桥是同步 urllib 实现；在线程池里跑，不占事件循环。
     try:
         return await asyncio.to_thread(
-            request_account_backend, f"/api/{path}", payload=payload, method=request.method
+            request_account_backend, forwarded, payload=payload, method=request.method
         )
     except AccountBackendError as exc:
         raise _error_response(exc) from exc

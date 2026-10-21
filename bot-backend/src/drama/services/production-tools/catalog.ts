@@ -1,5 +1,6 @@
 /** Capability facts only. Implementations are native Video Factory adapters. */
 import inventory from './inventory.json' with { type: 'json' }
+import { modeToolKit } from './mode-kits.js'
 import { providerPresets, providerToolSpecs } from './providers.js'
 import { companyBackendUrl } from '../company-backend.js'
 import { LOCAL_TOOL_IDS, localToolFields, localToolAvailability } from './local.js'
@@ -367,10 +368,24 @@ export async function getToolDefinition(id: string): Promise<ToolDefinition> {
     reason,
   }
 }
-export async function toolboxCatalog() {
+export async function toolboxCatalog(category?: string) {
+  const kit = category ? modeToolKit(category) : null
+  // kit 内的选择器 id（image_selector 等）展开为其 serviceType：
+  // 模式限制能力位，供应商是能力下的选择 → 同族全放行
+  const kitServiceTypes = new Set<string>()
+  if (kit)
+    for (const id of kit) {
+      const spec = providerToolSpecs[id] ?? sharedToolSpecs[id]
+      if (spec?.serviceType) kitServiceTypes.add(spec.serviceType)
+    }
   const tools = await Promise.all(
-    inventory.map(async (item) => {
-      const definition = getToolDefinition(item.id)
+    inventory.filter((item) => {
+      if (!kit) return true
+      const spec = providerToolSpecs[item.id] ?? sharedToolSpecs[item.id]
+      const serviceType = spec?.serviceType ?? ''
+      return kit.includes(item.id) || (serviceType ? kitServiceTypes.has(serviceType) : false)
+    }).map(async (item) => {
+      const definition = await getToolDefinition(item.id)
       if (LOCAL_TOOL_IDS.includes(item.id)) {
         const availability = await localToolAvailability(item.id)
         if (!availability.available) return { ...definition, available: false, reason: availability.reason }
@@ -405,5 +420,5 @@ export async function toolboxCatalog() {
       return definition
     }),
   )
-  return { tools, providers: toolboxProviderPresets(), referenceCount: inventory.length }
+  return { tools, providers: toolboxProviderPresets(), referenceCount: kit ? tools.length : inventory.length }
 }
