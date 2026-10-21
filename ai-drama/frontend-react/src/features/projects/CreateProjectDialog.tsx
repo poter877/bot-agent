@@ -81,6 +81,7 @@ export function CreateProjectDialog({ open, onClose, stylePresets, aspectRatioOp
   const words = useProductionText()
   const [projectType, setProjectType] = useState<ProjectType>('drama')
   const [creativeCategory, setCreativeCategory] = useState<CreativeCategory>('explainer')
+  const [idea, setIdea] = useState('')
   const [title, setTitle] = useState('')
   const [style, setStyle] = useState('')
   const [aspectRatio, setAspectRatio] = useState('16:9')
@@ -96,6 +97,7 @@ export function CreateProjectDialog({ open, onClose, stylePresets, aspectRatioOp
     if (!open) return
     setProjectType('drama')
     setCreativeCategory('explainer')
+    setIdea('')
     setTitle('')
     setStyle('')
     setAspectRatio('16:9')
@@ -113,7 +115,7 @@ export function CreateProjectDialog({ open, onClose, stylePresets, aspectRatioOp
         style: style || undefined,
         aspect_ratio: aspectRatio,
         ...(projectType === 'creative'
-          ? { project_type: 'creative' as const, creative_category: creativeCategory }
+          ? { project_type: 'creative' as const, creative_category: creativeCategory, idea }
           : {}),
       }),
     onSuccess: async (data) => {
@@ -150,7 +152,7 @@ export function CreateProjectDialog({ open, onClose, stylePresets, aspectRatioOp
             form="create-project-form"
             variant="primary"
             loading={createMutation.isPending}
-            disabled={projectType === 'creative' && !catalog.data?.some(item => item.id === creativeCategory)}
+            disabled={projectType === 'creative' && (!idea.trim() || !catalog.data?.some(item => item.id === creativeCategory))}
             className="min-w-0 whitespace-normal text-center leading-[1.35]"
           >
             <Plus size={13} strokeWidth={2.2} className="shrink-0" aria-hidden />
@@ -164,7 +166,7 @@ export function CreateProjectDialog({ open, onClose, stylePresets, aspectRatioOp
         className="flex flex-col gap-5"
         onSubmit={(e) => {
           e.preventDefault()
-          if (createMutation.isPending || !title.trim() || (projectType === 'creative' && !catalog.data?.some(item => item.id === creativeCategory))) return
+          if (createMutation.isPending || !title.trim() || (projectType === 'creative' && (!idea.trim() || !catalog.data?.some(item => item.id === creativeCategory)))) return
           createMutation.mutate()
         }}
       >
@@ -235,6 +237,21 @@ export function CreateProjectDialog({ open, onClose, stylePresets, aspectRatioOp
             autoFocus
           />
         </label>
+        {projectType === 'creative' && (
+          <label className={fieldClass}>
+            <span className={fieldLabelClass}>{t('index.createDialog.idea')} <span className="text-danger">*</span></span>
+            <textarea
+              value={idea}
+              onChange={(e) => setIdea(e.target.value)}
+              placeholder={t('index.createDialog.ideaPlaceholder')}
+              disabled={createMutation.isPending}
+              rows={3}
+              required
+              className="min-h-0 w-full rounded-control border border-outline bg-surface px-3 py-2 text-sm text-content placeholder:text-content-subtle focus-visible:outline-none focus-visible:shadow-focus"
+            />
+            <span className="text-micro leading-[1.5] text-content-subtle">{t('index.createDialog.ideaHint')}</span>
+          </label>
+        )}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {projectType === 'drama' && (
           <label className={fieldClass}>

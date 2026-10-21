@@ -173,7 +173,10 @@
           "title": "Video montage",
           "description": "Combine existing footage with audio and captions"
         }
-      }
+      },
+      "idea": "Topic & requirements",
+      "ideaPlaceholder": "e.g. Explain black holes in 60 seconds, starting from one question…",
+      "ideaHint": "This is the pipeline's input: AI starts researching and creating from here"
     },
     "deleteDialog": {
       "title": "Delete project",

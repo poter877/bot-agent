@@ -85,9 +85,16 @@ app.post('/', async (c) => {
       updatedAt: ts,
     }).returning())
     const id = getInsertId(res)
-    if (parsed.data.project_type === 'creative') (await tx.insert(schema.creativeProjects).values({
-      projectId: id, document: JSON.stringify(createCreativeDocument(parsed.data.creative_category!)), revision: 1, updatedAt: ts,
-    }))
+    if (parsed.data.project_type === 'creative') {
+      // OpenMontage 对齐：管线的用户输入就是主题（topic → brief.idea），
+      // 其余（角度/工具选择/风格）由各阶段导演决定，不设创建期表单。
+      const document = createCreativeDocument(parsed.data.creative_category!)
+      const idea = typeof body.idea === 'string' ? body.idea.trim().slice(0, 20000) : ''
+      if (idea) document.brief.idea = idea
+      await tx.insert(schema.creativeProjects).values({
+        projectId: id, document: JSON.stringify(document), revision: 1, updatedAt: ts,
+      })
+    }
     if (parsed.data.project_type === 'film') {
       createFilmProject({
         projectId: id,

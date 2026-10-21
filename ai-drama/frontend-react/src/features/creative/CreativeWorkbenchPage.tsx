@@ -4,7 +4,6 @@ import { useProductionText } from '@/entities/creative/catalog'
 import { AgentStageWatcher } from './AgentStageWatcher'
 import { PipelineStrip } from './PipelineStrip'
 import { useCreativeCatalog, useCatalogText } from '@/entities/creative/catalog'
-import { CreativeProductionPanel } from './CreativeProductionPanel'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useBeforeUnload, useBlocker, useNavigate } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -83,7 +82,6 @@ export function CreativeWorkbenchPage({ projectId }: { projectId: number }) {
       await queryClient.cancelQueries({ queryKey: options.queryKey })
       switch (action.kind) {
         case 'save': return creativeApi.save(projectId, action.draft)
-        case 'plan': return creativeApi.plan(projectId, action.revision)
         case 'approve': return creativeApi.approve(projectId, action.revision)
         case 'generate': return creativeApi.generate(projectId, action.shotId, action.mediaType, action.revision)
         case 'render': return action.individual ? creativeApi.render(projectId, action.revision, { individual: true }) : creativeApi.render(projectId, action.revision)
@@ -93,8 +91,7 @@ export function CreativeWorkbenchPage({ projectId }: { projectId: number }) {
     onMutate: () => { setError(null); setConflict(false) },
     onSuccess: async (project, action) => {
       await queryClient.cancelQueries({ queryKey: options.queryKey })
-      acceptProject(project)
-      if (action.kind === 'plan') store.getState().setStage('shots')
+      if (project) acceptProject(project)
       if (action.kind === 'render') store.getState().setStage('export')
     },
     onError: (cause) => {
@@ -120,7 +117,6 @@ export function CreativeWorkbenchPage({ projectId }: { projectId: number }) {
   const approved = !dirty && project.approvedRevision === project.revision
   const canRun = !dirty && !busy && !shotTasksActive && !conflict
   const planReady = current.shots.length > 0 && current.shots.every((shot) => !!shot.visualPrompt.trim() || shotHasMedia(shot))
-  const planInProgress = operation.isPending && operation.variables?.kind === 'plan'
   const mutationShotId = operation.isPending && operation.variables?.kind === 'generate' ? operation.variables.shotId : null
 
   const changeDraft = (update: (value: CreativeDraft) => CreativeDraft) => {
@@ -139,12 +135,6 @@ export function CreativeWorkbenchPage({ projectId }: { projectId: number }) {
     if (!draft || editDisabled) return
     if (!validateCreativeDraft(draft)) { setError(copy.validation); return }
     operation.mutate({ kind: 'save', draft: mergeCreativeMedia(draft, baseline.current ?? draft, project) })
-  }
-  const plan = () => {
-    if (!canRun || !current.brief.idea.trim()) return
-    const run = () => operation.mutate({ kind: 'plan', revision: project.revision })
-    if (current.shots.length || current.plan.script.trim()) setConfirmation({ title: copy.regeneratePlan, message: copy.regenerateWarning, onConfirm: run })
-    else run()
   }
   const upload = async (key: string, kind: 'image' | 'video' | 'audio', file: File, apply: (value: CreativeDraft, path: string) => CreativeDraft) => {
     if (editDisabled) return
@@ -192,7 +182,7 @@ export function CreativeWorkbenchPage({ projectId }: { projectId: number }) {
         </div>
         <div role="tabpanel" id={`creative-panel-${stage}`} aria-labelledby={`creative-tab-${stage}`}>
           {stage === 'toolbox' && <CreativeToolboxPanel project={project} disabled={editDisabled} canRun={canRun} onProjectUpdated={acceptProject} onBusyChange={setSourceBusy} />}
-          {stage === 'brief' && <div className="space-y-4"><CreativeProductionPanel project={project} draft={current} recipe={recipe} disabled={editDisabled} canRun={canRun} onChange={changeDraft} onProjectUpdated={acceptProject} onBusyChange={setSourceBusy} /><CreativeBriefPanel draft={current} copy={copy} disabled={editDisabled} canPlan={canRun && !!current.brief.idea.trim()} planning={planInProgress} onChange={changeDraft} onPlan={plan} onNext={() => setStage('shots')} /></div>}
+          {stage === 'brief' && <CreativeBriefPanel draft={current} copy={copy} disabled={editDisabled} onChange={changeDraft} />}
           {stage === 'shots' && <CreativeShotsPanel project={project} draft={current} copy={copy} selectedId={selectedId} disabled={editDisabled} canGenerate={canRun && approved} uploading={uploading} generating={mutationShotId} onSelect={store.getState().selectShot} onAdd={() => {
             const shot = { ...newCreativeShot(`${copy.shot} ${current.shots.length + 1}`), mediaType: recipe?.mediaType || 'image' as const }
             changeDraft((value) => ({ ...value, shots: [...value.shots, shot] }))
