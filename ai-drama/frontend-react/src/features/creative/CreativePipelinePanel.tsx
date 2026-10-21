@@ -4,7 +4,7 @@ import { CreativePipelineToolSteps } from './CreativePipelineToolSteps'
 import { toolboxQueries, type ToolboxFile } from '@/entities/creative/toolbox'
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Loader2, Pause, Play, RotateCcw } from 'lucide-react'
+import { Check, Loader2, Pause, RotateCcw } from 'lucide-react'
 import {
   pipelineApi,
   pipelineQueries,
@@ -204,31 +204,7 @@ export function CreativePipelinePanel({
             {definition.stages.length} {text('个阶段', 'stages')}
             {run ? ` · #${run.id} · ${label(run.status)}` : ''}
           </span>
-          {(!run || ended) && (
-            <Button variant="primary" disabled={locked} onClick={() => send('start')}>
-              <Play size={14} />
-              {text(run ? '建立新一轮流程' : '建立制作流程', run ? 'New run' : 'Create workflow')}
-            </Button>
-          )}
-          {run && !ended && !running && run.stages[run.cursor]?.status !== 'review' && !run.stale && (
-            <Button
-              variant="primary"
-              disabled={locked}
-              onClick={() =>
-                send(
-                  run.status === 'failed' || run.stages[run.cursor]?.status === 'failed'
-                    ? 'retry'
-                    : 'continue',
-                )
-              }
-            >
-              <Play size={14} />
-              {text(
-                run.status === 'failed' ? '重试当前阶段' : '继续执行',
-                run.status === 'failed' ? 'Retry stage' : 'Continue',
-              )}
-            </Button>
-          )}
+          {/* 建立/继续/重试的快捷入口已上移至顶部流程条（PipelineStrip） */}
           {run && ['running', 'waiting'].includes(run.status) && (
             <Button disabled={locked} onClick={() => send('pause')}>
               <Pause size={14} />

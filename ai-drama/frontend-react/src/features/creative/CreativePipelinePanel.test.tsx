@@ -185,7 +185,8 @@ it('keeps a cancelled review artifact read-only', () => {
   setup(value)
   expect(screen.queryByRole('button', { name: '确认此阶段' })).toBeNull()
   expect(screen.queryByRole('textbox', { name: '编辑阶段产物' })).toBeNull()
-  expect(screen.getByRole('button', { name: '建立新一轮流程' })).toBeTruthy()
+  // 建立/继续入口已上移至顶部流程条（PipelineStrip）；面板内不再重复
+  expect(screen.queryByRole('button', { name: '建立新一轮流程' })).toBeNull()
 })
 
 it('shows planned tools in their actual stage before execution', async () => {
