@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, Outlet, useLocation } from 'react-router'
 import { useTranslation } from 'react-i18next'
-import { Github, LayoutGrid, LogOut, Settings as SettingsIcon, TriangleAlert } from 'lucide-react'
+import { LayoutGrid, LogOut, Settings as SettingsIcon, TriangleAlert } from 'lucide-react'
 import { aiConfigApi } from '@/entities/ai-config/model'
 import { probeSession } from '@/shared/api/session'
 import { useUiLocale } from '@/shared/config/use-locale'
@@ -93,16 +93,6 @@ export function DefaultLayout() {
         </nav>
 
         <div className="ml-auto flex items-center">
-          <a
-            className="flex size-8 items-center justify-center rounded-pill text-content-muted leading-none transition-all duration-150 ease-app hover:bg-hover-overlay hover:text-content focus-visible:outline-none focus-visible:shadow-focus"
-            href="https://github.com/chatfire-AI/huobao-drama"
-            target="_blank"
-            rel="noopener"
-            aria-label="GitHub"
-            title="GitHub"
-          >
-            <Github size={15} strokeWidth={1.8} />
-          </a>
           <ThemeToggle />
           <LocaleSwitcher />
           {me && (

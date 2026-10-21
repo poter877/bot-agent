@@ -1,5 +1,5 @@
 /**
- * AI 服务配置面板：火宝快捷配置（API Key + 国内/国外节点一键写入）、
+ * AI 服务配置面板：
  * 手动配置 CRUD、模型标签编辑（首位即默认）、连通性测试。
  * API Key 仅存在于表单输入生命周期内，不进入任何缓存或持久化。
  */
@@ -35,9 +35,8 @@ const SETTINGS_HEAD = `${CONTENT_W} mb-5`
 const SETTINGS_TITLE = 'text-[22px] font-extrabold tracking-[-0.02em]'
 const SETTINGS_DESC = 'mt-1.5 text-[13px] text-content-muted'
 
-// 火宝快捷配置（quick-card 为引导锚点类，保留）
 
-// 内容语言分段选择器（火宝节点选择同款）
+// 内容语言分段选择器
 
 // 手动配置入口
 const CHIP =

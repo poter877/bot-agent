@@ -16,7 +16,6 @@ import { Button } from '@/shared/ui/button'
 import { cn } from '@/shared/lib/cn'
 
 const SETTINGS_TOUR: TourStep[] = [
-  { element: '.quick-card', titleKey: 'tour.settings.quick.title', descKey: 'tour.settings.quick.desc', popoverSide: 'bottom' },
   { element: '.settings-nav .nav-item', titleKey: 'tour.settings.nav.title', descKey: 'tour.settings.nav.desc', popoverSide: 'right' },
 ]
 

@@ -306,13 +306,9 @@
     "ai": {
       "title": "AI Service Configs",
       "desc": "Start with a recommended template, then fine-tune per service type. The workbench locks the chosen image and video capabilities when creating an episode.",
-      "quickTitle": "Huobao Quick Config",
       "recommended": "Recommended",
-      "quickDesc": "Enter a Huobao API Key to write three recommended configs (text, image, video) at once.",
-      "getKey": "Get a Huobao API key",
       "regionCn": "China",
       "regionCom": "Global",
-      "applyQuick": "Apply Huobao Config",
       "manualTitle": "Manual Templates",
       "manualDesc": "Pick a service type, then fill the recommended `provider / base URL / model` from a template.",
       "activeCount": "{n} active",
@@ -322,8 +318,6 @@
       "setDefault": "Set as default model for this type",
       "noBaseUrl": "Base URL not set",
       "test": "Test",
-      "apiKeyRequired": "Please enter a Huobao API Key",
-      "quickApplied": "Huobao quick config written",
       "defaultModelSwitched": "Default {type} model switched to {model}",
       "meta": {
         "text": "Text capabilities: script rewriting, asset extraction, storyboard breaking",
@@ -427,7 +421,7 @@
       "addTitle": "Add {type} Service",
       "sub": "Pick a template first — a sensible `Base URL` and default models will be filled in automatically.",
       "name": "Config name",
-      "namePlaceholder": "e.g. Huobao default image service",
+      "namePlaceholder": "e.g. Default image service",
       "provider": "Provider",
       "providerPlaceholder": "Select a provider",
       "priority": "Priority",
@@ -925,14 +919,10 @@
       },
       "settings": {
         "title": "Step 1 · Configure AI services",
-        "desc": "Every AI feature needs this first. Open Settings and paste a Huobao API Key to set up text/image/video in one click."
+        "desc": "All AI capabilities are configured here. Switch service types on the left and click a model to set it as default."
       }
     },
     "settings": {
-      "quick": {
-        "title": "Fastest setup: Quick Setup",
-        "desc": "Paste a Huobao API Key to write the three recommended configs (text/image/video) at once, with connectivity testing."
-      },
       "nav": {
         "title": "Everything lives here",
         "desc": "Switch sections on the left: AI services, general (UI & content language), style presets, agent prompts & skills, storage, about."
