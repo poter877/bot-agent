@@ -238,6 +238,7 @@ export function CreateProjectDialog({ open, onClose, stylePresets, aspectRatioOp
           />
         </label>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {projectType === 'drama' && (
           <label className={fieldClass}>
             <span className={fieldLabelClass}>{t('index.createDialog.style')}</span>
             <BaseSelect
@@ -250,6 +251,7 @@ export function CreateProjectDialog({ open, onClose, stylePresets, aspectRatioOp
             />
             {selectedStyleDesc && <span className="text-micro leading-[1.5] text-content-subtle">{selectedStyleDesc}</span>}
           </label>
+          )}
           <label className={fieldClass}>
             <span className={fieldLabelClass}>{t('index.createDialog.aspectRatio')}</span>
             <BaseSelect
