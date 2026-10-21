@@ -79,7 +79,6 @@ export function CreateProjectDialog({ open, onClose, stylePresets, aspectRatioOp
   const catalog = useCreativeCatalog(open)
   const localize = useCatalogText()
   const words = useProductionText()
-  const [categorySearch, setCategorySearch] = useState('')
   const [projectType, setProjectType] = useState<ProjectType>('drama')
   const [creativeCategory, setCreativeCategory] = useState<CreativeCategory>('explainer')
   const [title, setTitle] = useState('')
@@ -92,13 +91,12 @@ export function CreateProjectDialog({ open, onClose, stylePresets, aspectRatioOp
     ? aspectRatioOptions.filter((option) => option.value !== 'adaptive')
     : aspectRatioOptions
 
-  const filteredCategories = catalog.data?.filter(item => `${localize(item.title)} ${localize(item.description)}`.toLowerCase().includes(categorySearch.trim().toLowerCase())) ?? []
+  const filteredCategories = catalog.data ?? []
 
   // 只在重新打开时重置，后台预设刷新不能清空正在编辑的草稿。
   useEffect(() => {
     if (!open) return
     setProjectType('drama')
-    setCategorySearch('')
     setCreativeCategory('explainer')
     setTitle('')
     setStyle('')
@@ -106,9 +104,9 @@ export function CreateProjectDialog({ open, onClose, stylePresets, aspectRatioOp
   }, [open])
 
   useEffect(() => {
-    if (!open) return
+    if (!open || projectType === 'creative') return
     setStyle((current) => current || stylePresets[0]?.value || '')
-  }, [open, stylePresets])
+  }, [open, stylePresets, projectType])
 
   const createMutation = useMutation({
     mutationFn: () =>
@@ -196,6 +194,8 @@ export function CreateProjectDialog({ open, onClose, stylePresets, aspectRatioOp
               onChange={() => {
                 setProjectType('creative')
                 if (aspectRatio === 'adaptive') setAspectRatio('16:9')
+                // 短剧向的默认风格预选不带入制片；用户明确选过的保留
+                setStyle(current => current && current === stylePresets[0]?.value ? '' : current)
               }}
             />
           </div>
@@ -203,7 +203,6 @@ export function CreateProjectDialog({ open, onClose, stylePresets, aspectRatioOp
         {projectType === 'creative' && (
           <fieldset className="min-w-0 border-0">
             <legend className={cn(fieldLabelClass, 'mb-2')}>{t('index.createDialog.creativeCategory')}</legend>
-            <Input aria-label={words('搜索制作模式','Search production modes')} placeholder={words('搜索模式、用途…','Search modes and use cases…')} value={categorySearch} onChange={event => setCategorySearch(event.target.value)} disabled={createMutation.isPending} className="mb-3" />
             <p className="mb-3 text-xs text-content-muted">{words('已选择：','Selected: ')}{localize(catalog.data?.find(item => item.id === creativeCategory)?.title)} · {catalog.data?.length ?? 0} {words('种制作模式','production modes')}</p>
             {catalog.isPending && <p role="status">{words('正在加载视频类型…','Loading video types…')}</p>}
             {catalog.isError && <div role="alert">{words('无法加载类型，请重试','Could not load types. Retry.')}<Button onClick={() => void catalog.refetch()}>{words('重试','Retry')}</Button></div>}

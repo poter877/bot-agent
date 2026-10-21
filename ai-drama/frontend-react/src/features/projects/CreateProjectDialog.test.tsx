@@ -254,9 +254,8 @@ it('filters by group and search without silently replacing the selected type', a
   await user.click(screen.getByRole('radio',{name:'视频制片'}))
   await screen.findByRole('radio',{name:'长视频批量切片'})
   await user.click(screen.getByRole('radio',{name:'长视频批量切片'}))
-  // 平铺 12 种制作模式：搜索即筛选，选择不被搜索静默替换
+  // 平铺 12 种制作模式：全部直接可见，选择不因交互被静默替换
   expect(screen.getByText(/已选择：长视频批量切片/)).toBeTruthy()
-  await user.type(screen.getByRole('textbox',{name:'搜索制作模式'}),'播客')
   expect(screen.getByRole('radio',{name:'播客转视频'})).toBeTruthy()
   expect(screen.queryByRole('radio',{name:'产品宣传'})).toBeNull()
 })
