@@ -1,6 +1,6 @@
 import { createStore } from 'zustand'
 
-export type CreativeStage = 'toolbox' | 'tools' | 'pipeline' | 'shots' | 'audio' | 'export'
+export type CreativeStage = 'board' | 'toolbox' | 'pipeline' | 'shots' | 'audio' | 'export'
 
 export const createCreativeStore = () => createStore<{
   stage: CreativeStage
@@ -8,7 +8,7 @@ export const createCreativeStore = () => createStore<{
   setStage: (stage: CreativeStage) => void
   selectShot: (id: string | null) => void
 }>()((set) => ({
-  stage: 'pipeline',
+  stage: 'board',
   selectedShotId: null,
   setStage: (stage) => set({ stage }),
   selectShot: (selectedShotId) => set({ selectedShotId }),

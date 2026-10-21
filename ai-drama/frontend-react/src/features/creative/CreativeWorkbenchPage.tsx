@@ -2,6 +2,7 @@ import { CreativeToolboxPanel } from './CreativeToolboxPanel'
 import { pipelineQueries } from '@/entities/creative/pipeline'
 import { useProductionText } from '@/entities/creative/catalog'
 import { AgentStageWatcher } from './AgentStageWatcher'
+import { CreativeBoard } from './CreativeBoard'
 import { PipelineStrip } from './PipelineStrip'
 import { useCreativeCatalog, useCatalogText } from '@/entities/creative/catalog'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -151,6 +152,7 @@ export function CreativeWorkbenchPage({ projectId }: { projectId: number }) {
   } })
 
   const stages: { id: CreativeStage; label: string; icon: typeof FileText }[] = [
+    { id: 'board', label: text('制片看板', 'Board'), icon: Film },
     { id: 'toolbox', label: text('工具目录', 'Tool catalog'), icon: Wrench },
     { id: 'shots', label: copy.shots, icon: Clapperboard },
     { id: 'audio', label: copy.audio, icon: Music2 }, { id: 'export', label: copy.export, icon: Film },
@@ -180,6 +182,7 @@ export function CreativeWorkbenchPage({ projectId }: { projectId: number }) {
           }}><Icon size={14} aria-hidden />{label}</button>)}
         </div>
         <div role="tabpanel" id={`creative-panel-${stage}`} aria-labelledby={`creative-tab-${stage}`}>
+          {stage === 'board' && <CreativeBoard project={project} state={pipeline.data} loading={pipeline.isPending} />}
           {stage === 'toolbox' && <CreativeToolboxPanel project={project} disabled={editDisabled} canRun={canRun} onProjectUpdated={acceptProject} onBusyChange={setSourceBusy} />}
           {stage === 'shots' && <CreativeShotsPanel project={project} draft={current} copy={copy} selectedId={selectedId} disabled={editDisabled} canGenerate={canRun && approved} uploading={uploading} generating={mutationShotId} onSelect={store.getState().selectShot} onAdd={() => {
             const shot = { ...newCreativeShot(`${copy.shot} ${current.shots.length + 1}`), mediaType: recipe?.mediaType || 'image' as const }
