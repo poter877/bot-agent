@@ -1,4 +1,3 @@
-import { CreativeToolsPanel } from './CreativeToolsPanel'
 import { CreativeToolboxPanel } from './CreativeToolboxPanel'
 import { pipelineQueries } from '@/entities/creative/pipeline'
 import { useProductionText } from '@/entities/creative/catalog'
@@ -164,7 +163,6 @@ export function CreativeWorkbenchPage({ projectId }: { projectId: number }) {
 
   const stages: { id: CreativeStage; label: string; icon: typeof FileText }[] = [
     { id: 'toolbox', label: text('工具目录', 'Tool catalog'), icon: Wrench },
-    { id: 'tools', label: text('专项工具', 'Specialty tools'), icon: Settings2 },
     { id: 'brief', label: copy.brief, icon: FileText }, { id: 'shots', label: copy.shots, icon: Clapperboard },
     { id: 'audio', label: copy.audio, icon: Music2 }, { id: 'export', label: copy.export, icon: Film },
   ]
@@ -193,7 +191,6 @@ export function CreativeWorkbenchPage({ projectId }: { projectId: number }) {
           }}><Icon size={14} aria-hidden />{label}</button>)}
         </div>
         <div role="tabpanel" id={`creative-panel-${stage}`} aria-labelledby={`creative-tab-${stage}`}>
-          {stage === 'tools' && <CreativeToolsPanel project={project} draft={current} disabled={editDisabled} canRun={canRun} onChange={changeDraft} onProjectUpdated={acceptProject} onBusyChange={setSourceBusy} />}
           {stage === 'toolbox' && <CreativeToolboxPanel project={project} disabled={editDisabled} canRun={canRun} onProjectUpdated={acceptProject} onBusyChange={setSourceBusy} />}
           {stage === 'brief' && <div className="space-y-4"><CreativeProductionPanel project={project} draft={current} recipe={recipe} disabled={editDisabled} canRun={canRun} onChange={changeDraft} onProjectUpdated={acceptProject} onBusyChange={setSourceBusy} /><CreativeBriefPanel draft={current} copy={copy} disabled={editDisabled} canPlan={canRun && !!current.brief.idea.trim()} planning={planInProgress} onChange={changeDraft} onPlan={plan} onNext={() => setStage('shots')} /></div>}
           {stage === 'shots' && <CreativeShotsPanel project={project} draft={current} copy={copy} selectedId={selectedId} disabled={editDisabled} canGenerate={canRun && approved} uploading={uploading} generating={mutationShotId} onSelect={store.getState().selectShot} onAdd={() => {
