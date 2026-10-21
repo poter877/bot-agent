@@ -180,13 +180,7 @@ export function CreativeWorkbenchPage({ projectId }: { projectId: number }) {
     <AgentStageWatcher projectId={project.id} runId={pipeline.data?.run?.id ?? null} version={pipeline.data?.run?.version ?? null} />
     <PipelineStrip project={project} state={pipeline.data} loading={pipeline.isPending} disabled={dirty || operation.isPending || uploading !== null || sourceBusy || chatBusy || conflict}  />
     {(error || conflict || (query.isError && query.data)) && <div role="alert" className="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-control border border-danger/30 bg-danger-soft p-3 text-xs leading-relaxed text-danger"><p className="min-w-0 flex-1 whitespace-pre-wrap break-words">{conflict ? copy.conflict : error || query.error?.message}</p>{conflict && <Button size="sm" onClick={reload}>{copy.reload}</Button>}{query.isError && !error && !conflict && <Button size="sm" onClick={() => void query.refetch()}>{copy.retry}</Button>}</div>}
-    <div className="grid min-w-0 flex-1 items-start gap-4 lg:grid-cols-[300px_minmax(0,1fr)] 2xl:grid-cols-[340px_minmax(0,1fr)]">
-      <details open className="min-w-0 overflow-hidden rounded-panel border border-outline bg-surface lg:sticky lg:top-0">
-        <summary className="flex cursor-pointer list-none items-center gap-2 border-b border-outline px-4 py-3 text-sm font-semibold focus-visible:outline-none focus-visible:shadow-focus"><MessageSquare size={15} className="text-brand" aria-hidden />{copy.chatTitle}<ChevronDown size={14} className="ml-auto text-content-muted" aria-hidden /></summary>
-        {dirty && <p className="border-b border-outline bg-brand-soft px-4 py-2 text-xs text-brand-content">{copy.saveFirst}</p>}
-        <CreativeChatPanel project={project} disabled={dirty || pipelineDirty || busy || shotTasksActive || conflict} onProjectUpdated={acceptProject} onGoToStage={setStage} onBusyChange={setChatBusy} />
-      </details>
-      <section aria-label={copy.title} className="min-w-0">
+    <section aria-label={copy.title} className="min-w-0">
         {stage === 'shots' && <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-control bg-brand-soft px-4 py-3">
           <div className="min-w-0 flex-1"><p className="flex items-center gap-2 text-xs font-semibold text-brand-content">{approved ? <Check size={14} aria-hidden /> : <Sparkles size={14} aria-hidden />}{shotTasksActive ? copy.activeTasksHint : dirty ? copy.saveFirst : approved ? copy.approved : copy.approveFirst}</p><p className={cn(hintClass, 'mt-1')}>{copy.approvalHint}</p></div>
           {!approved && <Button size="sm" disabled={!canRun || !planReady} loading={operation.isPending && operation.variables?.kind === 'approve'} onClick={() => operation.mutate({ kind: 'approve', revision: project.revision })}>{copy.approve}</Button>}
@@ -211,7 +205,11 @@ export function CreativeWorkbenchPage({ projectId }: { projectId: number }) {
           {stage === 'export' && <CreativeExportPanel project={project} draft={current} copy={copy} canRender={canRun && approved && !renderActive} rendering={renderActive || (operation.isPending && operation.variables?.kind === 'render')} onRender={(individual) => operation.mutate({ kind: 'render', revision: project.revision, individual })} onPreview={(src, title) => setPreview({ kind: 'video', src, title })} />}
         </div>
       </section>
-    </div>
+      <details open className="min-w-0 overflow-hidden rounded-panel border border-outline bg-surface">
+        <summary className="flex cursor-pointer list-none items-center gap-2 border-b border-outline px-4 py-3 text-sm font-semibold focus-visible:outline-none focus-visible:shadow-focus"><MessageSquare size={15} className="text-brand" aria-hidden />{copy.chatTitle}<ChevronDown size={14} className="ml-auto text-content-muted" aria-hidden /></summary>
+        {dirty && <p className="border-b border-outline bg-brand-soft px-4 py-2 text-xs text-brand-content">{copy.saveFirst}</p>}
+        <CreativeChatPanel project={project} disabled={dirty || pipelineDirty || busy || shotTasksActive || conflict} onProjectUpdated={acceptProject} onGoToStage={setStage} onBusyChange={setChatBusy} />
+      </details>
     <Modal open={!!confirmation} onOpenChange={(open) => { if (!open) setConfirmation(null) }} title={confirmation?.title || copy.confirm} width={440} footer={<><Button onClick={() => setConfirmation(null)}>{copy.cancel}</Button><Button variant="primary" onClick={() => { const action = confirmation?.onConfirm; setConfirmation(null); action?.() }}>{copy.confirm}</Button></>}><p className="text-sm leading-relaxed text-content-muted">{confirmation?.message}</p></Modal>
     <Modal open={blocker.state === 'blocked'} onOpenChange={(open) => { if (!open && blocker.state === 'blocked') blocker.reset() }} title={copy.unsaved} width={440} footer={<><Button onClick={() => { if (blocker.state === 'blocked') blocker.reset() }}>{copy.cancel}</Button><Button variant="danger" onClick={() => { if (blocker.state === 'blocked') blocker.proceed() }}>{copy.discard}</Button></>}><p className="text-sm leading-relaxed text-content-muted">{copy.leaveWarning}</p></Modal>
     <ImageViewer open={preview?.kind === 'image'} src={preview?.src || ''} title={preview?.title || ''} onClose={() => setPreview(null)} />
