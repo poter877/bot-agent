@@ -37,13 +37,11 @@ function mount() {
 }
 
 describe('CreativeWorkbenchPage（对话式制片布局）', { timeout: 30_000 }, () => {
-  it('默认进入制片看板：阶段轨与分镜胶片条可见，Tab 只剩看板与工具目录', async () => {
+  it('看板直接呈现，无 Tab 栏；已退役的分区不再出现', async () => {
     mount()
-    await waitFor(() => expect(screen.getByRole('tab', { name: '制片看板' })).toBeTruthy())
-    expect(screen.getByRole('tab', { name: '工具目录' })).toBeTruthy()
     await waitFor(() => expect(screen.getByText('Production Board')).toBeTruthy())
     expect(screen.getByText('STORYBOARD')).toBeTruthy()
-    // 已移除的编辑器 Tab 不再出现
+    expect(screen.queryByRole('tab')).toBeNull()
     for (const gone of ['创作需求', '画面编排', '声音与字幕', '成片导出']) {
       expect(screen.queryByRole('tab', { name: gone })).toBeNull()
     }
@@ -55,10 +53,12 @@ describe('CreativeWorkbenchPage（对话式制片布局）', { timeout: 30_000 }
     expect(screen.queryByRole('button', { name: '保存修改' })).toBeNull()
   })
 
-  it('切换到工具目录 Tab 正常渲染', async () => {
+  it('工具目录从 header 按钮在弹层中打开', async () => {
     const user = userEvent.setup()
     mount()
-    await user.click(screen.getByRole('tab', { name: '工具目录' }))
-    expect(screen.getByRole('tab', { name: '工具目录' }).getAttribute('aria-selected')).toBe('true')
+    await user.click(await screen.findByRole('button', { name: '工具目录' }))
+    expect(screen.getByRole('dialog', { name: '工具目录' })).toBeTruthy()
+    await waitFor(() => expect(screen.getByText('刷新工具')).toBeTruthy())
+    expect(screen.getByText('工具任务记录')).toBeTruthy()
   })
 })

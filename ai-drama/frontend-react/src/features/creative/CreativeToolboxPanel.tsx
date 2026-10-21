@@ -215,7 +215,7 @@ export function CreativeToolboxPanel({ project, disabled, canRun, onProjectUpdat
   }
   const actOnJob = (job: ToolboxJob, action: () => Promise<unknown>) => { setError(null); setPendingJobId(job.id); mutation.mutate(action) }
   return <div className="space-y-4">
-    <CreativeSection title="工具目录" hint="按制作任务选择工具，调整输入后执行；任务记录与产物保存在当前项目。" action={<div className="flex flex-wrap items-center gap-3"><Button size="sm" variant="ghost" disabled={catalog.isFetching} onClick={() => void catalog.refetch()}>刷新工具</Button><Link to="/settings" className="inline-flex items-center gap-1 text-xs text-brand-content underline"><Settings2 size={13} aria-hidden />模型与服务配置</Link></div>}>
+    <CreativeSection title="工具清单" hint="按制作任务选择工具，调整输入后执行；任务记录与产物保存在当前项目。" action={<div className="flex flex-wrap items-center gap-3"><Button size="sm" variant="ghost" disabled={catalog.isFetching} onClick={() => void catalog.refetch()}>刷新工具</Button><Link to="/settings" className="inline-flex items-center gap-1 text-xs text-brand-content underline"><Settings2 size={13} aria-hidden />模型与服务配置</Link></div>}>
       <div className="flex flex-wrap gap-2 text-xs text-content-muted"><span>{tools.length} 项工具</span><span>·</span><span>{tools.filter(tool => tool.available).length} 项当前可用</span></div>
       {catalog.isError && <div role="alert" className="mt-3 flex flex-wrap items-center gap-2 text-sm text-danger">{catalog.error.message}<Button size="sm" onClick={() => void catalog.refetch()}>重新读取工具</Button></div>}
       {configs.isError && <p role="alert" className="mt-3 text-xs text-danger">模型配置无法读取：{configs.error.message}<Button size="sm" onClick={() => void configs.refetch()}>重试配置</Button></p>}
