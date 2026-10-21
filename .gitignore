@@ -330,3 +330,4 @@ apps/desktop/.dist-build*
 
 # ai-drama per-build draft working folders (runtime data)
 /ai-drama/draft_*/
+resp/
