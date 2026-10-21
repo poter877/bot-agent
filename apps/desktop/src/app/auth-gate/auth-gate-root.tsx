@@ -51,18 +51,19 @@ export function AuthGate({
 
   const lifecycle = useMemo(() => createAccountAuthLifecycle(transport, resetBusinessState), [transport, resetBusinessState])
 
+  // 认证状态无需轮询：会话失效由网关推送 accountAuth.invalidated 事件
+  // （transport.onInvalidated 已订阅并触发 invalidate）；聚焦/网络恢复做
+  // 即时补充检查；后端重启的停机窗口由 unavailable 退避探测接管。
   useEffect(() => {
     lifecycle.start()
     void lifecycle.check()
     const revalidate = () => lifecycle.revalidate()
-    const interval = window.setInterval(revalidate, 30_000)
     window.addEventListener('focus', revalidate)
     window.addEventListener('online', revalidate)
     const offline = () => lifecycle.offline()
     window.addEventListener('offline', offline)
 
     return () => {
-      window.clearInterval(interval)
       window.removeEventListener('focus', revalidate)
       window.removeEventListener('online', revalidate)
       window.removeEventListener('offline', offline)
