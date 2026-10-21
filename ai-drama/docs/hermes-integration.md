@@ -26,14 +26,12 @@ bot-backend（服务器）：模型出口 + 账号库 + 领域数据 + 媒体作
 
 | 侧 | 变量 | 说明 |
 |---|---|---|
-| ai-drama | `HERMES_AGENT_URL` | hermes gateway 的 api_server 基址（如 `http://hermes:30175`，多 profile 复用时为 `http://hermes:30175/p/drama`） |
-| ai-drama | `HERMES_AGENT_KEY` | gateway 的 `API_SERVER_KEY` |
-| ai-drama | `AI_DRAMA_API_TOKEN` | ai-drama 自身 HTTP API 的共享令牌（浏览器/外部调用方用 `Authorization: Bearer`；未配置时仅放行回环来源，容器/公网部署必配。与 MCP 令牌分开命名，可同值部署） |
-| ai-drama | `AI_DRAMA_MCP_TOKEN` | hermes↔ai-drama 之间的 MCP 令牌（与 bot-backend 的服务令牌无关） |
-| hermes (drama profile) | `API_SERVER_KEY` | api_server 鉴权；与 ai-drama 的 `HERMES_AGENT_KEY` 同值 |
+| bot-backend | `COMPANY_BACKEND_URL` / `COMPANY_SERVICE_TOKEN` | 模型出口（bot-backend 自身的 `/api/llm`）；服务端单发文本调用（提取/最终提示词/视频提示词/翻译/方案）都走这里 |
+| bot-backend | `AI_DRAMA_MCP_TOKEN` | 桌面 hermes↔bot-backend 之间的 MCP 令牌（与内部服务令牌分开命名，可同值部署） |
 
-未配置 `HERMES_AGENT_URL`/`HERMES_AGENT_KEY` 时，ai-drama 的 agent 调用直接报错
-（不回落本地循环——公司模式先例）。
+`HERMES_AGENT_URL`/`HERMES_AGENT_KEY`（bot-backend → hermes 网关的编排代调）已
+于《重构》清理中退役：编排（工具循环）在桌面 Hermes 客户端执行，管线文本阶段
+走 pendingAgent 客户端认领，服务端只保留单次模型调用。
 
 ## drama profile 的 config.yaml
 
@@ -154,7 +152,7 @@ bot-backend + 各 home 的 config/.env，只有一份真相。
 
 drama profile home（`~/hermes-dev-data/drama-home`）：config.yaml → `model.provider:
 hono` + `mcp_servers.ai_drama`（127.0.0.1:30172/mcp）；.env → `API_SERVER_KEY`、
-`API_SERVER_PORT=30179`、`HERMES_BOT_BACKEND_URL`。bot-backend/.env →
+（已随网关退役移除）。bot-backend/.env →
 `HERMES_AGENT_URL=http://127.0.0.1:30179` + `HERMES_AGENT_KEY`（同 key）。
 
 三个踩过的坑（2026-10-20 排障记录）：

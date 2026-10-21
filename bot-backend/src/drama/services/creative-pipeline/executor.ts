@@ -25,7 +25,7 @@ import { inspectCreativeSource } from '../creative-renderer.js'
 import { getCreativeRecipe } from '../creative-catalog.js'
 import { synthesizeCreativeShot, transcribeCreativeSource } from '../creative-speech.js'
 import { parseCreativeSrt, sourceSelectionsToShots } from '../creative-sources.js'
-import { generateStageNarrative, planPipelineScenes, translateCreativeCaptions } from './text.js'
+import { generateStageNarrative, planPipelineScenes, translateStagePending } from './text.js'
 import {
   PipelineInputRequired,
   type StageContext,
@@ -36,7 +36,7 @@ import {
 export const pipelineTools = {
   narrative: generateStageNarrative,
   plan: planPipelineScenes,
-  translate: translateCreativeCaptions,
+  translate: translateStagePending,
   generate: generateCreativeShot,
   render: startCreativeRender,
   transcribe: transcribeCreativeSource,

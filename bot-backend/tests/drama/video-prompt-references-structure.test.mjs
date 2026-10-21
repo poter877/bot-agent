@@ -9,7 +9,7 @@ test('prompt_generator video prompt format uses @name references instead of XML 
   // hermes 编排后指令源分层：workspace/prompts/prompt_generator.md 为运行时事实来源，
   // src/agents/index.ts 的 DEFAULT_PROMPTS 是文件缺失时的兜底——两处都要守住同一契约
   const promptFile = read('workspace/prompts/prompt_generator.md')
-  const defaults = read('src/drama/agents/index.ts')
+  const defaults = read('src/drama/agents/prompt-defaults.ts')
   const skill = read('workspace/skills/prompt-generator/video-prompt/SKILL.md')
 
   for (const src of [promptFile, defaults]) {

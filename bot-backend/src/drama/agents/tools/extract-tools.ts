@@ -415,6 +415,11 @@ const saveDedupProps = tool({
 })
 
 /** 键 = 模型可见的工具名（ai 以注册表键为工具名） */
+/** 供服务端单发提取流程直接调用的保存工具（去重合并逻辑的唯一实现）。 */
+export const saveDedupCharactersTool = saveDedupCharacters
+export const saveDedupScenesTool = saveDedupScenes
+export const saveDedupPropsTool = saveDedupProps
+
 export const extractTools: AgentToolSet = {
   read_script_for_extraction: readScriptForExtraction,
   read_existing_characters: readExistingCharacters,

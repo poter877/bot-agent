@@ -1,5 +1,4 @@
 import { HTTPException } from 'hono/http-exception'
-import { timeout } from 'hono/timeout'
 import type { MiddlewareHandler } from 'hono'
 import type { AppEnv } from '../shared/context.js'
 import { SECURITY_RESPONSE_HEADERS } from './securityHeaders.js'
@@ -10,15 +9,31 @@ import { SECURITY_RESPONSE_HEADERS } from './securityHeaders.js'
  * matching statement_timeout). SSE/WS routes, when they arrive, must not
  * mount these middlewares.
  *
- * Hono's timeout() arms one racing timer per mount and nested mounts settle
- * at the SHORTER duration, so a global budget must never wrap a tree that
- * carries its own: the tree settles the `budgetSettled` marker via
- * scopedProcessingTimeout and the global mount defers to it. Assembly rule:
- * every scoped budget is registered before the global one.
+ * 自实现竞速而非 hono/timeout：输掉竞速的下游链路若稍后失败，hono 的实现
+ * 会把它变成 unhandledRejection 直接打死进程（曾因 tool-plan 慢查询超时后
+ * 的迟到 PipelineInputRequired 复现）。这里对迟到的拒绝记录后吞掉——HTTP
+ * 交换已以 503 结束，进程不应陪葬。
  */
 
 function budgetTimeout(durationMs: number): MiddlewareHandler<AppEnv> {
-  return timeout(durationMs, (c) => {
+  return async (c, next) => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const expired = new Promise<'expired'>((resolve) => {
+      timer = setTimeout(() => resolve('expired'), durationMs)
+      timer.unref?.()
+    })
+    const work = next()
+    const outcome = await Promise.race([work.then(() => 'done' as const), expired])
+    clearTimeout(timer)
+    if (outcome === 'done') return
+    work.catch((error) => {
+      // 客户端已收到 503；迟到失败只留痕，不再冒泡为未处理拒绝
+      console.error('[timeout] late downstream failure after budget expiry', {
+        request_id: c.get('requestId') ?? 'unknown',
+        path: c.req.path,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    })
     const response = new Response(
       JSON.stringify({
         error: { code: 'request_timeout', message: 'The request exceeded its processing budget.' },
@@ -26,8 +41,8 @@ function budgetTimeout(durationMs: number): MiddlewareHandler<AppEnv> {
       }),
       { status: 503, headers: { 'content-type': 'application/json; charset=UTF-8', ...SECURITY_RESPONSE_HEADERS } },
     )
-    return new HTTPException(503, { res: response })
-  })
+    throw new HTTPException(503, { res: response })
+  }
 }
 
 /** The service-wide budget for ordinary endpoints. Trees with their own

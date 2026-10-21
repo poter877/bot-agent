@@ -509,7 +509,7 @@ export async function planPipelineTools(context: StageContext, phase: PipelineTo
     if (plan.toolId === 'character_rig_renderer') return characterChain(shot, supplied)
     const service = providerToolSpecs[plan.toolId]?.serviceType
     if (stockTools.has(plan.toolId) || sourcePages.has(plan.toolId)) {
-      searchAndImport(
+      await searchAndImport(
         plan.toolId,
         `shot-${shot.id}-${plan.toolId}`,
         String(supplied.query || shot.visualPrompt || project.brief.idea),
@@ -804,7 +804,7 @@ export async function planPipelineTools(context: StageContext, phase: PipelineTo
       const direction = project.plan.musicDirection || project.brief.tone
       if (!direction.trim()) throw new PipelineInputRequired('请先填写音乐方向，再启用自动配乐。')
       if (stockTools.has(musicTool) || sourcePages.has(musicTool))
-        searchAndImport(musicTool, 'project-music', direction, undefined, true)
+        await searchAndImport(musicTool, 'project-music', direction, undefined, true)
       else;
         (add(
           'project-music-generate',
@@ -830,22 +830,22 @@ export async function planPipelineTools(context: StageContext, phase: PipelineTo
       const plan = object((shot as Shot & { toolPlan?: ToolPlan }).toolPlan) as ToolPlan
       const avatarTool = selected('avatarTool')
       if (avatarTool && (!plan.toolId || getPipelineToolPolicy(plan.toolId)?.selectionKey === 'avatar')) {
-        avatarScene(shot, avatarTool, plan.toolId === avatarTool ? plan : undefined)
+        await avatarScene(shot, avatarTool, plan.toolId === avatarTool ? plan : undefined)
         continue
       }
       if (!media(shot)) {
-        if (plan.toolId) sceneTool(shot, plan)
+        if (plan.toolId) await sceneTool(shot, plan)
         else if (automation.visual === 'source')
           throw new PipelineInputRequired(`「${shot.title}」需要真实原片，请导入来源并绑定该镜头。`)
         else if (
           automation.visual === 'character' ||
           (automation.visual === 'auto' && project.category === 'character_animation')
         )
-          characterChain(shot, { ...params('character_rig_renderer') })
+          await characterChain(shot, { ...params('character_rig_renderer') })
         else if (automation.visual === 'math')
-          sceneTool(shot, { toolId: 'math_animate', args: params('math_animate') })
+          await sceneTool(shot, { toolId: 'math_animate', args: params('math_animate') })
         else if (['threejs', 'blender'].includes(automation.visual))
-          sceneTool(shot, {
+          await sceneTool(shot, {
             toolId: automation.visual === 'threejs' ? 'threejs_world' : 'blender_world',
             args: params(automation.visual === 'threejs' ? 'threejs_world' : 'blender_world'),
           })
@@ -859,7 +859,7 @@ export async function planPipelineTools(context: StageContext, phase: PipelineTo
             .map((line) => line.trim())
             .filter(Boolean)
             .slice(0, 12)
-          sceneTool(shot, {
+          await sceneTool(shot, {
             toolId: 'diagram_gen',
             args: {
               title: shot.title,
@@ -868,7 +868,7 @@ export async function planPipelineTools(context: StageContext, phase: PipelineTo
             },
           })
         } else if (project.category === 'podcast' && shot.audioUrl)
-          sceneTool(shot, {
+          await sceneTool(shot, {
             toolId: 'showcase_card',
             args: {
               title: shot.title,

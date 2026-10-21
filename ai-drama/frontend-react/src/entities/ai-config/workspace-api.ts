@@ -49,22 +49,6 @@ export const skillsApi = {
   del: (id: string) => api.del(`/skills/${id}`),
 }
 
-/** Agent chat（请求式长流程）：结果经工具落库，调用方负责刷新对应资源 */
-export interface AgentChatResult {
-  type: 'done'
-  text: string
-  toolCalls: { toolName: string; args: unknown }[]
-  toolResults: { toolName: string; result: string }[]
-}
-
-export function agentChat(
-  type: string,
-  body: { message: string; drama_id: number; episode_id: number; model?: string; config_id?: number },
-  signal?: AbortSignal,
-): Promise<AgentChatResult> {
-  return api.post(`/agent/${type}/chat`, body, { signal, timeoutMs: 600_000 })
-}
-
 /** 内容 lang 的 query key 值（无配置时回退 zh） */
 export function langQueryValue(lang: string | undefined | null): string {
   return lang && lang !== 'zh' ? lang : 'zh'

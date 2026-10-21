@@ -81,8 +81,10 @@ hermes 侧对应的是 **company mode**（`agent/company_backend_policy.py` +
 
 ### `/v1/chat/completions`（gateway api_server）
 
-ai-drama 后端作为客户端调用 gateway 的 OpenAI 兼容端点（`Authorization: Bearer
-<API_SERVER_KEY>`，即 ai-drama 侧的 `HERMES_AGENT_KEY`）：
+~~ai-drama 后端作为客户端调用 gateway 的 OpenAI 兼容端点~~（**已退役**：
+《重构》清理后 bot-backend 不再代调编排——管线文本走 pendingAgent 客户端认领，
+服务端只保留经 `COMPANY_BACKEND_URL`/`COMPANY_SERVICE_TOKEN` 的单次模型调用）。
+以下为该端点仍服务的外部调用方（桌面 serve 的 hono provider 等）的协议说明：
 
 - **system 消息 = agent 指令。** gateway 把 system 消息折叠为叠加在核心提示词之上的
   临时系统提示词（ephemeral system prompt）——ai-drama 用它下发"你是编剧/分镜师"式

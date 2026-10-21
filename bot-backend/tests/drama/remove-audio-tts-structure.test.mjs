@@ -7,7 +7,7 @@ const read = (path) => readFileSync(new URL(path, root), 'utf8')
 const exists = (path) => existsSync(new URL(path, root))
 
 test('backend removes the voice assignment agent and tools', () => {
-  const agents = read('src/drama/agents/index.ts')
+  const agents = read('src/drama/agents/prompt-defaults.ts')
   const skills = read('src/drama/agents/skills.ts')
 
   assert.doesNotMatch(agents, /voice_assigner/)

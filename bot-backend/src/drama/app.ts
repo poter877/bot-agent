@@ -27,7 +27,6 @@ import upload from './routes/upload.js'
 import aiConfigs, { aiProviders } from './routes/aiConfigs.js'
 import stylePresets from './routes/stylePresets.js'
 import prompts from './routes/prompts.js'
-import agent from './routes/agent.js'
 import merge from './routes/merge.js'
 import skills from './routes/skills.js'
 import props from './routes/props.js'
@@ -89,7 +88,6 @@ export function createDramaApp(auth: Auth | null): Hono {
   api.route('/ai-providers', aiProviders)
   api.route('/style-presets', stylePresets)
   api.route('/prompts', prompts)
-  api.route('/agent', agent)
   api.route('/merge', merge)
   api.route('/skills', skills)
   api.route('/props', props)

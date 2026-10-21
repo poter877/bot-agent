@@ -20,7 +20,6 @@ import { episodeQueries } from '@/entities/episode/queries'
 import { episodeApi } from '@/entities/episode/api'
 import { aiConfigQueries } from '@/entities/ai-config/queries'
 import { aiConfigApi, type AiConfig } from '@/entities/ai-config/model'
-import { agentChat } from '@/entities/ai-config/workspace-api'
 import { mergeApi, taskApi } from '@/entities/generation-task/api'
 import type { VideoMerge, SysTask } from '@/entities/generation-task/model'
 import { storyboardApi } from '@/entities/storyboard/api'
@@ -50,7 +49,6 @@ import {
   resolutionShort,
   resolveVideoPromptRefs,
   storyboardScene,
-  videoPromptMessage,
   type ModelOption,
   type VideoTaskState,
   clampVideoCol,
@@ -743,30 +741,27 @@ export function WorkbenchProvider({
   const genVideoPrompt = useCallback(
     async (sb: Storyboard) => {
       if (!sb || videoPromptGeneratingIds.includes(sb.id) || !episodeId) return
-      const idx = sbs.indexOf(sb) + 1
-      const label = selectedVideoConfig ? `${selectedVideoConfig.name} (${selectedVideoConfig.provider})` : '默认'
-      const charNames = visualChars.filter((c) => sb.characterIds.includes(c.id)).map((c) => c.name).join('、') || '无'
-      const propNames = props.filter((p) => sb.propIds.includes(p.id)).map((p) => p.name).join('、') || '无'
-      const scene = storyboardScene(sb, scenes)
-      const sceneName = scene ? `${scene.location} · ${scene.time || globalT('episode.asset.noTime')}` : ''
       setVideoPromptGeneratingIds((prev) => [...prev, sb.id])
       try {
-        await agentChat('prompt_generator', {
-          message: videoPromptMessage({ idx, sbId: sb.id, duration: sb.duration || 10, sceneName, charNames, propNames, videoModelLabel: label }),
-          drama_id: dramaId,
-          episode_id: episodeId,
+        // 单发提示词生成走批量端点的定向模式（服务端单次模型调用 + 状态轮询）
+        const res = await episodeApi.generateVideoPrompts(episodeId!, {
           model: chatModelOverride(),
-          config_id: chatConfigId(),
+          configId: chatConfigId(),
+          storyboardIds: [sb.id],
         })
-        toast.success(t('episode.sb.promptGenerated', { n: idx }))
-        await refresh()
+        if (res?.already_running) {
+          toast.info(t('episode.sb.batchStarted', { n: 1 }))
+        } else {
+          setPromptWatch(true)
+          setBatchPromptState({ running: true, total: 1, completed: 0 })
+        }
       } catch (err) {
         toastError(err)
       } finally {
         setVideoPromptGeneratingIds((prev) => prev.filter((id) => id !== sb.id))
       }
     },
-    [videoPromptGeneratingIds, episodeId, sbs, selectedVideoConfig, visualChars, props, scenes, dramaId, chatModelOverride, chatConfigId, refresh, t],
+    [videoPromptGeneratingIds, episodeId, chatModelOverride, chatConfigId, t],
   )
 
   const [generatingPromptKeys, setGeneratingPromptKeys] = useState<string[]>([])

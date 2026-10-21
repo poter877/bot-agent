@@ -100,31 +100,22 @@ test('adapter registry fails closed for unsupported providers', () => {
   assert.doesNotMatch(registry, /ttsAdapters/)
 })
 
-test('agent orchestration moved to the hermes gateway; zero local tool loops remain', () => {
-  for (const file of [
-    'src/drama/agents/index.ts',
-    'src/drama/services/creative-planner.ts',
-    'src/drama/services/creative-chat.ts',
-    'src/drama/services/creative-pipeline/text.ts',
-    'src/drama/services/film-pipeline/text.ts',
-    'src/drama/services/film-pipeline/build-agent.ts',
-    'src/drama/services/production-tools/auxiliary.ts',
-  ]) {
-    const source = read(file)
-    assert.match(source, /runHermesAgent/, `${file} 应经 hermes gateway 编排`)
-    assert.doesNotMatch(source, /ToolLoopAgent|getTextModel|createOpenAI|createGoogleGenerativeAI/)
-  }
-  // 编排归一：全后端源码零本地 ToolLoopAgent / 本地文本模型工厂（含 film build 循环）
+test('orchestration fully retired: zero hermes-gateway calls remain', () => {
+  // 《重构》清理：编排（工具循环）在桌面客户端；服务端只剩单次模型调用
+  // （runTextModel）与管线 pendingAgent。hermes-agent 网关客户端已删除。
   const walk = (rel) => readdirSync(new URL(rel, root), { withFileTypes: true })
     .flatMap((e) => (e.isDirectory() ? walk(`${rel}/${e.name}`) : [`${rel}/${e.name}`]))
     .filter((f) => f.endsWith('.ts'))
   for (const file of walk('src')) {
-    assert.doesNotMatch(read(file), /ToolLoopAgent|getTextModel/, `${file} 不应再持有本地工具循环/本地模型`)
+    assert.doesNotMatch(read(file), /runHermesAgent|hermes-agent|ToolLoopAgent|getTextModel/, `${file} 不应持有 hermes 网关编排或本地工具循环/本地模型`)
   }
-  assert.ok(!existsSync(new URL('src/drama/services/ai-text.ts', root)), 'ai-text.ts 已删除')
-  assert.ok(!existsSync(new URL('src/drama/services/company-llm-model.ts', root)), 'company-llm-model.ts 已删除')
-  // build 预算对齐原本地循环的 30 分钟超时，且超时确实下发到 gateway 请求
-  const build = read('src/drama/services/film-pipeline/build-agent.ts')
-  assert.match(build, /export const BUILD_AGENT_TIMEOUT_MS = 30 \* 60_000/)
-  assert.match(build, /timeoutMs: BUILD_AGENT_TIMEOUT_MS/)
+  // 管线文本阶段一律 pending 化（narrative/plan/translate 三种 kind）
+  const pipelineText = read('src/drama/services/creative-pipeline/text.ts')
+  assert.match(pipelineText, /kind: 'narrative'/)
+  assert.match(pipelineText, /kind: 'plan'/)
+  assert.match(pipelineText, /kind: 'translate'/)
+  // 单发模型调用的消费方
+  assert.match(read('src/drama/services/extraction.ts'), /runTextModel/)
+  assert.match(read('src/drama/services/final-prompt.ts'), /runTextModel/)
+  assert.match(read('src/drama/services/video-prompts.ts'), /runTextModel/)
 })

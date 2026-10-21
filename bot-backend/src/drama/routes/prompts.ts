@@ -6,7 +6,7 @@
 import { Hono } from 'hono'
 import { success, badRequest } from '../utils/response.js'
 import { workspaceFs } from '../agents/skills.js'
-import { validAgentTypes, DEFAULT_PROMPTS } from '../agents/index.js'
+import { validAgentTypes, DEFAULT_PROMPTS } from '../agents/prompt-defaults.js'
 import { loadAgentPromptFile, serializePromptFile, promptFilePath } from '../agents/prompts.js'
 
 const app = new Hono()

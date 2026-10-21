@@ -2,7 +2,8 @@ import { and, desc, eq, notInArray } from 'drizzle-orm'
 import { db, getInsertId, schema } from '../../db/index.js'
 import { now } from '../../utils/response.js'
 import { CreativeError, creativeDocumentSchema } from '../creative-model.js'
-import { approveCreativeProject, getCreativeProject } from '../creative-projects.js'
+import { approveCreativeProject, getCreativeProject, saveCreativeProject, withCreativeMutation } from '../creative-projects.js'
+import { applyGeneratedPlan, parseCaptionTranslation } from '../creative-planner.js'
 import { getPipelineDefinition, type PipelineDefinition } from './definitions.js'
 import { createStageExecutor } from './executor.js'
 import { reconcilePipelineToolRevision } from './tool-runtime.js'
@@ -349,7 +350,12 @@ export function createPipelineRunner(execute: StageExecutor = createStageExecuto
     patch(row, { status: 'running', error: null }, polling ? 'poll' : 'continued', { retry })
     const promise = work((await current(row)), retry)
     workers.set(row.id, promise)
-    void promise.finally(() => workers.delete(row.id))
+    // work 是 fire-and-forget（idle 可等原件）：阶段级失败已记录进 run 状态，
+    // 这里必须旁路接住迟到拒绝——否则 catch 分支自身的写库冲突会以
+    // unhandledRejection 打死整个进程（曾复现）。
+    void promise.catch(error => {
+      console.error('[creative-pipeline] worker crashed after stage bookkeeping', row.id, error)
+    }).finally(() => workers.delete(row.id))
   };
   async function checked(projectId: number, runId: number, version: number) {
     const row = await readRun(projectId, runId)
@@ -366,7 +372,7 @@ export function createPipelineRunner(execute: StageExecutor = createStageExecuto
     return { stageId: stage.id, ...stage.pendingAgent }
   }
 
-  /** 客户端 Agent 回交阶段产物：校验 → 注入（等价正常完成路径）→ 续跑。 */
+  /** 客户端 Agent 回交阶段产物：按 pendingAgent.kind 校验 → 注入（等价正常完成路径）→ 续跑。 */
   async function commitAgentArtifact(projectId: number, runId: number, version: number, artifactJson: string) {
     const row = await checked(projectId, runId, version)
     const decoded = decode(row)
@@ -375,22 +381,54 @@ export function createPipelineRunner(execute: StageExecutor = createStageExecuto
     if (row.status !== 'waiting' || !stage?.pendingAgent) {
       throw new CreativeError('当前阶段不在等待客户端 Agent 的状态', 409)
     }
-    let parsed: { summary?: unknown; content?: unknown; checks?: unknown }
-    try {
-      parsed = JSON.parse(artifactJson)
-    } catch {
-      throw new CreativeError('产物不是合法 JSON（应返回 {"summary","content","checks"}）', 400)
-    }
-    if (typeof parsed.summary !== 'string' || typeof parsed.content !== 'string') {
-      throw new CreativeError('产物缺少 summary/content 字段', 400)
-    }
+    const kind = stage.pendingAgent.kind ?? 'narrative'
+    const raw = artifactJson.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
     const definition = decoded.definition ?? (await getPipelineState(projectId)).definition
     const stageDef = definition.stages.find((it) => it.id === stage.id)
-    stage.artifact = {
-      summary: parsed.summary,
-      content: parsed.content,
-      checks: Array.isArray(parsed.checks) ? parsed.checks.map(String) : [],
-      data: {},
+    let revision: number | undefined
+    if (kind === 'plan') {
+      // scene_plan 的原生完成路径：方案落库（乐观锁走 withCreativeMutation）
+      const project = await getCreativeProject(projectId)
+      const planned = applyGeneratedPlan(raw, { category: project.category, document: project })
+      const saved = await withCreativeMutation(projectId, async () =>
+        await saveCreativeProject(projectId, { ...planned, revision: project.revision }),
+      )
+      revision = saved.revision
+      stage.artifact = {
+        summary: `已编排 ${saved.shots.length} 个镜头`,
+        content: saved.shots
+          .map((s, i) => `${i + 1}. ${s.title} · ${s.duration} 秒\n${s.visualPrompt}\n字幕：${s.caption}`)
+          .join('\n\n'),
+        checks: ['在画面编排中核对镜头、字幕、来源和总时长', '确认后才开始生成缺失素材'],
+        data: { shots: saved.shots },
+      }
+    } else if (kind === 'translate') {
+      const project = await getCreativeProject(projectId)
+      const translated = parseCaptionTranslation(raw, project)
+      if (project.production.fields.speechMode === 'openai')
+        translated.shots = translated.shots.map((s) => ({ ...s, narration: s.narration || s.caption }))
+      stage.artifact = {
+        summary: '字幕译稿已生成，时序保持不变',
+        content: translated.shots.map((s) => `${s.title}\n${s.caption}\n${s.narration}`).join('\n\n'),
+        checks: ['核对术语与原稿含义', '检查目标语言和每段阅读长度'],
+        data: { translatedShots: translated.shots },
+      }
+    } else {
+      let parsed: { summary?: unknown; content?: unknown; checks?: unknown }
+      try {
+        parsed = JSON.parse(raw)
+      } catch {
+        throw new CreativeError('产物不是合法 JSON（应返回 {"summary","content","checks"}）', 400)
+      }
+      if (typeof parsed.summary !== 'string' || typeof parsed.content !== 'string') {
+        throw new CreativeError('产物缺少 summary/content 字段', 400)
+      }
+      stage.artifact = {
+        summary: parsed.summary,
+        content: parsed.content,
+        checks: Array.isArray(parsed.checks) ? parsed.checks.map(String) : [],
+        data: {},
+      }
     }
     stage.error = null
     stage.pendingAgent = null
@@ -400,7 +438,7 @@ export function createPipelineRunner(execute: StageExecutor = createStageExecuto
     const status: RunStatus = stageDef?.review ? 'review' : cursor === decoded.stages.length ? 'completed' : 'running'
     await patch(
       row,
-      { status, cursor, stages: JSON.stringify(decoded.stages) },
+      { status, cursor, stages: JSON.stringify(decoded.stages), ...(revision !== undefined ? { revision } : {}) },
       'agent_committed',
       { stage: stage.id },
       stage.id,

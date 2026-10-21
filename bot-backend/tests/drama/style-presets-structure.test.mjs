@@ -83,7 +83,7 @@ test('drama style prompt is injected into image prompt composition', () => {
 })
 
 test('agent default prompts no longer hardcode consistent art style', () => {
-  const agents = read('src/drama/agents/index.ts')
+  const agents = read('src/drama/agents/prompt-defaults.ts')
 
   assert.doesNotMatch(agents, /必须包含 "consistent art style"/)
   assert.match(agents, /视觉风格描述会由工具/)

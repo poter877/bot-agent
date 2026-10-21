@@ -1,22 +1,10 @@
 /**
- * Agent 注册表 — hermes gateway 编排的薄封装（编排大脑外移）
+ * Agent 提示词默认值 — workspace prompts/<type>.md 缺失时的兜底内容。
  *
- * instructions 按请求解析（workspace/prompts/<agent_type>.md 文件 + 技能全文 + 语言块），
- * 作为 system 消息发给 hermes gateway；工具循环在 hermes 侧经 MCP 执行 ai-drama 领域工具
- * （episodeId/dramaId 由 MCP 服务端绑定，本模块不再经 toolsContext 注入）。
- * 模型由 hermes drama profile 决定——本侧不选模型，只发消息收最终文本。
+ * 《重构》清理：编排注册表已随网关退役；这些指令文本继续作为
+ * 提示词编辑器（settings → Agent 配置）的种子内容。执行这些任务的编排
+ * 在桌面 Hermes 客户端（runStudioTask），提取/最终提示词改为服务端单发模型调用。
  */
-import { runHermesAgent, type HermesChatMessage } from '../services/hermes-agent.js'
-import { loadAgentSkills } from './skills.js'
-import { loadAgentPromptFile } from './prompts.js'
-import { buildLanguageDirective } from './language.js'
-import {
-  buildAgentRequestContext,
-  getContentLanguageFromRC,
-  type AgentRequestContext,
-  type AgentRequestContextValues,
-} from './context.js'
-
 // Default prompts (used when workspace/prompts/<type>.md 文件缺失时兜底)
 export const DEFAULT_PROMPTS: Record<string, { name: string; instructions: string }> = {
   script_rewriter: {
@@ -150,61 +138,3 @@ video_prompt 规则（硬约束）：
 }
 
 export const validAgentTypes = Object.keys(DEFAULT_PROMPTS)
-
-/** instructions 按请求解析：prompt 文件（或默认）+ 技能全文拼接 + 目标语言指令块
- *  prompt/skill 文本随内容语言切换语言变体（<type>.<lang>.md / SKILL.<lang>.md），缺失回退中文版 */
-async function buildInstructions(type: string, requestContext: AgentRequestContext): Promise<string> {
-  const defaults = DEFAULT_PROMPTS[type]
-  const lang = getContentLanguageFromRC(requestContext)
-  const promptFile = await loadAgentPromptFile(type, lang)
-  const baseInstructions = promptFile?.instructions || defaults.instructions
-  const skillInstructions = await loadAgentSkills(type, lang)
-  const languageDirective = buildLanguageDirective(lang)
-  return [baseInstructions, skillInstructions, languageDirective]
-    .filter(Boolean)
-    .join('\n\n')
-}
-
-/** hermes 编排结果：工具循环在 hermes 侧执行，工具轨迹不回流，text 即最终回复。
- *  空数组字段保持原 agent 结果形状，消费方（routes/agent 等）无需判空。 */
-export interface AgentRunResult {
-  text: string
-  toolCalls: []
-  toolResults: []
-  steps: []
-}
-
-export interface DramaAgent {
-  /** 发消息收最终文本；instructions 已在构建时解析（作为 system 消息参与会话派生） */
-  generate(options: { messages: HermesChatMessage[]; signal?: AbortSignal }): Promise<AgentRunResult>
-}
-
-/** 按请求构建 hermes 编排薄封装：instructions 逐请求解析（等价于原动态解析语义） */
-async function createAgent(type: string, values: AgentRequestContextValues): Promise<DramaAgent> {
-  const requestContext = await buildAgentRequestContext(values)
-  const instructions = await buildInstructions(type, requestContext)
-  // 关联 id 用现成的请求上下文 id（episode 优先，其次 drama），链路排查可反查任务
-  const correlationId = values.episodeId
-    ? `episode-${values.episodeId}`
-    : values.dramaId
-      ? `drama-${values.dramaId}`
-      : undefined
-  return {
-    async generate({ messages, signal }) {
-      const result = await runHermesAgent({ instructions, messages, signal, correlationId })
-      return { text: result.text, toolCalls: [], toolResults: [], steps: [] }
-    },
-  }
-}
-
-/** Agent 注册表：type → 按请求构建 hermes 编排封装的工厂 */
-export const agentRegistry: Record<string, (values: AgentRequestContextValues) => Promise<DramaAgent>> =
-  Object.fromEntries(validAgentTypes.map(type => [type, values => createAgent(type, values)]))
-
-/** 取指定类型的 Agent；类型不存在返回 undefined（消费方自行报错） */
-export function getAgent(
-  type: string,
-  values: AgentRequestContextValues,
-): Promise<DramaAgent> | undefined {
-  return agentRegistry[type]?.(values)
-}
