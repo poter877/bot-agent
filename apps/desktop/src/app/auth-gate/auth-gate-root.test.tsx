@@ -111,7 +111,7 @@ describe('AuthGate', () => {
     vi.useRealTimers()
   })
 
-  it('stops self-healing after the bounded retries; the manual button still works', async () => {
+  it('keeps self-healing with exponential backoff while the account service is down', async () => {
     vi.useFakeTimers()
     const status = vi.fn().mockRejectedValue(new Error('still down'))
     const transport = fakeTransport({ status })
@@ -125,16 +125,23 @@ describe('AuthGate', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0)
     })
+    expect(status).toHaveBeenCalledTimes(1)
 
-    // Initial probe + the bounded budget of automatic rechecks, nothing more.
+    // 4s → 8s doubling probes; retries never stop, so a backend restart that
+    // outlasts any fixed budget still recovers without a manual click.
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(4_000 * 3)
+      await vi.advanceTimersByTimeAsync(4_000)
     })
-    expect(status).toHaveBeenCalledTimes(4)
+    expect(status).toHaveBeenCalledTimes(2)
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(4_000 * 5)
+      await vi.advanceTimersByTimeAsync(8_000)
     })
-    expect(status).toHaveBeenCalledTimes(4)
+    expect(status).toHaveBeenCalledTimes(3)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000 * 10)
+    })
+    expect(status.mock.calls.length).toBeGreaterThan(6)
+    expect(screen.queryByText('business-shell')).toBeNull()
 
     vi.useRealTimers()
   })

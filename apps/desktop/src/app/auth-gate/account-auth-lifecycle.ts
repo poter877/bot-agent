@@ -1,4 +1,4 @@
-import { $accountAuth, setAccountAuthState } from '@/store/account-auth'
+import { setAccountAuthState } from '@/store/account-auth'
 
 import type { AccountAuthInvalidationReason, AccountAuthStatus, AccountAuthTransport } from './account-auth-transport'
 
@@ -110,7 +110,9 @@ export function createAccountAuthLifecycle(backend: AccountAuthTransport, resetB
       if (currentSignOut === signOut) { currentSignOut = undefined }
     },
     revalidate() {
-      if ($accountAuth.get().phase === 'authenticated') { void check() }
+      // 认证门之外（如 unavailable）聚焦/网络恢复同样触发检查——
+      // 后端恢复后无需手动点重试
+      void check()
     }
   }
 }

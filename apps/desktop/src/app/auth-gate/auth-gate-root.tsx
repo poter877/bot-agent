@@ -16,10 +16,13 @@ import {
 /** Self-heal cadence for an unreachable account service: the first probes of
  *  a cold boot race the local backend's spawn (a renderer reload retires the
  *  old backend; the replacement needs seconds to listen), and a live session
- *  can lose its socket the same way. Bounded retries with the manual button
- *  as the way out — never an unbounded loop. */
-const UNAVAILABLE_RETRY_DELAY_MS = 4_000
-const UNAVAILABLE_RETRY_LIMIT = 3
+ *  can lose its socket the same way. A backend restart or deploy can outlast
+ *  any fixed probe budget — stranding the user on an error screen that only a
+ *  manual button resurrects is worse than one lightweight status probe per
+ *  interval — so the gate retries indefinitely with exponential backoff
+ *  (4s doubling to a 60s ceiling). */
+const UNAVAILABLE_RETRY_BASE_MS = 4_000
+const UNAVAILABLE_RETRY_MAX_MS = 60_000
 
 /**
  * The login gate (doc《用户认证》§2/§4): while the account session is
@@ -66,12 +69,24 @@ export function AuthGate({
     }
   }, [lifecycle])
 
-  // Bounded self-heal: an `unavailable` verdict rechecks after a short delay,
-  // up to UNAVAILABLE_RETRY_LIMIT times; success resets the budget (a later
-  // drop earns a fresh round). The manual 重试 always works regardless.
+  // Self-heal: an `unavailable` verdict schedules probes with exponential
+  // backoff — unlimited attempts, the delay ceiling keeps it gentle. Success
+  // resets the schedule. The manual 重试 always works regardless.
   useEffect(() => {
-    let autoRetries = 0
+    let attempt = 0
     let timer: number | undefined
+
+    const schedule = () => {
+      if (timer !== undefined) { return }
+      timer = window.setTimeout(
+        () => {
+          timer = undefined
+          void lifecycle.check()
+        },
+        Math.min(UNAVAILABLE_RETRY_BASE_MS * 2 ** attempt, UNAVAILABLE_RETRY_MAX_MS)
+      )
+      attempt += 1
+    }
 
     const stop = $accountAuth.subscribe(state => {
       if (timer !== undefined) {
@@ -79,14 +94,10 @@ export function AuthGate({
         timer = undefined
       }
 
-      if (state.phase === 'unavailable' && autoRetries < UNAVAILABLE_RETRY_LIMIT) {
-        autoRetries += 1
-        timer = window.setTimeout(() => {
-          timer = undefined
-          void lifecycle.check()
-        }, UNAVAILABLE_RETRY_DELAY_MS)
+      if (state.phase === 'unavailable') {
+        schedule()
       } else if (state.phase === 'authenticated') {
-        autoRetries = 0
+        attempt = 0
       }
     })
 
