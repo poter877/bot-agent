@@ -10,7 +10,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useBeforeUnload, useBlocker, useNavigate } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useStore } from 'zustand'
-import { ArrowLeft, ArrowRight, Check, CheckCircle2, ChevronDown, Circle, Clapperboard, FileText, Film, Loader2, MessageSquare, Music2, Play as PlayIcon, Save, Settings2, Sparkles, Wrench } from 'lucide-react'
+import { ArrowLeft, Check, ChevronDown, Clapperboard, FileText, Film, Loader2, MessageSquare, Music2, Play as PlayIcon, Save, Settings2, Sparkles, Wrench } from 'lucide-react'
 import { creativeApi } from '@/entities/creative/api'
 import { creativeQueries } from '@/entities/creative/queries'
 import { hasActiveShotTasks, newCreativeShot, taskIsActive, toCreativeDraft, type CreativeDraft, type CreativeProject, type CreativeShot } from '@/entities/creative/model'
@@ -121,7 +121,6 @@ export function CreativeWorkbenchPage({ projectId }: { projectId: number }) {
   const editDisabled = busy || shotTasksActive
   const approved = !dirty && project.approvedRevision === project.revision
   const canRun = !dirty && !busy && !shotTasksActive && !conflict
-  const readyCount = current.shots.filter(shotHasMedia).length
   const planReady = current.shots.length > 0 && current.shots.every((shot) => !!shot.visualPrompt.trim() || shotHasMedia(shot))
   const planInProgress = operation.isPending && operation.variables?.kind === 'plan'
   const mutationShotId = operation.isPending && operation.variables?.kind === 'generate' ? operation.variables.shotId : null
@@ -171,19 +170,11 @@ export function CreativeWorkbenchPage({ projectId }: { projectId: number }) {
     { id: 'brief', label: copy.brief, icon: FileText }, { id: 'shots', label: copy.shots, icon: Clapperboard },
     { id: 'audio', label: copy.audio, icon: Music2 }, { id: 'export', label: copy.export, icon: Film },
   ]
-  const workflow = [
-    { label: copy.brief, stage: 'brief' as const, done: !!current.brief.idea.trim(), active: false, failed: false, waiting: copy.toComplete },
-    { label: copy.plan, stage: 'brief' as const, done: planReady, active: planInProgress, failed: operation.isError && operation.variables?.kind === 'plan', waiting: copy.toComplete },
-    { label: copy.approve, stage: 'shots' as const, done: approved, active: false, failed: false, waiting: copy.toApprove },
-    { label: copy.shots, stage: 'shots' as const, done: planReady && readyCount === current.shots.length, active: shotTasksActive, failed: (operation.isError && operation.variables?.kind === 'generate') || project.shots.some((shot) => (shot.mediaType === 'video' ? shot.videoTask : shot.imageTask)?.status === 'failed'), waiting: copy.toProduce },
-    { label: copy.audio, stage: 'audio' as const, done: !!(current.audio.narrationUrl || current.audio.musicUrl || current.shots.some((shot) => shot.caption.trim() || shot.audioUrl)), active: false, failed: false, waiting: copy.optional, doneLabel: copy.added },
-    { label: copy.export, stage: 'export' as const, done: project.renders.some((render) => render.revision === project.revision && render.status === 'completed'), active: renderActive, failed: (operation.isError && operation.variables?.kind === 'render') || project.renders[0]?.status === 'failed', waiting: copy.toProduce },
-  ]
 
   return <div className="flex h-full min-h-0 flex-col overflow-y-auto p-4 md:p-6">
     <header className="mb-4 flex flex-wrap items-center gap-3">
       <IconButton aria-label={copy.back} title={copy.back} onClick={() => navigate('/')}><ArrowLeft size={17} aria-hidden /></IconButton>
-      <div className="min-w-0 flex-1"><p className="mb-1 flex flex-wrap items-center gap-2 text-[11px] text-content-muted"><Sparkles size={12} className="text-brand" aria-hidden />{copy.title}<span className="rounded-pill bg-brand-soft px-2 py-0.5 text-brand-content">{localize(recipe?.title) || project.category}</span><span>{project.aspectRatio}</span></p><h1 className="truncate font-display text-xl font-bold tracking-tight">{current.title}</h1></div>
+      <div className="min-w-0 flex-1"><p className="mb-1 flex flex-wrap items-center gap-2 text-[11px] text-content-muted"><Sparkles size={12} className="text-brand" aria-hidden />{copy.title}<span className="rounded-pill bg-brand-soft px-2 py-0.5 text-brand-content">{localize(recipe?.title) || project.category}</span></p><h1 className="truncate font-display text-xl font-bold tracking-tight">{current.title}</h1></div>
       <Button size="sm" variant="ghost" onClick={() => navigate('/settings')}><Settings2 size={14} aria-hidden />{copy.settings}</Button>
       <div className="flex items-center gap-2"><span role="status" className={cn('hidden text-xs sm:inline', dirty ? 'text-brand-content' : 'text-content-muted')}>{dirty ? copy.unsaved : copy.saved}</span><Button size="sm" variant={dirty ? 'primary' : 'default'} loading={operation.isPending && operation.variables?.kind === 'save'} disabled={!dirty || editDisabled || conflict} onClick={save}><Save size={14} aria-hidden />{copy.save}</Button></div>
     </header>
@@ -218,15 +209,7 @@ export function CreativeWorkbenchPage({ projectId }: { projectId: number }) {
         <CreativeChatPanel project={project} disabled={dirty || pipelineDirty || busy || shotTasksActive || conflict} onProjectUpdated={acceptProject} onGoToStage={setStage} onBusyChange={setChatBusy} />
       </details>
       <section aria-label={copy.title} className="min-w-0">
-        {stage !== 'tools' && stage !== 'toolbox' && <nav aria-label={copy.plan} className="mb-4 flex gap-2 overflow-x-auto rounded-panel border border-outline bg-surface p-3">
-          {workflow.map((node, index) => <div key={node.label} className="flex min-w-[124px] flex-1 items-center gap-2">
-            <button type="button" onClick={() => setStage(node.stage)} className="flex min-w-[86px] flex-1 flex-col items-start gap-2 rounded-control border-0 bg-transparent p-2 text-left hover:bg-hover-overlay focus-visible:outline-none focus-visible:shadow-focus">
-              <span className={cn('flex items-center gap-1.5 text-[10px]', node.active ? 'text-brand-content' : node.failed ? 'text-danger' : node.done ? 'text-success' : 'text-content-subtle')}>{node.active ? <Loader2 size={13} className="animate-spin" aria-hidden /> : node.done && !node.failed ? <CheckCircle2 size={13} aria-hidden /> : <Circle size={13} aria-hidden />}{node.active ? copy.processing : node.failed ? copy.failed : node.done ? node.doneLabel ?? copy.completed : node.waiting}</span>
-              <span className="text-xs font-semibold text-content-secondary">{node.label}</span>
-            </button>{index < workflow.length - 1 && <ArrowRight size={13} className="shrink-0 text-content-subtle" aria-hidden />}
-          </div>)}
-        </nav>}
-        {stage !== 'tools' && stage !== 'toolbox' && <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-control bg-brand-soft px-4 py-3">
+        {stage === 'shots' && <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-control bg-brand-soft px-4 py-3">
           <div className="min-w-0 flex-1"><p className="flex items-center gap-2 text-xs font-semibold text-brand-content">{approved ? <Check size={14} aria-hidden /> : <Sparkles size={14} aria-hidden />}{shotTasksActive ? copy.activeTasksHint : dirty ? copy.saveFirst : approved ? copy.approved : copy.approveFirst}</p><p className={cn(hintClass, 'mt-1')}>{copy.approvalHint}</p></div>
           {!approved && <Button size="sm" disabled={!canRun || !planReady} loading={operation.isPending && operation.variables?.kind === 'approve'} onClick={() => operation.mutate({ kind: 'approve', revision: project.revision })}>{copy.approve}</Button>}
         </div>}

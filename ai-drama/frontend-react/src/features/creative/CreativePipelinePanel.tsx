@@ -197,9 +197,9 @@ export function CreativePipelinePanel({
     <div className="space-y-4">
       <AgentStageWatcher projectId={project.id} runId={runId} version={runVersion} />
       <CreativeSection
-        title={`${definition.title} · ${text('制作流程', 'Workflow')}`}
+        title={text('制作流程', 'Workflow')}
         hint={text(
-          '各阶段保存输入与产物。审阅后继续；修改项目后需同步，并重新检查后续阶段。',
+          text('审阅确认每个阶段；修改项目后先同步。', 'Review each stage; sync after editing.'),
           'Stages retain their outputs. Review before continuing; sync project edits to invalidate dependent stages.',
         )}
       >

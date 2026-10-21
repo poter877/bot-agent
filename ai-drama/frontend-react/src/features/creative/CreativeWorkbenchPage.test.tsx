@@ -63,16 +63,19 @@ describe('CreativeWorkbenchPage', { timeout: 30_000 }, () => {
     project.shots[0].caption = ''
     setup(project)
     expect(screen.getByRole('button', { name: '内容语言' }).textContent).toContain('中文')
-    await user.click(screen.getByRole('button', { name: '可选 声音与字幕' }))
+    await user.click(screen.getByRole('tab', { name: '声音与字幕' }))
     expect(screen.getByRole('heading', { name: '旁白音轨' })).toBeTruthy()
   })
 
   it('keeps unsaved writing when task polling updates the server document', async () => {
+    const user = userEvent.setup()
     const { client, project } = setup()
+    await user.click(screen.getByRole('tab', { name: '创作需求' }))
     fireEvent.change(screen.getByRole('textbox', { name: '主题与创作要求' }), { target: { value: '我的未保存想法' } })
     act(() => client.setQueryData(creativeQueries.detail(project.id).queryKey, { ...project, brief: { ...project.brief, idea: '后台的新内容' } }))
     expect((screen.getByRole('textbox', { name: '主题与创作要求' }) as HTMLTextAreaElement).value).toBe('我的未保存想法')
     expect((screen.getByRole('button', { name: '测试发送消息' }) as HTMLButtonElement).disabled).toBe(true)
+    await user.click(screen.getByRole('tab', { name: '画面编排' }))
     expect((screen.getByRole('button', { name: '确认制作方案' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
@@ -85,6 +88,7 @@ describe('CreativeWorkbenchPage', { timeout: 30_000 }, () => {
     await waitFor(() => expect(save).toHaveBeenCalled())
     expect(save.mock.calls[0][0]).toBe(42)
     expect(save.mock.calls[0][1]).toMatchObject({ revision: 1, title: '新的森林标题' })
+    await user.click(screen.getByRole('tab', { name: '画面编排' }))
     await waitFor(() => expect((screen.getByRole('button', { name: '确认制作方案' }) as HTMLButtonElement).disabled).toBe(false))
     expect((screen.getByRole('button', { name: '保存修改' }) as HTMLButtonElement).disabled).toBe(true)
   })

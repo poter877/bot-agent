@@ -74,7 +74,7 @@ export function PipelineStrip({ project, state, loading, disabled, activeStage, 
                   : <Play size={12} aria-hidden />}
           {loading ? '流程状态加载中…' : run ? `制作流程 · ${runStatusText[run.status] ?? run.status}` : '制作流程 · 未建立'}
         </span>
-        {cursor && run && <span className="text-xs text-content-muted">当前：{stageTitles[cursor.id] ?? cursor.id}{cursor.status === 'waiting' ? '（等待 AI 执行）' : ''}</span>}
+        {cursor && run && ['running', 'waiting', 'pausing', 'review'].includes(run.status) && <span className="text-xs text-content-muted">当前：{stageTitles[cursor.id] ?? cursor.id}{cursor.status === 'waiting' ? '（等待 AI 执行）' : ''}</span>}
         <span className="ml-auto flex items-center gap-2">
           {nextAction && (
             <Button
