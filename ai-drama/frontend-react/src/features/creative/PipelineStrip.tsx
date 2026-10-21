@@ -27,16 +27,11 @@ const runStatusText: Record<string, string> = {
   review: '等待审阅', failed: '已失败', completed: '已完成', cancelled: '已结束',
 }
 
-export function PipelineStrip({ project, state, loading, disabled, activeStage, onOpenPipeline, onSelectStage }: {
+export function PipelineStrip({ project, state, loading, disabled }: {
   project: { id: number; revision: number; category: string }
   state?: PipelineState | null
   loading?: boolean
   disabled?: boolean
-  /** 当前工作台所处 Tab——处于流程视图时隐藏冗余的「查看详情」 */
-  activeStage?: string
-  onOpenPipeline: () => void
-  /** 点击阶段 chip：切到流程视图并打开该阶段详情 */
-  onSelectStage: (stageId: string) => void
 }) {
   const client = useQueryClient()
   const run = state?.run
@@ -46,7 +41,7 @@ export function PipelineStrip({ project, state, loading, disabled, activeStage, 
   const running = run?.status === 'running' || run?.status === 'pausing'
 
   const action = useMutation({
-    mutationFn: (input: 'start' | 'continue' | 'retry') => {
+    mutationFn: (input: 'start' | 'continue' | 'retry' | 'sync') => {
       if (input === 'start' || !run) return pipelineApi.start(project.id, project.revision)
       return pipelineApi.action(project.id, run.id, { action: input, version: run.version })
     },
@@ -87,12 +82,19 @@ export function PipelineStrip({ project, state, loading, disabled, activeStage, 
               onClick={() => action.mutate(nextAction)}
             >
               <Play size={12} aria-hidden />
-              {nextAction === 'start' ? (run ? '建立新一轮流程' : '建立制作流程') : failed ? '重试当前阶段' : '继续执行'}
+              {nextAction === 'start' ? '建立制作流程' : failed ? '重试当前阶段' : '继续执行'}
             </Button>
           )}
-          {activeStage !== 'pipeline' && (
-            <Button size="sm" variant="ghost" onClick={onOpenPipeline}>
-              {run ? '查看详情' : '打开流程'}
+          {run && run.stale && !['completed', 'cancelled'].includes(run.status) && (
+            <Button
+              size="sm"
+              disabled={disabled || running}
+              onClick={() => {
+                if (!run) { return }
+                action.mutate('sync')
+              }}
+            >
+              同步修改
             </Button>
           )}
         </span>
@@ -106,9 +108,7 @@ export function PipelineStrip({ project, state, loading, disabled, activeStage, 
             const isCursor = run && index === run.cursor
             return (
               <li key={stage.id} className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => onSelectStage(stage.id)}
+                <span
                   title={`${stageTitles[stage.id] ?? stage.id} · ${
                     status === 'completed' ? '已完成' : status === 'running' ? '进行中' : status === 'failed' ? '失败'
                       : status === 'review' ? '待审阅' : status === 'waiting' ? '等待 AI' : '未开始'}`}
@@ -122,7 +122,7 @@ export function PipelineStrip({ project, state, loading, disabled, activeStage, 
                 >
                   <Icon size={11} className={status === 'running' ? 'animate-spin' : ''} aria-hidden />
                   {String(index + 1).padStart(2, '0')} {stageTitles[stage.id] ?? stage.title ?? stage.id}
-                </button>
+                </span>
                 {index < definition.stages.length - 1 && <span className="text-content-subtle" aria-hidden>·</span>}
               </li>
             )

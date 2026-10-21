@@ -2,7 +2,7 @@ import { CreativeToolsPanel } from './CreativeToolsPanel'
 import { CreativeToolboxPanel } from './CreativeToolboxPanel'
 import { pipelineQueries } from '@/entities/creative/pipeline'
 import { useProductionText } from '@/entities/creative/catalog'
-import { CreativePipelinePanel } from './CreativePipelinePanel'
+import { AgentStageWatcher } from './AgentStageWatcher'
 import { PipelineStrip } from './PipelineStrip'
 import { useCreativeCatalog, useCatalogText } from '@/entities/creative/catalog'
 import { CreativeProductionPanel } from './CreativeProductionPanel'
@@ -10,7 +10,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useBeforeUnload, useBlocker, useNavigate } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useStore } from 'zustand'
-import { ArrowLeft, Check, ChevronDown, Clapperboard, FileText, Film, Loader2, MessageSquare, Music2, Play as PlayIcon, Save, Settings2, Sparkles, Wrench } from 'lucide-react'
+import { ArrowLeft, Check, ChevronDown, Clapperboard, FileText, Film, Loader2, MessageSquare, Music2, Save, Settings2, Sparkles, Wrench } from 'lucide-react'
 import { creativeApi } from '@/entities/creative/api'
 import { creativeQueries } from '@/entities/creative/queries'
 import { hasActiveShotTasks, newCreativeShot, taskIsActive, toCreativeDraft, type CreativeDraft, type CreativeProject, type CreativeShot } from '@/entities/creative/model'
@@ -43,7 +43,6 @@ export function CreativeWorkbenchPage({ projectId }: { projectId: number }) {
   const options = creativeQueries.detail(projectId)
   const query = useQuery(options)
   const pipeline = useQuery(pipelineQueries.detail(projectId))
-  const [pipelineFocusStage, setPipelineFocusStage] = useState<string | null>(null)
   const pipelineRevision = pipeline.data?.run?.revision
   const projectRevision = query.data?.revision
   useEffect(() => {
@@ -164,7 +163,6 @@ export function CreativeWorkbenchPage({ projectId }: { projectId: number }) {
   } })
 
   const stages: { id: CreativeStage; label: string; icon: typeof FileText }[] = [
-    { id: 'pipeline', label: text('制作流程', 'Workflow'), icon: PlayIcon },
     { id: 'toolbox', label: text('工具目录', 'Tool catalog'), icon: Wrench },
     { id: 'tools', label: text('专项工具', 'Specialty tools'), icon: Settings2 },
     { id: 'brief', label: copy.brief, icon: FileText }, { id: 'shots', label: copy.shots, icon: Clapperboard },
@@ -179,29 +177,9 @@ export function CreativeWorkbenchPage({ projectId }: { projectId: number }) {
       <div className="flex items-center gap-2"><span role="status" className={cn('hidden text-xs sm:inline', dirty ? 'text-brand-content' : 'text-content-muted')}>{dirty ? copy.unsaved : copy.saved}</span><Button size="sm" variant={dirty ? 'primary' : 'default'} loading={operation.isPending && operation.variables?.kind === 'save'} disabled={!dirty || editDisabled || conflict} onClick={save}><Save size={14} aria-hidden />{copy.save}</Button></div>
     </header>
 
-    <PipelineStrip project={project} state={pipeline.data} loading={pipeline.isPending} disabled={dirty || operation.isPending || uploading !== null || sourceBusy || chatBusy || conflict} activeStage={stage} onOpenPipeline={() => setStage('pipeline')} onSelectStage={(id) => { setPipelineFocusStage(id); setStage('pipeline') }} />
+    <AgentStageWatcher projectId={project.id} runId={pipeline.data?.run?.id ?? null} version={pipeline.data?.run?.version ?? null} />
+    <PipelineStrip project={project} state={pipeline.data} loading={pipeline.isPending} disabled={dirty || operation.isPending || uploading !== null || sourceBusy || chatBusy || conflict}  />
     {(error || conflict || (query.isError && query.data)) && <div role="alert" className="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-control border border-danger/30 bg-danger-soft p-3 text-xs leading-relaxed text-danger"><p className="min-w-0 flex-1 whitespace-pre-wrap break-words">{conflict ? copy.conflict : error || query.error?.message}</p>{conflict && <Button size="sm" onClick={reload}>{copy.reload}</Button>}{query.isError && !error && !conflict && <Button size="sm" onClick={() => void query.refetch()}>{copy.retry}</Button>}</div>}
-    {stage === 'pipeline' ? (
-      <div className="flex min-w-0 flex-1 flex-col gap-4">
-      <section aria-label={copy.title} className="min-w-0">
-        <div role="tablist" aria-label={copy.title} className="mb-4 flex gap-1 overflow-x-auto border-b border-outline pb-2">
-          {stages.map(({ id, label, icon: Icon }, index) => <button type="button" key={id} id={`creative-tab-${id}`} role="tab" tabIndex={stage === id ? 0 : -1} aria-selected={stage === id} aria-controls={`creative-panel-${id}`} className={cn('flex shrink-0 items-center gap-2 rounded-control border-0 px-3 py-2 text-xs font-semibold focus-visible:outline-none focus-visible:shadow-focus', stage === id ? 'bg-brand-soft text-brand-content' : 'bg-transparent text-content-muted hover:bg-hover-overlay')} onClick={() => setStage(id)} onKeyDown={(event) => {
-            const next = event.key === 'ArrowRight' ? (index + 1) % stages.length : event.key === 'ArrowLeft' ? (index + stages.length - 1) % stages.length : event.key === 'Home' ? 0 : event.key === 'End' ? stages.length - 1 : null
-            if (next == null) return
-            event.preventDefault(); setStage(stages[next].id); document.getElementById(`creative-tab-${stages[next].id}`)?.focus()
-          }}><Icon size={14} aria-hidden />{label}</button>)}
-        </div>
-        <div role="tabpanel" id={`creative-panel-${stage}`} aria-labelledby={`creative-tab-${stage}`}>
-          <CreativePipelinePanel project={project} state={pipeline.data} loading={pipeline.isPending} error={pipeline.error} disabled={dirty || operation.isPending || uploading !== null || sourceBusy || chatBusy} onReload={() => void pipeline.refetch()} onOpenEditor={setStage} onDirtyChange={setPipelineDirty} focusStage={pipelineFocusStage} />
-        </div>
-      </section>
-      <details open className="min-w-0 overflow-hidden rounded-panel border border-outline bg-surface">
-        <summary className="flex cursor-pointer list-none items-center gap-2 border-b border-outline px-4 py-3 text-sm font-semibold focus-visible:outline-none focus-visible:shadow-focus"><MessageSquare size={15} className="text-brand" aria-hidden />{copy.chatTitle}<ChevronDown size={14} className="ml-auto text-content-muted" aria-hidden /></summary>
-        {dirty && <p className="border-b border-outline bg-brand-soft px-4 py-2 text-xs text-brand-content">{copy.saveFirst}</p>}
-        <CreativeChatPanel project={project} disabled={dirty || pipelineDirty || busy || shotTasksActive || conflict} onProjectUpdated={acceptProject} onGoToStage={setStage} onBusyChange={setChatBusy} />
-      </details>
-      </div>
-    ) : (
     <div className="grid min-w-0 flex-1 items-start gap-4 lg:grid-cols-[300px_minmax(0,1fr)] 2xl:grid-cols-[340px_minmax(0,1fr)]">
       <details open className="min-w-0 overflow-hidden rounded-panel border border-outline bg-surface lg:sticky lg:top-0">
         <summary className="flex cursor-pointer list-none items-center gap-2 border-b border-outline px-4 py-3 text-sm font-semibold focus-visible:outline-none focus-visible:shadow-focus"><MessageSquare size={15} className="text-brand" aria-hidden />{copy.chatTitle}<ChevronDown size={14} className="ml-auto text-content-muted" aria-hidden /></summary>
@@ -234,7 +212,6 @@ export function CreativeWorkbenchPage({ projectId }: { projectId: number }) {
         </div>
       </section>
     </div>
-    )}
     <Modal open={!!confirmation} onOpenChange={(open) => { if (!open) setConfirmation(null) }} title={confirmation?.title || copy.confirm} width={440} footer={<><Button onClick={() => setConfirmation(null)}>{copy.cancel}</Button><Button variant="primary" onClick={() => { const action = confirmation?.onConfirm; setConfirmation(null); action?.() }}>{copy.confirm}</Button></>}><p className="text-sm leading-relaxed text-content-muted">{confirmation?.message}</p></Modal>
     <Modal open={blocker.state === 'blocked'} onOpenChange={(open) => { if (!open && blocker.state === 'blocked') blocker.reset() }} title={copy.unsaved} width={440} footer={<><Button onClick={() => { if (blocker.state === 'blocked') blocker.reset() }}>{copy.cancel}</Button><Button variant="danger" onClick={() => { if (blocker.state === 'blocked') blocker.proceed() }}>{copy.discard}</Button></>}><p className="text-sm leading-relaxed text-content-muted">{copy.leaveWarning}</p></Modal>
     <ImageViewer open={preview?.kind === 'image'} src={preview?.src || ''} title={preview?.title || ''} onClose={() => setPreview(null)} />

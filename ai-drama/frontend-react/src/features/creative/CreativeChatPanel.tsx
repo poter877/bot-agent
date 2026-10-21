@@ -3,6 +3,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { ArrowUp, MessageSquare } from 'lucide-react'
 import { creativeChatApi } from '@/entities/creative/chat-api'
+import { pipelineQueries } from '@/entities/creative/pipeline'
+import { PipelineReviewCards } from './PipelineReviewCards'
 import type { CreativeProject } from '@/entities/creative/model'
 import { Button } from '@/shared/ui/button'
 import { Textarea } from '@/shared/ui/input'
@@ -32,6 +34,7 @@ function StudioChatPanel({ project, disabled, onBusyChange }: { project: Creativ
   const client = useQueryClient()
   const [input, setInput] = useState('')
   const listRef = useRef<HTMLDivElement>(null)
+  const pipeline = useQuery(pipelineQueries.detail(project.id))
   const chat = useStudioAgentChat(studioSessions.key('creative', project.id), project.title, {
     onSettled: () => {
       // 方案可能被模型经 MCP 工具改写——刷新业务快照（不串改本地编辑态，
@@ -64,6 +67,7 @@ function StudioChatPanel({ project, disabled, onBusyChange }: { project: Creativ
           {!!m.toolActivity?.length && <ul className="mt-2 space-y-0.5 font-mono text-[11px] text-content-subtle">{m.toolActivity.map((t, i) => <li key={i}>{t}</li>)}</ul>}
           {m.status === 'failed' && <p className="mt-2 text-xs text-warn-text">{copy.failed}</p>}
         </article>)}
+        <PipelineReviewCards project={project} state={pipeline.data} />
       </div>
       <form onSubmit={event => { event.preventDefault(); send(input) }} className="space-y-2">
         <Textarea aria-label={copy.placeholder} value={input} maxLength={8000} rows={3}
@@ -97,6 +101,7 @@ function HttpChatPanel({ project }: { project: CreativeProject }) {
   const listRef = useRef<HTMLDivElement>(null)
   const messages = useQuery({ queryKey: ['workspace', 'default', 'creative', project.id, 'messages'],
     queryFn: ({ signal }) => creativeChatApi.messages(project.id, signal) })
+  const pipeline = useQuery(pipelineQueries.detail(project.id))
   useEffect(() => {
     const list = listRef.current
     if (list) list.scrollTop = list.scrollHeight
@@ -109,6 +114,7 @@ function HttpChatPanel({ project }: { project: CreativeProject }) {
           <div className="mb-1 text-xs font-semibold text-content-subtle">{message.role === 'user' ? copy.user : copy.assistant}</div>
           <p className="whitespace-pre-wrap break-words leading-relaxed text-content">{message.content}</p>
         </article>)}
+        <PipelineReviewCards project={project} state={pipeline.data} />
       </div>
       <div className="rounded-xl bg-hover-overlay p-4 text-sm text-content-muted">
         <MessageSquare className="mb-3 size-5 text-brand-content" aria-hidden />
