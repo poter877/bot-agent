@@ -35,14 +35,9 @@ export function CreativeWorkbenchPage({ projectId }: { projectId: number }) {
 
   const disabled = query.isPending || pipeline.isPending || pipeline.data?.run?.stale === true
 
-  const startOrAction = (action: 'start' | 'continue' | 'retry' | 'sync') => {
-    if (action === 'start' || !pipeline.data?.run) {
-      void pipelineApi.start(projectId, query.data?.revision ?? 1)
-        .then(result => { queryClient.setQueryData(pipelineQueries.detail(projectId).queryKey, result as never) })
-        .catch(() => { void queryClient.invalidateQueries({ queryKey: pipelineQueries.detail(projectId).queryKey }) })
-      return
-    }
-    const run = pipeline.data.run
+  const runAction = (action: 'continue' | 'retry' | 'sync') => {
+    const run = pipeline.data?.run
+    if (!run) return
     void pipelineApi.action(projectId, run.id, { action, version: run.version })
       .then(result => { queryClient.setQueryData(pipelineQueries.detail(projectId).queryKey, result as never) })
       .catch(() => { void queryClient.invalidateQueries({ queryKey: pipelineQueries.detail(projectId).queryKey }) })
@@ -65,8 +60,7 @@ export function CreativeWorkbenchPage({ projectId }: { projectId: number }) {
         state={pipeline.data}
         loading={pipeline.isPending}
         disabled={disabled}
-        onStart={() => startOrAction('start')}
-        onAction={(action) => startOrAction(action)}
+        onAction={runAction}
       />
     )}
 

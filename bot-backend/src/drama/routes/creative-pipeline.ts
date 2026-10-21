@@ -76,13 +76,8 @@ export function createPipelineRoutes(runner: ReturnType<typeof createPipelineRun
   app.get('/:id/pipeline/runs/:runId', async (c) =>
     success(c, await getPipelineRun(Number(c.req.param('id')), Number(c.req.param('runId')))),
   )
-  app.post('/:id/pipeline', async (c) => {
-    const { revision } = z
-      .object({ revision: z.number().int().positive() })
-      .strict()
-      .parse(await c.req.json())
-    return success(c, await runner.start(Number(c.req.param('id')), revision))
-  })
+  // 流程建立只走对话（EP 经 MCP pipeline_start：start + continue 建立即启动）；
+  // HTTP 面不再提供裸建卡入口。
   app.post('/:id/pipeline/:runId/actions', async (c) => {
     const id = Number(c.req.param('id')),
       runId = Number(c.req.param('runId'))

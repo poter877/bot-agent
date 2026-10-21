@@ -47,9 +47,10 @@ describe('CreativeWorkbenchPage（对话式制片布局）', { timeout: 30_000 }
     }
   })
 
-  it('流程未建立时看板显示建立入口；无 draft/save 机制', async () => {
+  it('流程未建立：无建立按钮，指引从制作对话开始', async () => {
     mount()
-    await waitFor(() => expect(screen.getByRole('button', { name: '建立制作流程' })).toBeTruthy())
+    await waitFor(() => expect(screen.getByText(/在下方制作对话中说「开始制作」/)).toBeTruthy())
+    expect(screen.queryByRole('button', { name: '建立制作流程' })).toBeNull()
     expect(screen.queryByRole('button', { name: '保存修改' })).toBeNull()
   })
 

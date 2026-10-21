@@ -187,7 +187,7 @@ export function createStageExecutor(tools: PipelineTools = pipelineTools) {
     }
     if (stage.id === 'idea' || stage.id === 'research') {
       if (!project.brief.idea.trim())
-        throw new PipelineInputRequired('请在创作需求中填写并保存主题，然后同步修改继续。')
+        throw new PipelineInputRequired('缺少制作主题：在制作对话里告诉 AI 这支视频要讲什么（EP 会写入方案），然后重试当前阶段。')
       const recipe = await getCreativeRecipe(project.category)
       if (
         recipe.source !== 'optional' &&
@@ -318,7 +318,7 @@ export function createStageExecutor(tools: PipelineTools = pipelineTools) {
           kind: shot.mediaType,
         })
         pending.push(shot.id)
-        context.checkpoint(
+        await context.checkpoint(
           (await artifact('素材正在制作', '已提交镜头任务，继续时复用任务记录，不重复生成。', {
             tasks: updated.shots
               .filter(async (s) => s.imageTaskId || s.videoTaskId)
@@ -461,7 +461,7 @@ export function createStageExecutor(tools: PipelineTools = pipelineTools) {
         })
         job = updated.renders[0]
         if (!job) throw new Error('合成任务未创建')
-        context.checkpoint(
+        await context.checkpoint(
           artifact('合成任务已提交', '保留该任务记录，继续时不重复提交。', { renderId: job.id }),
         )
       }

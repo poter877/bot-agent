@@ -9,7 +9,7 @@
  * - /mcp 路由 Bearer 鉴权：缺令牌 / 错令牌 / 未配置 env 一律 403 fail-closed
  */
 import assert from 'node:assert/strict'
-import { test } from 'node:test'
+import { after, test } from 'node:test'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -28,6 +28,7 @@ process.env.AI_DRAMA_MCP_TOKEN = 'test-token'
 
 const { db, schema, getInsertId } = await import('../../src/drama/db/index.js')
 const { buildMcpServer } = await import('../../src/drama/mcp/server.js')
+const { pipelineRunner, getPipelineState } = await import('../../src/drama/services/creative-pipeline/runner.js')
 // 无 auth 注入：测试只覆盖静态令牌面；用户会话面（createMcpApp(auth)）
 // 在鉴权统一后由集成测试覆盖。
 const mcpRoute = (await import('../../src/drama/mcp/route.js')).createMcpApp(null)
@@ -37,6 +38,7 @@ const { InMemoryTransport } = await import('@modelcontextprotocol/sdk/inMemory.j
 
 const now = new Date().toISOString()
 let episodeId = 0
+let pipelineRunId = 0
 /** film build 工具的目标工程（filmProjectDir 只拼路径，不需要库里有行） */
 const FILM_PROJECT_ID = 901
 const filmDir = path.join(STORAGE_ROOT, 'films', String(FILM_PROJECT_ID))
@@ -86,9 +88,10 @@ test('list tools: 领域工具全集 + 任务工具 + build 工具，上下文�
   const { tools } = await client.listTools()
   const names = tools.map(t => t.name)
 
-  // script(3) + extract(7) + storyboard(3) + image-prompt(6) + 任务工具(3) + build 工具(4)
+  // script(3) + creative(2) + extract(7) + storyboard(3) + image-prompt(6) + 任务工具(3) + build 工具(4) + 管线(1)
   const expected = [
     'read_episode_script', 'rewrite_to_screenplay', 'save_script',
+    'read_creative_project', 'save_creative_plan',
     'read_script_for_extraction', 'read_existing_characters', 'read_existing_scenes',
     'read_existing_props', 'save_dedup_characters', 'save_dedup_scenes', 'save_dedup_props',
     'read_storyboard_context', 'save_storyboards', 'update_storyboard',
@@ -96,6 +99,7 @@ test('list tools: 领域工具全集 + 任务工具 + build 工具，上下文�
     'read_props', 'save_prop_final_prompt',
     'submit_image_task', 'submit_video_task', 'get_task_status',
     'write_file', 'render_frame', 'run_blender', 'generate_texture',
+    'pipeline_start',
   ]
   assert.deepEqual([...names].sort(), [...expected].sort())
   assert.equal(names.length, new Set(names).size, 'tool names unique')
@@ -294,6 +298,64 @@ test('run_blender: 未检测到 Blender / 脚本不存在 → error 结果', asy
   }
 })
 
+test('pipeline_start: 建创意流程（revision 服务端取当前），重复建立返回 error', async () => {
+  const { createCreativeDocument } = await import('../../src/drama/services/creative-model.js')
+  const document = createCreativeDocument('explainer')
+  document.brief.idea = '黑洞是什么'
+  document.brief.targetDuration = 30
+  const ts = new Date().toISOString()
+  const dramaId = getInsertId(await db.insert(schema.dramas).values({
+    title: 'MCP 管线测试', projectType: 'creative', creativeCategory: 'explainer', createdAt: ts, updatedAt: ts,
+  }).returning({ id: schema.dramas.id }))
+  await db.insert(schema.creativeProjects).values({
+    projectId: dramaId, document: JSON.stringify(document), revision: 1, updatedAt: ts,
+  })
+
+  const { client } = await connectClient()
+  const started = await client.callTool({ name: 'pipeline_start', arguments: { drama_id: dramaId } })
+  const state = await parseTextContent(started)
+  assert.ok(state.run, 'run created by the EP tool')
+  assert.equal(state.run.projectId, dramaId)
+  assert.ok(state.definition?.stages?.length, 'definition attached to the run')
+  assert.notEqual(state.run.status, 'ready', 'EP starts the run immediately')
+  pipelineRunId = state.run.id
+
+  const again = await client.callTool({ name: 'pipeline_start', arguments: { drama_id: dramaId } })
+  assert.match(String((await parseTextContent(again)).error), /已建立过制作流程/)
+})
+
+test('pipeline_start 带 idea：对话主题写入 brief（revision bump），research 挂起等待宿主车道', async () => {
+  const { createCreativeDocument } = await import('../../src/drama/services/creative-model.js')
+  const document = createCreativeDocument('explainer')
+  const ts = new Date().toISOString()
+  const dramaId = getInsertId(await db.insert(schema.dramas).values({
+    title: 'MCP 无主题项目', projectType: 'creative', creativeCategory: 'explainer', createdAt: ts, updatedAt: ts,
+  }).returning({ id: schema.dramas.id }))
+  await db.insert(schema.creativeProjects).values({
+    projectId: dramaId, document: JSON.stringify(document), revision: 1, updatedAt: ts,
+  })
+
+  const { client } = await connectClient()
+  const started = await client.callTool({
+    name: 'pipeline_start', arguments: { drama_id: dramaId, idea: '用 60 秒解释什么是引力波' },
+  })
+  const state = await parseTextContent(started)
+  assert.ok(state.run, 'run created')
+  assert.equal(state.run.revision, 2, 'idea 写入经 saveCreativeProject 乐观锁 bump revision')
+  // 首阶段异步执行：等它落到确定态。本断言只锁本轮契约——idea 门槛放行
+  // （失败若发生，不再是「缺少制作主题」）；完成路径的 CAS 竞态是主网存量问题。
+  let status = state.run.status
+  let error: string | null = state.run.error ?? null
+  for (let i = 0; i < 50 && !['waiting', 'review', 'failed', 'completed'].includes(status); i++) {
+    await new Promise(resolve => setTimeout(resolve, 100))
+    const fresh = await getPipelineState(dramaId)
+    status = fresh.run!.status
+    error = fresh.run!.error
+  }
+  assert.notEqual(status, 'ready')
+  assert.ok(!/缺少制作主题/.test(error ?? ''), `idea gate must pass, got: ${error}`)
+})
+
 // ─── /mcp 路由鉴权（Hono app.request 直打） ───────────────────────
 
 const INIT_BODY = JSON.stringify({
@@ -342,4 +404,12 @@ test('/mcp: 无状态模式 GET 返回 405', async () => {
   assert.equal(res.status, 405)
 })
 
-after(async () => { process.env.DATABASE_URL = __base; await __admin.query(`DROP DATABASE IF EXISTS "${__dbName}"`); await __admin.end(); })
+after(async () => {
+  pipelineRunner.dispose()
+  // 等在途 worker 归位再关池，否则 drop 撞上活跃会话（55006）
+  if (pipelineRunId) await pipelineRunner.idle(pipelineRunId).catch(() => {})
+  await db.$client.end()
+  process.env.DATABASE_URL = __base
+  await __admin.query(`DROP DATABASE IF EXISTS "${__dbName}"`)
+  await __admin.end()
+})

@@ -102,6 +102,16 @@ const dramaSourceResolver = () => ({
   }
 })
 
+// The drama tree lives outside this workspace, so chokidar never watches it by
+// default — edits there keep serving the stale transform until the server
+// restarts. Explicitly watch it (the standalone SPA's dev config does the same).
+const dramaSourceWatcher = () => ({
+  name: 'hermes:watch-drama-sources',
+  configureServer(server: { watcher: { add: (paths: string) => void } }) {
+    server.watcher.add(dramaSrc)
+  }
+})
+
 // React refuses to run when `react` and `react-dom` come from two different
 // installed copies ("Minified React error #527" — a blank window, since it
 // throws before the first paint). Both packages are pinned to one version in
@@ -177,7 +187,7 @@ const emojibaseAssets = () => ({
 
 export default defineConfig(({ command }) => ({
   base: './',
-  plugins: [dramaSourceResolver(), react(), cachedCompilerPass(command), tailwindcss(), emojibaseAssets()],
+  plugins: [dramaSourceResolver(), dramaSourceWatcher(), react(), cachedCompilerPass(command), tailwindcss(), emojibaseAssets()],
   css: {
     // Pin an explicit (empty) PostCSS config. Tailwind is handled entirely by
     // `@tailwindcss/vite`, so the renderer needs no PostCSS plugins — and

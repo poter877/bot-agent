@@ -14,6 +14,8 @@
  *    包 services/film-pipeline/build-tools.ts（原 film build 循环的内联工具提取）。
  *    render_frame/run_blender 的结果携带 ImageContent，hermes 的 MCP 客户端原生
  *    回喂模型完成渲帧自检闭环。
+ * 4. 创意管线 EP 工具：pipeline_start 包 runner.start（revision 服务端读当前值），
+ *    制作流程由对话建立——编排大脑说开始就开始，看板只读镜像。
  *
  * 会话/状态：无状态调用，每次 tools/call 带齐参数（transport 层见 route.ts）。
  */
@@ -28,6 +30,10 @@ import { scriptTools } from '../agents/tools/script-tools.js'
 import { storyboardTools } from '../agents/tools/storyboard-tools.js'
 import { db, schema } from '../db/index.js'
 import { generateImage, generateVideo } from '../services/generation.js'
+import { getCreativeProject, saveCreativeProject } from '../services/creative-projects.js'
+import { creativeDocumentSchema } from '../services/creative-model.js'
+import { getCreativeRecipe } from '../services/creative-catalog.js'
+import { pipelineRunner } from '../services/creative-pipeline/runner.js'
 import {
   generateProjectTexture,
   renderProjectFrame,
@@ -226,6 +232,45 @@ function registerBuildTools(server: McpServer) {
   }, async ({ projectId, prompt, filename }) => generateProjectTexture({ projectId, prompt, filename }))
 }
 
+/** 创意管线 EP 工具：对话式建流程（OpenMontage executive-producer）——
+ *  主题来自对话写入 brief（创作需求页已退役，对话是唯一主题来源）；
+ *  revision/版本细节全部由这里消化，编排大脑无需感知。 */
+function registerPipelineTools(server: McpServer) {
+  server.registerTool('pipeline_start', {
+    description: 'Executive-producer entry for a creative video project: write the production topic into the project brief, create its production pipeline run and start executing it stage by stage. Call this when the user asks to begin production; pass `idea` = the topic/goal expressed in the conversation (one concise sentence). One run per project — an { error } about 已建立过制作流程 means a run already exists; report that instead of retrying (the run is mirrored on the production board). Text stages pause as pendingAgent for the host agent lane; checkpoints surface as review cards in the production conversation.',
+    inputSchema: {
+      drama_id: z.number().describe('Creative video project id'),
+      idea: z.string().trim().min(1).max(20000).optional()
+        .describe('The production topic from the conversation, e.g. 「用 60 秒解释黑洞是什么」。Written into the brief so the pipeline stages have a subject; strongly recommended for new runs.'),
+    },
+  }, async ({ drama_id, idea }) => {
+    try {
+      let project = await getCreativeProject(drama_id)
+      if (!project) return jsonResult({ error: `Creative project not found (id=${drama_id})` })
+      // 原片预检：一项目一流程，别建出必死流程——把门槛提到建卡之前。
+      const recipe = await getCreativeRecipe(project.category)
+      if (recipe.source !== 'optional' &&
+          !project.production.sources.some((s) => recipe.source === 'video' ? s.kind === 'video' : s.kind !== 'image')) {
+        return jsonResult({ error: '此流程需要原片：当前项目没有视频/音频素材。请重新创建项目并上传原片，或改用不需要原片的制作模式。' })
+      }
+      // 主题来自对话：写入 brief（走 saveCreativeProject 乐观锁），research 阶段以此为种子。
+      if (idea && idea.trim() && idea.trim() !== project.brief.idea.trim()) {
+        const document = creativeDocumentSchema.parse(project)
+        document.brief.idea = idea.trim()
+        const saved = await saveCreativeProject(drama_id, { ...document, revision: project.revision })
+        project = saved
+      }
+      // start 只落卡（ready）；continue 立即点火首阶段（文本阶段挂起 pendingAgent）。
+      const state = await pipelineRunner.start(drama_id, project.revision)
+      const run = state.run
+      if (!run) return jsonResult({ error: 'pipeline_start: run was not returned after creation' })
+      return jsonResult(await pipelineRunner.continue(drama_id, run.id, run.version))
+    } catch (cause) {
+      return jsonResult({ error: cause instanceof Error ? cause.message : String(cause) })
+    }
+  })
+}
+
 /** 构建一个装好全部工具的 McpServer（route.ts 按请求各建一个，无状态） */
 export function buildMcpServer(): McpServer {
   const server = new McpServer({ name: 'ai-drama', version: '1.0.0' })
@@ -236,5 +281,6 @@ export function buildMcpServer(): McpServer {
   registerAgentToolSet(server, imagePromptTools)
   registerTaskTools(server)
   registerBuildTools(server)
+  registerPipelineTools(server)
   return server
 }

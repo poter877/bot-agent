@@ -35,9 +35,10 @@ function StudioChatPanel({ project, disabled, onBusyChange }: { project: Creativ
   const pipeline = useQuery(pipelineQueries.detail(project.id))
   const chat = useStudioAgentChat(studioSessions.key('creative', project.id), project.title, {
     onSettled: () => {
-      // 方案可能被模型经 MCP 工具改写——刷新业务快照（不串改本地编辑态，
-      // 由外层 detail 查询自然合并）。
+      // 方案可能被模型经 MCP 工具改写、流程可能被 pipeline_start 建立——
+      // 刷新业务快照与管线状态（不串改本地编辑态，由外层 detail 查询自然合并）。
       void client.invalidateQueries({ queryKey: ['workspace', 'default', 'creative', 'detail', String(project.id)] })
+      void client.invalidateQueries({ queryKey: pipelineQueries.detail(project.id).queryKey })
     }
   })
   useEffect(() => {

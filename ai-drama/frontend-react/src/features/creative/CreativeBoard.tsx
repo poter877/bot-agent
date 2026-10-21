@@ -4,7 +4,7 @@
  * 胶片美学：片孔点阵分隔、奶油剧本纸（APPROVED 戳）、琥珀现场态、
  * 场景卡按时长变宽、元数据 chips、斜体旁白、LIVE 呼吸灯。
  * 数据全部来自管线 API 与项目文档，运行中由管线查询轮询自动刷新。
- * 只读看板——审阅确认在制作对话（PipelineReviewCards）。
+ * 只读看板——流程建立在制作对话（EP 经 pipeline_start），审阅确认在对话审阅卡。
  */
 import { useMemo, useState } from 'react'
 import { Loader2, Play, Volume2 } from 'lucide-react'
@@ -47,12 +47,11 @@ function Sprockets() {
   )
 }
 
-export function CreativeBoard({ project, state, loading, disabled, onStart, onAction }: {
+export function CreativeBoard({ project, state, loading, disabled, onAction }: {
   project: CreativeProject
   state?: PipelineState | null
   loading?: boolean
   disabled?: boolean
-  onStart: () => void
   onAction: (action: 'continue' | 'retry' | 'sync') => void
 }) {
   const [scriptExpanded, setScriptExpanded] = useState(false)
@@ -76,8 +75,8 @@ export function CreativeBoard({ project, state, loading, disabled, onStart, onAc
   })()
   const scriptPaper = scriptRecord?.artifact?.content
 
-  const nextAction: 'start' | 'continue' | 'retry' | 'sync' | null =
-    !run ? 'start'
+  const nextAction: 'continue' | 'retry' | 'sync' | null =
+    !run ? null
       : ended ? null
         : run.stale && !running ? 'sync'
           : !running && run.status !== 'review' ? (failed ? 'retry' : 'continue')
@@ -102,7 +101,7 @@ export function CreativeBoard({ project, state, loading, disabled, onStart, onAc
               {runStatusText[run.status] ?? run.status}
             </span>
           )}
-          {nextAction === 'start' && <Button size="sm" variant="primary" disabled={disabled} loading={loading} onClick={onStart}>建立制作流程</Button>}
+          {!run && <span className="text-[11px] text-content-subtle">流程未建立 · 在下方制作对话中说「开始制作」</span>}
           {nextAction === 'retry' && <Button size="sm" variant="primary" disabled={disabled} loading={loading} onClick={() => onAction('retry')}>重试当前阶段</Button>}
           {nextAction === 'continue' && <Button size="sm" variant="primary" disabled={disabled} loading={loading} onClick={() => onAction('continue')}>继续执行</Button>}
           {nextAction === 'sync' && <Button size="sm" disabled={disabled} onClick={() => onAction('sync')}>同步修改</Button>}

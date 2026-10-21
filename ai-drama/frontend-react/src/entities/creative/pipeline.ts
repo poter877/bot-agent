@@ -159,7 +159,6 @@ export const pipelineApi = {
     api.get<{ id: string; title: string; available: boolean; detail: string }[]>(
       `/creative/${id}/pipeline/capabilities`,
     ),
-  start: (id: number, revision: number) => api.post<PipelineState>(`/creative/${id}/pipeline`, { revision }),
   action: (
     id: number,
     runId: number,
