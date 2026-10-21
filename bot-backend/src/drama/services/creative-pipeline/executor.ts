@@ -153,13 +153,13 @@ export async function pipelineCapabilities(projectId: number) {
       available:
         !!transcription?.apiKey ||
         project.production.sources.some((s) => s.transcript.trim()) ||
-        project.shots.some(async (s) => s.caption.trim()),
+        project.shots.some((s) => s.caption.trim()),
       detail: '支持原稿、SRT 和 OpenAI 语音识别；自动识别需在制作要求中开启',
     },
     {
       id: 'voice',
       title: '旁白与配音',
-      available: !!speech?.apiKey || !!project.audio.narrationUrl || project.shots.some(async (s) => !!s.audioUrl),
+      available: !!speech?.apiKey || !!project.audio.narrationUrl || project.shots.some((s) => !!s.audioUrl),
       detail: '支持原声、上传配音和 OpenAI 合成语音；自动配音需在制作要求中开启',
     },
     ...providers.map(async (p) => ({
@@ -229,7 +229,7 @@ export function createStageExecutor(tools: PipelineTools = pipelineTools) {
           }),
         }
       }
-      if (!project.shots.length || !project.shots.some(async (s) => s.caption.trim() || s.narration.trim()))
+      if (!project.shots.length || !project.shots.some((s) => s.caption.trim() || s.narration.trim()))
         throw new PipelineInputRequired('请先上传原片并按 SRT 时码编排，或填写带时序的字幕，再同步修改。')
       const translated = await tools.translate(project)
       if (project.production.fields.speechMode === 'openai')
@@ -271,7 +271,7 @@ export function createStageExecutor(tools: PipelineTools = pipelineTools) {
         artifact: (await artifact(
           `已编排 ${saved.shots.length} 个镜头`,
           saved.shots
-            .map(async (s, i) => `${i + 1}. ${s.title} · ${s.duration} 秒\n${s.visualPrompt}\n字幕：${s.caption}`)
+            .map((s, i) => `${i + 1}. ${s.title} · ${s.duration} 秒\n${s.visualPrompt}\n字幕：${s.caption}`)
             .join('\n\n'),
           { shots: saved.shots },
           ['在画面编排中核对镜头、字幕、来源和总时长', '确认后才开始生成缺失素材'],
@@ -364,12 +364,12 @@ export function createStageExecutor(tools: PipelineTools = pipelineTools) {
           )),
         }
       }
-      const missingVoice = (await project.shots.some(
-        async (s) =>
-          await s.narration.trim() &&
+      const missingVoice = project.shots.some(
+        (s) =>
+          s.narration.trim() &&
           !s.audioUrl &&
           !(s.mediaType === 'video' && recipe.source !== 'optional' && project.category !== 'localization'),
-      ))
+      )
       if (missingVoice && !project.audio.narrationUrl)
         throw new PipelineInputRequired(
           '方案包含旁白，但没有可用旁白音轨。请开启自动配音、上传配音，或移除不需要的旁白文字后同步修改；生成的视频不能自动视为已经含有准确旁白。',

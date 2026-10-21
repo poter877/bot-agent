@@ -184,10 +184,11 @@ export async function linkCreativeShotTask(project: CreativeProject, shot: Creat
 export async function hasRunningCreativeTask(id: number, shotId?: string, kind?: string) {
   const links = (await db.select().from(schema.creativeShotTasks).where(eq(schema.creativeShotTasks.projectId, id)))
     .filter(link => (!shotId || link.shotId === shotId) && (!kind || link.kind === kind))
-  return links.some(async link => {
+  for (const link of links) {
     const task = (await db.select().from(schema.sysTask).where(and(eq(schema.sysTask.id, link.taskId), eq(schema.sysTask.dramaId, id))))[0]
-    return task && ['pending', 'processing'].includes(task.status || '')
-  })
+    if (task && ['pending', 'processing'].includes(task.status || '')) return true
+  }
+  return false
 }
 
 export async function createCreativeRender(project: CreativeProject, snapshot: unknown) {

@@ -46,7 +46,7 @@ export function createCreativeRoutes(dependencies: Partial<typeof defaultDepende
     const id = Number(c.req.param('id'))
     const { revision } = revisionBody.parse(await c.req.json())
     const project = await requireCreativeRevision(id, revision)
-    if (!project.shots.some(async shot => shot.caption.trim() || shot.narration.trim())) throw new CreativeError('请先导入字幕或填写字幕文字')
+    if (!project.shots.some(shot => shot.caption.trim() || shot.narration.trim())) throw new CreativeError('请先导入字幕或填写字幕文字')
     if (translating.has(id)) throw new CreativeError('字幕正在翻译，请稍候', 409)
     translating.add(id)
     try {

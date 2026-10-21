@@ -1050,7 +1050,7 @@ export async function planPipelineTools(context: StageContext, phase: PipelineTo
     if (clips.length)
       add('project-composition-check', 'composition_validator', { clips }, { apply: { target: 'artifact' } })
     let offset = 0
-    const segments = project.shots.flatMap(async (shot) => {
+    const segments = project.shots.flatMap((shot) => {
       const start = offset
       offset += shot.duration
       return shot.caption.trim() ? [{ start, end: offset, text: shot.caption }] : []

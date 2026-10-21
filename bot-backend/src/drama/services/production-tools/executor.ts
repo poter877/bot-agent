@@ -253,7 +253,7 @@ async function runPiper(ctx: ToolContext): Promise<ToolOutput> {
 async function runLip(ctx: ToolContext): Promise<ToolOutput> {
   const project = await getCreativeProject(ctx.projectId),
     shotId = text(ctx.args, 'shotId')
-  if (!project.shots.some(async (shot) => shot.id === shotId))
+  if (!project.shots.some((shot) => shot.id === shotId))
     throw new CreativeError('请选择需要口型同步的人物镜头')
   let id = Number(ctx.state.legacyJobId) || undefined
   if (!id) {
