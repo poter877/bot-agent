@@ -1,40 +1,24 @@
 import { CreativeToolboxPanel } from './CreativeToolboxPanel'
 import { pipelineApi, pipelineQueries } from '@/entities/creative/pipeline'
-import { useProductionText } from '@/entities/creative/catalog'
 import { AgentStageWatcher } from './AgentStageWatcher'
 import { CreativeBoard } from './CreativeBoard'
-import { useCreativeCatalog, useCatalogText } from '@/entities/creative/catalog'
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { useBeforeUnload, useBlocker, useNavigate } from 'react-router'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useStore } from 'zustand'
-import { ArrowLeft, Check, ChevronDown, Clapperboard, FileText, Film, Loader2, MessageSquare, Music2, Save, Settings2, Sparkles, Wrench } from 'lucide-react'
-import { creativeApi } from '@/entities/creative/api'
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { ArrowLeft, ChevronDown, Film, MessageSquare, Settings2, Wrench } from 'lucide-react'
 import { creativeQueries } from '@/entities/creative/queries'
-import { hasActiveShotTasks, newCreativeShot, taskIsActive, toCreativeDraft, type CreativeDraft, type CreativeProject, type CreativeShot } from '@/entities/creative/model'
-import { ApiError } from '@/shared/api/client'
-import { uploadApi } from '@/shared/api/upload'
-import { qk } from '@/shared/api/query-keys'
-import { cn } from '@/shared/lib/cn'
 import { Button, IconButton } from '@/shared/ui/button'
-import { Modal } from '@/shared/ui/Modal'
-import { ImageViewer, VideoViewer } from '@/shared/ui/media-viewers'
-import { CreativeShotsPanel } from './CreativeShotsPanel'
-import { CreativeAudioPanel } from './CreativeAudioPanel'
-import { CreativeExportPanel } from './CreativeExportPanel'
 import { CreativeChatPanel } from './CreativeChatPanel'
-import { createCreativeStore, type CreativeStage } from './creative-store'
-import { mergeCreativeMedia, moveCreativeShot, shotHasMedia, validateCreativeDraft } from './creative-draft'
+import { type CreativeStage } from './creative-store'
 import { useCreativeCopy } from './creative-locales'
-import { hintClass } from './CreativeFields'
 
-type Operation = { kind: 'save'; draft: CreativeDraft } | { kind: 'plan' | 'approve' | 'render' | 'translate'; revision: number; individual?: boolean } | { kind: 'generate'; revision: number; shotId: string; mediaType: 'image' | 'video' }
-
+/**
+ * 视频制片工作台——OpenMontage 对话式制片布局：
+ * 流程条（状态/建立/继续/重试）→ 制片看板 → Tab（工具目录）→ 制作对话。
+ * 审阅确认在制作对话（PipelineReviewCards）；画面/声音/成片在看板呈现。
+ */
 export function CreativeWorkbenchPage({ projectId }: { projectId: number }) {
   const copy = useCreativeCopy()
-  const text = useProductionText()
-  const catalog = useCreativeCatalog()
-  const localize = useCatalogText()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const options = creativeQueries.detail(projectId)
@@ -47,177 +31,66 @@ export function CreativeWorkbenchPage({ projectId }: { projectId: number }) {
       void queryClient.invalidateQueries({ queryKey: creativeQueries.detail(projectId).queryKey })
     }
   }, [pipelineRevision, projectRevision, projectId, queryClient])
-  const [store] = useState(createCreativeStore)
-  const stage = useStore(store, (state) => state.stage)
-  const selectedId = useStore(store, (state) => state.selectedShotId)
-  const [draft, setDraft] = useState<CreativeDraft | null>(null)
-  const baseline = useRef<CreativeDraft | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [conflict, setConflict] = useState(false)
-  const [uploading, setUploading] = useState<string | null>(null)
-  const [sourceBusy, setSourceBusy] = useState(false)
-  const [chatBusy, setChatBusy] = useState(false)
-  const [pipelineDirty, setPipelineDirty] = useState(false)
-  const [confirmation, setConfirmation] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
-  const [preview, setPreview] = useState<{ kind: 'image' | 'video'; src: string; title: string } | null>(null)
-  const dirty = draft !== null
-  const blocker = useBlocker(dirty || pipelineDirty)
-  useBeforeUnload(useCallback((event: BeforeUnloadEvent) => {
-    if (dirty || pipelineDirty) { event.preventDefault(); event.returnValue = '' }
-  }, [dirty, pipelineDirty]))
+  const [stage, setStage] = useState<CreativeStage>('board')
 
-  const acceptProject = (project: CreativeProject) => {
-    setDraft(null)
-    baseline.current = null
-    setConflict(false)
-    setError(null)
-    queryClient.setQueryData(options.queryKey, project)
-    void queryClient.invalidateQueries({ queryKey: pipelineQueries.detail(projectId).queryKey })
-    void queryClient.invalidateQueries({ queryKey: qk.dramas() })
-  }
+  const disabled = query.isPending || pipeline.isPending || pipeline.data?.run?.stale === true
 
-  const operation = useMutation({
-    mutationFn: async (action: Operation) => {
-      await queryClient.cancelQueries({ queryKey: options.queryKey })
-      switch (action.kind) {
-        case 'save': return creativeApi.save(projectId, action.draft)
-        case 'approve': return creativeApi.approve(projectId, action.revision)
-        case 'generate': return creativeApi.generate(projectId, action.shotId, action.mediaType, action.revision)
-        case 'render': return action.individual ? creativeApi.render(projectId, action.revision, { individual: true }) : creativeApi.render(projectId, action.revision)
-        case 'translate': return creativeApi.translate(projectId, action.revision)
-      }
-    },
-    onMutate: () => { setError(null); setConflict(false) },
-    onSuccess: async (project, action) => {
-      await queryClient.cancelQueries({ queryKey: options.queryKey })
-      if (project) acceptProject(project)
-      if (action.kind === 'render') store.getState().setStage('export')
-    },
-    onError: (cause) => {
-      if (cause instanceof ApiError && (cause.status === 409 || cause.code === 409)) setConflict(true)
-      else setError(cause instanceof Error ? cause.message : String(cause))
-      void queryClient.invalidateQueries({ queryKey: options.queryKey })
-    },
-  })
-
-  if (!Number.isInteger(projectId) || projectId <= 0 || (query.isError && !query.data)) {
-    return <div className="flex h-full flex-col items-center justify-center gap-4 p-8"><h1 className="text-lg font-bold">{copy.invalidProject}</h1>{query.error && <p className="max-w-lg break-words text-sm text-danger">{query.error.message}</p>}<div className="flex gap-3"><Button onClick={() => navigate('/')}>{copy.back}</Button>{projectId > 0 && <Button onClick={() => void query.refetch()}>{copy.retry}</Button>}</div></div>
-  }
-  if (!query.data) return <div className="flex h-full items-center justify-center gap-3 p-8" role="status"><Loader2 size={20} className="animate-spin text-brand" aria-hidden /><span className="text-sm text-content-muted">{copy.loading}</span></div>
-
-  const project = query.data
-  const recipe = catalog.data?.find(item => item.id === project.category) ?? project.recipe
-  const current = draft ?? toCreativeDraft(project)
-  const shotTasksActive = hasActiveShotTasks(project)
-  const renderActive = project.renders.some((render) => taskIsActive(render.status))
-  const pipelineBusy = ['running', 'waiting', 'pausing'].includes(pipeline.data?.run?.status ?? '')
-  const busy = pipelineBusy || operation.isPending || uploading !== null || chatBusy || sourceBusy
-  const editDisabled = busy || shotTasksActive
-  const approved = !dirty && project.approvedRevision === project.revision
-  const canRun = !dirty && !busy && !shotTasksActive && !conflict
-  const planReady = current.shots.length > 0 && current.shots.every((shot) => !!shot.visualPrompt.trim() || shotHasMedia(shot))
-  const mutationShotId = operation.isPending && operation.variables?.kind === 'generate' ? operation.variables.shotId : null
-
-  const changeDraft = (update: (value: CreativeDraft) => CreativeDraft) => {
-    if (editDisabled) return
-    if (!baseline.current) baseline.current = toCreativeDraft(project)
-    setDraft((value) => update(value ?? toCreativeDraft(project)))
-    setError(null)
-  }
-  const updateShot = (id: string, patch: Partial<CreativeShot>) => changeDraft((value) => ({ ...value, shots: value.shots.map((shot) => shot.id === id ? { ...shot, ...patch } : shot) }))
-  const setStage = (value: CreativeStage) => {
-    if(pipelineDirty && value !== stage) {
-      setConfirmation({title:copy.unsaved,message:copy.leaveWarning,onConfirm:()=>{setPipelineDirty(false);store.getState().setStage(value)}})
-    } else store.getState().setStage(value)
-  }
-  const save = () => {
-    if (!draft || editDisabled) return
-    if (!validateCreativeDraft(draft)) { setError(copy.validation); return }
-    operation.mutate({ kind: 'save', draft: mergeCreativeMedia(draft, baseline.current ?? draft, project) })
-  }
-  const upload = async (key: string, kind: 'image' | 'video' | 'audio', file: File, apply: (value: CreativeDraft, path: string) => CreativeDraft) => {
-    if (editDisabled) return
-    setUploading(key)
-    setError(null)
-    try {
-      const result = await uploadApi[kind](file)
-      if (!baseline.current) baseline.current = toCreativeDraft(project)
-      setDraft((value) => apply(value ?? toCreativeDraft(project), result.path || result.url))
-    } catch (cause) { setError(cause instanceof Error ? cause.message : copy.uploadFailed) }
-    finally { setUploading(null) }
-  }
-  const reload = () => setConfirmation({ title: copy.reload, message: copy.reloadWarning, onConfirm: () => {
-    setDraft(null); baseline.current = null; setConflict(false); setError(null); void query.refetch()
-  } })
-
-  const stages: { id: CreativeStage; label: string; icon: typeof FileText }[] = [
-    { id: 'board', label: text('制片看板', 'Board'), icon: Film },
-    { id: 'toolbox', label: text('工具目录', 'Tool catalog'), icon: Wrench },
-    { id: 'shots', label: copy.shots, icon: Clapperboard },
-    { id: 'audio', label: copy.audio, icon: Music2 }, { id: 'export', label: copy.export, icon: Film },
+  const stages: { id: CreativeStage; label: string; icon: typeof Film }[] = [
+    { id: 'board', label: '制片看板', icon: Film },
+    { id: 'toolbox', label: '工具目录', icon: Wrench },
   ]
+
+  const startOrAction = (action: 'start' | 'continue' | 'retry' | 'sync') => {
+    if (action === 'start' || !pipeline.data?.run) {
+      void pipelineApi.start(projectId, query.data?.revision ?? 1)
+        .then(result => { queryClient.setQueryData(pipelineQueries.detail(projectId).queryKey, result as never) })
+        .catch(() => { void queryClient.invalidateQueries({ queryKey: pipelineQueries.detail(projectId).queryKey }) })
+      return
+    }
+    const run = pipeline.data.run
+    void pipelineApi.action(projectId, run.id, { action, version: run.version })
+      .then(result => { queryClient.setQueryData(pipelineQueries.detail(projectId).queryKey, result as never) })
+      .catch(() => { void queryClient.invalidateQueries({ queryKey: pipelineQueries.detail(projectId).queryKey }) })
+  }
 
   return <div className="flex h-full min-h-0 flex-col overflow-y-auto p-4 md:p-6">
     <header className="mb-4 flex flex-wrap items-center gap-3">
       <IconButton aria-label={copy.back} title={copy.back} onClick={() => navigate('/')}><ArrowLeft size={17} aria-hidden /></IconButton>
-      <div className="min-w-0 flex-1"><p className="mb-1 flex flex-wrap items-center gap-2 text-[11px] text-content-muted"><Sparkles size={12} className="text-brand" aria-hidden />{copy.title}<span className="rounded-pill bg-brand-soft px-2 py-0.5 text-brand-content">{localize(recipe?.title) || project.category}</span></p><h1 className="truncate font-display text-xl font-bold tracking-tight">{current.title}</h1></div>
+      <div className="min-w-0 flex-1"><p className="mb-1 flex flex-wrap items-center gap-2 text-[11px] text-content-muted"><span className="rounded-pill bg-brand-soft px-2 py-0.5 text-brand-content">{query.data?.category ?? ''}</span></p><h1 className="truncate font-display text-xl font-bold tracking-tight">{query.data?.title ?? ''}</h1></div>
       <Button size="sm" variant="ghost" onClick={() => navigate('/settings')}><Settings2 size={14} aria-hidden />{copy.settings}</Button>
-      <div className="flex items-center gap-2"><span role="status" className={cn('hidden text-xs sm:inline', dirty ? 'text-brand-content' : 'text-content-muted')}>{dirty ? copy.unsaved : copy.saved}</span><Button size="sm" variant={dirty ? 'primary' : 'default'} loading={operation.isPending && operation.variables?.kind === 'save'} disabled={!dirty || editDisabled || conflict} onClick={save}><Save size={14} aria-hidden />{copy.save}</Button></div>
     </header>
 
-    <AgentStageWatcher projectId={project.id} runId={pipeline.data?.run?.id ?? null} version={pipeline.data?.run?.version ?? null} />
-    {(error || conflict || (query.isError && query.data)) && <div role="alert" className="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-control border border-danger/30 bg-danger-soft p-3 text-xs leading-relaxed text-danger"><p className="min-w-0 flex-1 whitespace-pre-wrap break-words">{conflict ? copy.conflict : error || query.error?.message}</p>{conflict && <Button size="sm" onClick={reload}>{copy.reload}</Button>}{query.isError && !error && !conflict && <Button size="sm" onClick={() => void query.refetch()}>{copy.retry}</Button>}</div>}
-    <section aria-label={copy.title} className="min-w-0">
-        {stage === 'shots' && <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-control bg-brand-soft px-4 py-3">
-          <div className="min-w-0 flex-1"><p className="flex items-center gap-2 text-xs font-semibold text-brand-content">{approved ? <Check size={14} aria-hidden /> : <Sparkles size={14} aria-hidden />}{shotTasksActive ? copy.activeTasksHint : dirty ? copy.saveFirst : approved ? copy.approved : copy.approveFirst}</p><p className={cn(hintClass, 'mt-1')}>{copy.approvalHint}</p></div>
-          {!approved && <Button size="sm" disabled={!canRun || !planReady} loading={operation.isPending && operation.variables?.kind === 'approve'} onClick={() => operation.mutate({ kind: 'approve', revision: project.revision })}>{copy.approve}</Button>}
-        </div>}
-        <div role="tablist" aria-label={copy.title} className="mb-4 flex gap-1 overflow-x-auto border-b border-outline pb-2">
-          {stages.map(({ id, label, icon: Icon }, index) => <button type="button" key={id} id={`creative-tab-${id}`} role="tab" tabIndex={stage === id ? 0 : -1} aria-selected={stage === id} aria-controls={`creative-panel-${id}`} className={cn('flex shrink-0 items-center gap-2 rounded-control border-0 px-3 py-2 text-xs font-semibold focus-visible:outline-none focus-visible:shadow-focus', stage === id ? 'bg-brand-soft text-brand-content' : 'bg-transparent text-content-muted hover:bg-hover-overlay')} onClick={() => setStage(id)} onKeyDown={(event) => {
-            const next = event.key === 'ArrowRight' ? (index + 1) % stages.length : event.key === 'ArrowLeft' ? (index + stages.length - 1) % stages.length : event.key === 'Home' ? 0 : event.key === 'End' ? stages.length - 1 : null
-            if (next == null) return
-            event.preventDefault(); setStage(stages[next].id); document.getElementById(`creative-tab-${stages[next].id}`)?.focus()
-          }}><Icon size={14} aria-hidden />{label}</button>)}
-        </div>
-        <div role="tabpanel" id={`creative-panel-${stage}`} aria-labelledby={`creative-tab-${stage}`}>
-          {stage === 'board' && (
-            <CreativeBoard
-              project={project}
-              state={pipeline.data}
-              loading={pipeline.isPending}
-              disabled={dirty || operation.isPending || uploading !== null || sourceBusy || chatBusy || conflict}
-              onStart={() => {
-                void pipelineApi.start(project.id, project.revision)
-                  .then(result => { queryClient.setQueryData(pipelineQueries.detail(project.id).queryKey, result as never) })
-                  .catch(() => { void queryClient.invalidateQueries({ queryKey: pipelineQueries.detail(project.id).queryKey }) })
-              }}
-              onAction={(action) => {
-                const run = pipeline.data?.run
-                if (!run) { return }
-                void pipelineApi.action(project.id, run.id, { action, version: run.version })
-                  .then(result => { queryClient.setQueryData(pipelineQueries.detail(project.id).queryKey, result as never) })
-                  .catch(() => { void queryClient.invalidateQueries({ queryKey: pipelineQueries.detail(project.id).queryKey }) })
-              }}
-            />
-          )}
-          {stage === 'toolbox' && <CreativeToolboxPanel project={project} disabled={editDisabled} canRun={canRun} onProjectUpdated={acceptProject} onBusyChange={setSourceBusy} />}
-          {stage === 'shots' && <CreativeShotsPanel project={project} draft={current} copy={copy} selectedId={selectedId} disabled={editDisabled} canGenerate={canRun && approved} uploading={uploading} generating={mutationShotId} onSelect={store.getState().selectShot} onAdd={() => {
-            const shot = { ...newCreativeShot(`${copy.shot} ${current.shots.length + 1}`), mediaType: recipe?.mediaType || 'image' as const }
-            changeDraft((value) => ({ ...value, shots: [...value.shots, shot] }))
-            store.getState().selectShot(shot.id)
-          }} onUpdate={updateShot} onMove={(id, delta) => changeDraft((value) => ({ ...value, shots: moveCreativeShot(value.shots, id, delta) }))} onDelete={(id) => setConfirmation({ title: copy.remove, message: copy.deleteWarning, onConfirm: () => changeDraft((value) => ({ ...value, shots: value.shots.filter((shot) => shot.id !== id) })) })} onUpload={(id, kind, file) => void upload(id, kind, file, (value, path) => ({ ...value, shots: value.shots.map((shot) => shot.id === id ? kind === 'audio' ? { ...shot, audioUrl: path, audioTrimStart: 0 } : { ...shot, [kind === 'image' ? 'imageUrl' : 'videoUrl']: path, [kind === 'image' ? 'imageTaskId' : 'videoTaskId']: null } : shot) }))} onGenerate={(shotId, mediaType) => operation.mutate({ kind: 'generate', shotId, mediaType, revision: project.revision })} onPreview={(src, title) => setPreview({ kind: 'image', src, title })} />}
-          {stage === 'audio' && <CreativeAudioPanel draft={current} copy={copy} disabled={editDisabled} uploading={uploading} onChange={(patch) => changeDraft((value) => ({ ...value, audio: { ...value.audio, ...patch } }))} onUpload={(kind, file) => void upload(kind, 'audio', file, (value, path) => ({ ...value, audio: { ...value.audio, [kind === 'music' ? 'musicUrl' : 'narrationUrl']: path } }))} onNext={() => setStage('export')} canTranslate={canRun && current.shots.some(shot => !!shot.caption.trim() || !!shot.narration.trim())} translating={operation.isPending && operation.variables?.kind === 'translate'} onTranslate={() => operation.mutate({ kind: 'translate', revision: project.revision })} onTargetLanguage={(language) => changeDraft(value => ({ ...value, brief: { ...value.brief, language } }))} onMuteSource={() => changeDraft(value => ({ ...value, shots: value.shots.map(shot => ({ ...shot, originalVolume: 0 })) }))} />}
-          {stage === 'export' && <CreativeExportPanel project={project} draft={current} copy={copy} canRender={canRun && approved && !renderActive} rendering={renderActive || (operation.isPending && operation.variables?.kind === 'render')} onRender={(individual) => operation.mutate({ kind: 'render', revision: project.revision, individual })} onPreview={(src, title) => setPreview({ kind: 'video', src, title })} />}
-        </div>
-      </section>
+    <AgentStageWatcher projectId={projectId} runId={pipeline.data?.run?.id ?? null} version={pipeline.data?.run?.version ?? null} />
+    {(query.isError || pipeline.isError) && <div role="alert" className="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-control border border-danger/30 bg-danger-soft p-3 text-xs leading-relaxed text-danger"><p className="min-w-0 flex-1 whitespace-pre-wrap break-words">{pipeline.isError ? pipeline.error?.message : query.error?.message}</p><Button size="sm" onClick={() => { void query.refetch(); void pipeline.refetch() }}>重试</Button></div>}
+
+    <section aria-label="视频制片" className="min-w-0">
+      <div role="tablist" aria-label="视频制片" className="mb-4 flex gap-1 overflow-x-auto border-b border-outline pb-2">
+        {stages.map(({ id, label, icon: Icon }, index) => <button type="button" key={id} id={`creative-tab-${id}`} role="tab" tabIndex={stage === id ? 0 : -1} aria-selected={stage === id} aria-controls={`creative-panel-${id}`} className="flex shrink-0 items-center gap-2 rounded-control border-0 px-3 py-2 text-xs font-semibold focus-visible:outline-none focus-visible:shadow-full" style={stage === id ? { background: 'var(--color-brand-soft)', color: 'var(--color-brand-content)' } : undefined} onClick={() => setStage(id)} onKeyDown={(event) => {
+          const next = event.key === 'ArrowRight' ? (index + 1) % stages.length : event.key === 'ArrowLeft' ? (index + stages.length - 1) % stages.length : null
+          if (next == null) return
+          event.preventDefault(); setStage(stages[next].id); document.getElementById(`creative-tab-${stages[next].id}`)?.focus()
+        }}><Icon size={14} aria-hidden />{label}</button>)}
+      </div>
+      <div role="tabpanel" id={`creative-panel-${stage}`} aria-labelledby={`creative-tab-${stage}`}>
+        {stage === 'board' && query.data && (
+          <CreativeBoard
+            project={query.data}
+            state={pipeline.data}
+            loading={pipeline.isPending}
+            disabled={disabled}
+            onStart={() => startOrAction('start')}
+            onAction={(action) => startOrAction(action)}
+          />
+        )}
+        {stage === 'toolbox' && <CreativeToolboxPanel project={query.data!} disabled={disabled} canRun={!disabled} onProjectUpdated={p => queryClient.setQueryData(options.queryKey, p)} onBusyChange={() => undefined} />}
+      </div>
+    </section>
+
+    {query.data && (
       <details open className="min-w-0 overflow-hidden rounded-panel border border-outline bg-surface">
         <summary className="flex cursor-pointer list-none items-center gap-2 border-b border-outline px-4 py-3 text-sm font-semibold focus-visible:outline-none focus-visible:shadow-focus"><MessageSquare size={15} className="text-brand" aria-hidden />{copy.chatTitle}<ChevronDown size={14} className="ml-auto text-content-muted" aria-hidden /></summary>
-        {dirty && <p className="border-b border-outline bg-brand-soft px-4 py-2 text-xs text-brand-content">{copy.saveFirst}</p>}
-        <CreativeChatPanel project={project} disabled={dirty || pipelineDirty || busy || shotTasksActive || conflict} onProjectUpdated={acceptProject} onBusyChange={setChatBusy} />
+        <CreativeChatPanel project={query.data} />
       </details>
-    <Modal open={!!confirmation} onOpenChange={(open) => { if (!open) setConfirmation(null) }} title={confirmation?.title || copy.confirm} width={440} footer={<><Button onClick={() => setConfirmation(null)}>{copy.cancel}</Button><Button variant="primary" onClick={() => { const action = confirmation?.onConfirm; setConfirmation(null); action?.() }}>{copy.confirm}</Button></>}><p className="text-sm leading-relaxed text-content-muted">{confirmation?.message}</p></Modal>
-    <Modal open={blocker.state === 'blocked'} onOpenChange={(open) => { if (!open && blocker.state === 'blocked') blocker.reset() }} title={copy.unsaved} width={440} footer={<><Button onClick={() => { if (blocker.state === 'blocked') blocker.reset() }}>{copy.cancel}</Button><Button variant="danger" onClick={() => { if (blocker.state === 'blocked') blocker.proceed() }}>{copy.discard}</Button></>}><p className="text-sm leading-relaxed text-content-muted">{copy.leaveWarning}</p></Modal>
-    <ImageViewer open={preview?.kind === 'image'} src={preview?.src || ''} title={preview?.title || ''} onClose={() => setPreview(null)} />
-    <VideoViewer open={preview?.kind === 'video'} src={preview?.src || ''} downloadHref={preview?.src || ''} title={preview?.title || ''} onClose={() => setPreview(null)} />
+    )}
   </div>
 }

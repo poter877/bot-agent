@@ -176,7 +176,9 @@
       },
       "idea": "Topic & requirements",
       "ideaPlaceholder": "e.g. Explain black holes in 60 seconds, starting from one question…",
-      "ideaHint": "This is the pipeline's input: AI starts researching and creating from here"
+      "ideaHint": "This is the pipeline's input: AI starts researching and creating from here",
+      "sourceVideo": "Source footage",
+      "sourceHint": "This mode builds on your footage: upload video or audio (≤512MB); the pipeline arranges the edit around it"
     },
     "deleteDialog": {
       "title": "Delete project",

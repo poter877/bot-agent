@@ -7,6 +7,7 @@ import { BookOpen, Check, Clapperboard, Film, Info, Layers, Package, Plus, Spark
 import { toastError } from '@/shared/lib/errors'
 import { cn } from '@/shared/lib/cn'
 import { dramaApi } from '@/entities/drama/api'
+import { creativeApi } from '@/entities/creative/api'
 import type { ProjectType, CreativeCategory } from '@/entities/drama/model'
 import { qk } from '@/shared/api/query-keys'
 import { Modal } from '@/shared/ui/Modal'
@@ -82,6 +83,7 @@ export function CreateProjectDialog({ open, onClose, stylePresets, aspectRatioOp
   const [projectType, setProjectType] = useState<ProjectType>('drama')
   const [creativeCategory, setCreativeCategory] = useState<CreativeCategory>('explainer')
   const [idea, setIdea] = useState('')
+  const [sourceFile, setSourceFile] = useState<File | null>(null)
   const [title, setTitle] = useState('')
   const [style, setStyle] = useState('')
   const [aspectRatio, setAspectRatio] = useState('16:9')
@@ -98,6 +100,7 @@ export function CreateProjectDialog({ open, onClose, stylePresets, aspectRatioOp
     setProjectType('drama')
     setCreativeCategory('explainer')
     setIdea('')
+    setSourceFile(null)
     setTitle('')
     setStyle('')
     setAspectRatio('16:9')
@@ -109,15 +112,24 @@ export function CreateProjectDialog({ open, onClose, stylePresets, aspectRatioOp
   }, [open, stylePresets, projectType])
 
   const createMutation = useMutation({
-    mutationFn: () =>
-      dramaApi.create({
+    mutationFn: async () => {
+      const data = await dramaApi.create({
         title: title.trim(),
         style: style || undefined,
         aspect_ratio: aspectRatio,
         ...(projectType === 'creative'
           ? { project_type: 'creative' as const, creative_category: creativeCategory, idea }
           : {}),
-      }),
+      })
+      // OpenMontage Paste-A-Video 对齐：需原片的模式在创建时一并上传，
+      // 流程的 research/assets 阶段即可直接取用
+      const recipe = catalog.data?.find(item => item.id === creativeCategory)
+      if (projectType === 'creative' && sourceFile && (recipe?.source === 'video' || recipe?.source === 'audio-video')) {
+        const id = Number((data as { id?: number })?.id)
+        await creativeApi.sourceUpload(id, 1, sourceFile)
+      }
+      return data
+    },
     onSuccess: async (data) => {
       await queryClient.invalidateQueries({ queryKey: qk.dramas() })
       onClose()
@@ -237,6 +249,23 @@ export function CreateProjectDialog({ open, onClose, stylePresets, aspectRatioOp
             autoFocus
           />
         </label>
+        {projectType === 'creative' && (() => {
+          const recipe = catalog.data?.find(item => item.id === creativeCategory)
+          const needsSource = recipe?.source === 'video' || recipe?.source === 'audio-video'
+          return needsSource ? (
+          <label className={fieldClass}>
+            <span className={fieldLabelClass}>{t('index.createDialog.sourceVideo')} <span className="text-danger">*</span></span>
+            <input
+              type="file"
+              accept="video/mp4,video/quicktime,video/webm,audio/mpeg,audio/wav,audio/mp4,.m4v,.m4a,.aac"
+              disabled={createMutation.isPending}
+              className="w-full rounded-control border border-outline bg-surface px-3 py-2 text-sm text-content file:mr-3 file:rounded-pill file:border-0 file:bg-brand-soft file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-brand-content"
+              onChange={(e) => setSourceFile(e.target.files?.[0] ?? null)}
+            />
+            <span className="text-micro leading-[1.5] text-content-subtle">{t('index.createDialog.sourceHint')}</span>
+          </label>
+          ) : null
+        })()}
         {projectType === 'creative' && (
           <label className={fieldClass}>
             <span className={fieldLabelClass}>{t('index.createDialog.idea')} <span className="text-danger">*</span></span>
