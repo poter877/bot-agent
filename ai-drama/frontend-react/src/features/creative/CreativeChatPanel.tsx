@@ -23,7 +23,6 @@ interface Props {
   project: CreativeProject
   disabled?: boolean
   onProjectUpdated?: (project: CreativeProject) => void
-  onGoToStage?: (stage: 'brief' | 'shots' | 'audio' | 'export') => void
   onBusyChange?: (busy: boolean) => void
 }
 /** 嵌入模式的宿主车道面板：流式渲染 + 工具活动 + 停止。 */

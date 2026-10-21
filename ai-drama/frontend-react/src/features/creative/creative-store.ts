@@ -1,6 +1,6 @@
 import { createStore } from 'zustand'
 
-export type CreativeStage = 'toolbox' | 'tools' | 'pipeline' | 'brief' | 'shots' | 'audio' | 'export'
+export type CreativeStage = 'toolbox' | 'tools' | 'pipeline' | 'shots' | 'audio' | 'export'
 
 export const createCreativeStore = () => createStore<{
   stage: CreativeStage

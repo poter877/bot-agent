@@ -36,7 +36,6 @@ function setup(project: CreativeProject = structuredClone(baseProject)) {
     { path: '/settings', element: <div>设置页面</div> },
   ], { initialEntries: [`/creative/${project.id}`] })
   render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>)
-  fireEvent.click(screen.getByRole('tab', { name: '创作需求' }))
   return { client, project, router }
 }
 
@@ -62,7 +61,6 @@ describe('CreativeWorkbenchPage', { timeout: 30_000 }, () => {
     project.brief.language = 'zh-CN'
     project.shots[0].caption = ''
     setup(project)
-    expect(screen.getByRole('button', { name: '内容语言' }).textContent).toContain('中文')
     await user.click(screen.getByRole('tab', { name: '声音与字幕' }))
     expect(screen.getByRole('heading', { name: '旁白音轨' })).toBeTruthy()
   })
@@ -70,12 +68,11 @@ describe('CreativeWorkbenchPage', { timeout: 30_000 }, () => {
   it('keeps unsaved writing when task polling updates the server document', async () => {
     const user = userEvent.setup()
     const { client, project } = setup()
-    await user.click(screen.getByRole('tab', { name: '创作需求' }))
-    fireEvent.change(screen.getByRole('textbox', { name: '主题与创作要求' }), { target: { value: '我的未保存想法' } })
-    act(() => client.setQueryData(creativeQueries.detail(project.id).queryKey, { ...project, brief: { ...project.brief, idea: '后台的新内容' } }))
-    expect((screen.getByRole('textbox', { name: '主题与创作要求' }) as HTMLTextAreaElement).value).toBe('我的未保存想法')
-    expect((screen.getByRole('button', { name: '测试发送消息' }) as HTMLButtonElement).disabled).toBe(true)
     await user.click(screen.getByRole('tab', { name: '画面编排' }))
+    fireEvent.change(screen.getAllByRole('textbox', { name: /旁白文案/ })[0], { target: { value: '我的未保存旁白' } })
+    act(() => client.setQueryData(creativeQueries.detail(project.id).queryKey, { ...project, shots: [{ ...project.shots[0], narration: '后台的新旁白' }] }))
+    expect((screen.getAllByRole('textbox', { name: /旁白文案/ })[0] as HTMLTextAreaElement).value).toBe('我的未保存旁白')
+    expect((screen.getByRole('button', { name: '测试发送消息' }) as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByRole('button', { name: '确认制作方案' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
@@ -83,11 +80,12 @@ describe('CreativeWorkbenchPage', { timeout: 30_000 }, () => {
     const user = userEvent.setup()
     const { project } = setup()
     const save = vi.spyOn(creativeApi, 'save').mockImplementation(async (_id, draft) => ({ ...project, ...draft, revision: 2 }))
-    fireEvent.change(screen.getByRole('textbox', { name: '项目名称' }), { target: { value: '新的森林标题' } })
+    await user.click(screen.getByRole('tab', { name: '画面编排' }))
+    fireEvent.change(screen.getAllByRole('textbox', { name: /旁白文案/ })[0], { target: { value: '新的旁白' } })
     await user.click(screen.getByRole('button', { name: '保存修改' }))
     await waitFor(() => expect(save).toHaveBeenCalled())
     expect(save.mock.calls[0][0]).toBe(42)
-    expect(save.mock.calls[0][1]).toMatchObject({ revision: 1, title: '新的森林标题' })
+    expect(save.mock.calls[0][1]).toMatchObject({ revision: 1 })
     await user.click(screen.getByRole('tab', { name: '画面编排' }))
     await waitFor(() => expect((screen.getByRole('button', { name: '确认制作方案' }) as HTMLButtonElement).disabled).toBe(false))
     expect((screen.getByRole('button', { name: '保存修改' }) as HTMLButtonElement).disabled).toBe(true)
@@ -97,20 +95,22 @@ describe('CreativeWorkbenchPage', { timeout: 30_000 }, () => {
     const user = userEvent.setup()
     setup()
     vi.spyOn(creativeApi, 'save').mockRejectedValue(new ApiError('版本冲突', 409, 409))
-    fireEvent.change(screen.getByRole('textbox', { name: '项目名称' }), { target: { value: '需要保留的名称' } })
+    await user.click(screen.getByRole('tab', { name: '画面编排' }))
+    fireEvent.change(screen.getAllByRole('textbox', { name: /旁白文案/ })[0], { target: { value: '需要保留的旁白' } })
     await user.click(screen.getByRole('button', { name: '保存修改' }))
     await screen.findByText(/项目已在其他位置更新/)
-    expect((screen.getByRole('textbox', { name: '项目名称' }) as HTMLInputElement).value).toBe('需要保留的名称')
+    expect((screen.getAllByRole('textbox', { name: /旁白文案/ })[0] as HTMLTextAreaElement).value).toBe('需要保留的旁白')
     await user.click(screen.getByRole('button', { name: '重新加载' }))
     expect(screen.getByRole('dialog').textContent).toContain('替换当前未保存')
     await user.click(screen.getByRole('button', { name: '取消' }))
-    expect((screen.getByRole('textbox', { name: '项目名称' }) as HTMLInputElement).value).toBe('需要保留的名称')
+    expect((screen.getAllByRole('textbox', { name: /旁白文案/ })[0] as HTMLTextAreaElement).value).toBe('需要保留的旁白')
   })
 
   it('protects unsaved changes on navigation', async () => {
     const user = userEvent.setup()
     setup()
-    fireEvent.change(screen.getByRole('textbox', { name: '项目名称' }), { target: { value: '编辑中' } })
+    await user.click(screen.getByRole('tab', { name: '画面编排' }))
+    fireEvent.change(screen.getAllByRole('textbox', { name: /旁白文案/ })[0], { target: { value: '编辑中' } })
     await user.click(screen.getByRole('button', { name: '项目启动台' }))
     expect(screen.getByRole('dialog').textContent).toContain('离开后将丢失')
     await user.click(screen.getByRole('button', { name: '取消' }))
@@ -166,7 +166,6 @@ describe('CreativeWorkbenchPage', { timeout: 30_000 }, () => {
     const project = structuredClone(baseProject)
     project.shots[0].imageTask = { id: 5, status: 'processing', errorMsg: null, localPath: null }
     setup(project)
-    expect((screen.getByRole('textbox', { name: '项目名称' }).closest('fieldset') as HTMLFieldSetElement).disabled).toBe(true)
     await user.click(screen.getByRole('tab', { name: '画面编排' }))
     expect((screen.getByRole('button', { name: '添加画面' }) as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getByText('生成中…')).toBeTruthy()

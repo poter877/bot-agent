@@ -19,7 +19,6 @@ import { cn } from '@/shared/lib/cn'
 import { Button, IconButton } from '@/shared/ui/button'
 import { Modal } from '@/shared/ui/Modal'
 import { ImageViewer, VideoViewer } from '@/shared/ui/media-viewers'
-import { CreativeBriefPanel } from './CreativeBriefPanel'
 import { CreativeShotsPanel } from './CreativeShotsPanel'
 import { CreativeAudioPanel } from './CreativeAudioPanel'
 import { CreativeExportPanel } from './CreativeExportPanel'
@@ -153,7 +152,7 @@ export function CreativeWorkbenchPage({ projectId }: { projectId: number }) {
 
   const stages: { id: CreativeStage; label: string; icon: typeof FileText }[] = [
     { id: 'toolbox', label: text('工具目录', 'Tool catalog'), icon: Wrench },
-    { id: 'brief', label: copy.brief, icon: FileText }, { id: 'shots', label: copy.shots, icon: Clapperboard },
+    { id: 'shots', label: copy.shots, icon: Clapperboard },
     { id: 'audio', label: copy.audio, icon: Music2 }, { id: 'export', label: copy.export, icon: Film },
   ]
 
@@ -182,7 +181,6 @@ export function CreativeWorkbenchPage({ projectId }: { projectId: number }) {
         </div>
         <div role="tabpanel" id={`creative-panel-${stage}`} aria-labelledby={`creative-tab-${stage}`}>
           {stage === 'toolbox' && <CreativeToolboxPanel project={project} disabled={editDisabled} canRun={canRun} onProjectUpdated={acceptProject} onBusyChange={setSourceBusy} />}
-          {stage === 'brief' && <CreativeBriefPanel draft={current} copy={copy} disabled={editDisabled} onChange={changeDraft} />}
           {stage === 'shots' && <CreativeShotsPanel project={project} draft={current} copy={copy} selectedId={selectedId} disabled={editDisabled} canGenerate={canRun && approved} uploading={uploading} generating={mutationShotId} onSelect={store.getState().selectShot} onAdd={() => {
             const shot = { ...newCreativeShot(`${copy.shot} ${current.shots.length + 1}`), mediaType: recipe?.mediaType || 'image' as const }
             changeDraft((value) => ({ ...value, shots: [...value.shots, shot] }))
@@ -195,7 +193,7 @@ export function CreativeWorkbenchPage({ projectId }: { projectId: number }) {
       <details open className="min-w-0 overflow-hidden rounded-panel border border-outline bg-surface">
         <summary className="flex cursor-pointer list-none items-center gap-2 border-b border-outline px-4 py-3 text-sm font-semibold focus-visible:outline-none focus-visible:shadow-focus"><MessageSquare size={15} className="text-brand" aria-hidden />{copy.chatTitle}<ChevronDown size={14} className="ml-auto text-content-muted" aria-hidden /></summary>
         {dirty && <p className="border-b border-outline bg-brand-soft px-4 py-2 text-xs text-brand-content">{copy.saveFirst}</p>}
-        <CreativeChatPanel project={project} disabled={dirty || pipelineDirty || busy || shotTasksActive || conflict} onProjectUpdated={acceptProject} onGoToStage={setStage} onBusyChange={setChatBusy} />
+        <CreativeChatPanel project={project} disabled={dirty || pipelineDirty || busy || shotTasksActive || conflict} onProjectUpdated={acceptProject} onBusyChange={setChatBusy} />
       </details>
     <Modal open={!!confirmation} onOpenChange={(open) => { if (!open) setConfirmation(null) }} title={confirmation?.title || copy.confirm} width={440} footer={<><Button onClick={() => setConfirmation(null)}>{copy.cancel}</Button><Button variant="primary" onClick={() => { const action = confirmation?.onConfirm; setConfirmation(null); action?.() }}>{copy.confirm}</Button></>}><p className="text-sm leading-relaxed text-content-muted">{confirmation?.message}</p></Modal>
     <Modal open={blocker.state === 'blocked'} onOpenChange={(open) => { if (!open && blocker.state === 'blocked') blocker.reset() }} title={copy.unsaved} width={440} footer={<><Button onClick={() => { if (blocker.state === 'blocked') blocker.reset() }}>{copy.cancel}</Button><Button variant="danger" onClick={() => { if (blocker.state === 'blocked') blocker.proceed() }}>{copy.discard}</Button></>}><p className="text-sm leading-relaxed text-content-muted">{copy.leaveWarning}</p></Modal>
