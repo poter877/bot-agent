@@ -4,7 +4,7 @@ import { CreativePipelineToolSteps } from './CreativePipelineToolSteps'
 import { toolboxQueries, type ToolboxFile } from '@/entities/creative/toolbox'
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Loader2, Pause, RotateCcw } from 'lucide-react'
+import { Check, Pause, RotateCcw } from 'lucide-react'
 import {
   pipelineApi,
   pipelineQueries,
@@ -19,7 +19,6 @@ import { creativeQueries } from '@/entities/creative/queries'
 import { Button } from '@/shared/ui/button'
 import { Textarea } from '@/shared/ui/input'
 import { Modal } from '@/shared/ui/Modal'
-import { cn } from '@/shared/lib/cn'
 import { CreativeSection, hintClass } from './CreativeFields'
 
 const statuses: Record<string, [string, string]> = {
@@ -43,6 +42,7 @@ export function CreativePipelinePanel({
   onReload,
   onOpenEditor,
   onDirtyChange,
+  focusStage,
 }: {
   project: CreativeProject
   state?: PipelineState
@@ -52,11 +52,15 @@ export function CreativePipelinePanel({
   onReload: () => void
   onOpenEditor: (stage: 'tools' | 'brief' | 'shots' | 'audio' | 'export') => void
   onDirtyChange?: (dirty: boolean) => void
+  /** 顶部流程条点击的阶段 id——驱动详情视图切换 */
+  focusStage?: string | null
 }) {
   const text = useProductionText(),
     client = useQueryClient()
   const [selected, setSelected] = useState<string | null>(null)
   const [edited, setEdited] = useState<string | null>(null)
+  // 编辑中的产物未确认前不响应顶部条的阶段切换，避免丢字
+  useEffect(() => { if (focusStage && !edited) setSelected(focusStage) }, [focusStage, edited])
   const [historyId, setHistoryId] = useState<number | null>(null)
   const history = useQuery({
     queryKey: ['creative-pipeline-run', project.id, historyId],
@@ -200,10 +204,7 @@ export function CreativePipelinePanel({
         )}
       >
         <div className="flex flex-wrap items-center gap-2">
-          <span className="mr-auto text-xs text-content-muted">
-            {definition.stages.length} {text('个阶段', 'stages')}
-            {run ? ` · #${run.id} · ${label(run.status)}` : ''}
-          </span>
+
           {/* 建立/继续/重试的快捷入口已上移至顶部流程条（PipelineStrip） */}
           {run && ['running', 'waiting'].includes(run.status) && (
             <Button disabled={locked} onClick={() => send('pause')}>
@@ -264,46 +265,6 @@ export function CreativePipelinePanel({
             {mutation.error?.message || run?.error}
           </p>
         )}
-        <ol className="m-0 mt-4 grid list-none grid-cols-1 gap-2 p-0 sm:grid-cols-2 xl:grid-cols-3">
-          {definition.stages.map((item, i) => {
-            const record = run?.stages[i],
-              status = record?.status ?? 'pending'
-            return (
-              <li key={item.id}>
-                <button
-                  type="button"
-                  disabled={dirty && visibleIndex !== i}
-                  aria-pressed={visibleIndex === i}
-                  className={cn(
-                    'flex w-full items-start gap-2 rounded-control border p-3 text-left disabled:opacity-50',
-                    visibleIndex === i ? 'border-brand bg-brand-soft' : 'border-outline bg-elevated',
-                  )}
-                  onClick={() => {
-                    setSelected(item.id)
-                    setEdited(null)
-                  }}
-                >
-                  <span className="mt-0.5 text-xs text-content-muted">
-                    {status === 'completed' ? (
-                      <Check size={14} />
-                    ) : status === 'running' || status === 'waiting' ? (
-                      <Loader2 size={14} className="animate-spin" />
-                    ) : (
-                      String(i + 1).padStart(2, '0')
-                    )}
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block text-xs font-semibold">{item.title}</span>
-                    <span className="mt-1 block text-[11px] text-content-muted">
-                      {label(status)}
-                      {record?.attempt ? ` · ${text('尝试', 'Attempt')} ${record.attempt}` : ''}
-                    </span>
-                  </span>
-                </button>
-              </li>
-            )
-          })}
-        </ol>
       </CreativeSection>
       {stage && (
         <CreativeSection

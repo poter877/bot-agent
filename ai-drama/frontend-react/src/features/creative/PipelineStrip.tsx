@@ -27,12 +27,16 @@ const runStatusText: Record<string, string> = {
   review: '等待审阅', failed: '已失败', completed: '已完成', cancelled: '已结束',
 }
 
-export function PipelineStrip({ project, state, loading, disabled, onOpenPipeline }: {
+export function PipelineStrip({ project, state, loading, disabled, activeStage, onOpenPipeline, onSelectStage }: {
   project: { id: number; revision: number; category: string }
   state?: PipelineState | null
   loading?: boolean
   disabled?: boolean
+  /** 当前工作台所处 Tab——处于流程视图时隐藏冗余的「查看详情」 */
+  activeStage?: string
   onOpenPipeline: () => void
+  /** 点击阶段 chip：切到流程视图并打开该阶段详情 */
+  onSelectStage: (stageId: string) => void
 }) {
   const client = useQueryClient()
   const run = state?.run
@@ -84,9 +88,11 @@ export function PipelineStrip({ project, state, loading, disabled, onOpenPipelin
               {nextAction === 'start' ? (run ? '建立新一轮流程' : '建立制作流程') : failed ? '重试当前阶段' : '继续执行'}
             </Button>
           )}
-          <Button size="sm" variant="ghost" onClick={onOpenPipeline}>
-            {run ? '查看详情' : '打开流程'}
-          </Button>
+          {activeStage !== 'pipeline' && (
+            <Button size="sm" variant="ghost" onClick={onOpenPipeline}>
+              {run ? '查看详情' : '打开流程'}
+            </Button>
+          )}
         </span>
       </div>
       {definition && (
@@ -100,7 +106,7 @@ export function PipelineStrip({ project, state, loading, disabled, onOpenPipelin
               <li key={stage.id} className="flex items-center gap-1">
                 <button
                   type="button"
-                  onClick={onOpenPipeline}
+                  onClick={() => onSelectStage(stage.id)}
                   title={`${stageTitles[stage.id] ?? stage.id} · ${
                     status === 'completed' ? '已完成' : status === 'running' ? '进行中' : status === 'failed' ? '失败'
                       : status === 'review' ? '待审阅' : status === 'waiting' ? '等待 AI' : '未开始'}`}

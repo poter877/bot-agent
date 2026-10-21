@@ -43,6 +43,7 @@ export function CreativeWorkbenchPage({ projectId }: { projectId: number }) {
   const options = creativeQueries.detail(projectId)
   const query = useQuery(options)
   const pipeline = useQuery(pipelineQueries.detail(projectId))
+  const [pipelineFocusStage, setPipelineFocusStage] = useState<string | null>(null)
   const pipelineRevision = pipeline.data?.run?.revision
   const projectRevision = query.data?.revision
   useEffect(() => {
@@ -187,7 +188,7 @@ export function CreativeWorkbenchPage({ projectId }: { projectId: number }) {
       <div className="flex items-center gap-2"><span role="status" className={cn('hidden text-xs sm:inline', dirty ? 'text-brand-content' : 'text-content-muted')}>{dirty ? copy.unsaved : copy.saved}</span><Button size="sm" variant={dirty ? 'primary' : 'default'} loading={operation.isPending && operation.variables?.kind === 'save'} disabled={!dirty || editDisabled || conflict} onClick={save}><Save size={14} aria-hidden />{copy.save}</Button></div>
     </header>
 
-    <PipelineStrip project={project} state={pipeline.data} loading={pipeline.isPending} disabled={dirty || operation.isPending || uploading !== null || sourceBusy || chatBusy || conflict} onOpenPipeline={() => setStage('pipeline')} />
+    <PipelineStrip project={project} state={pipeline.data} loading={pipeline.isPending} disabled={dirty || operation.isPending || uploading !== null || sourceBusy || chatBusy || conflict} activeStage={stage} onOpenPipeline={() => setStage('pipeline')} onSelectStage={(id) => { setPipelineFocusStage(id); setStage('pipeline') }} />
     {(error || conflict || (query.isError && query.data)) && <div role="alert" className="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-control border border-danger/30 bg-danger-soft p-3 text-xs leading-relaxed text-danger"><p className="min-w-0 flex-1 whitespace-pre-wrap break-words">{conflict ? copy.conflict : error || query.error?.message}</p>{conflict && <Button size="sm" onClick={reload}>{copy.reload}</Button>}{query.isError && !error && !conflict && <Button size="sm" onClick={() => void query.refetch()}>{copy.retry}</Button>}</div>}
     {stage === 'pipeline' ? (
       <div className="flex min-w-0 flex-1 flex-col gap-4">
@@ -200,7 +201,7 @@ export function CreativeWorkbenchPage({ projectId }: { projectId: number }) {
           }}><Icon size={14} aria-hidden />{label}</button>)}
         </div>
         <div role="tabpanel" id={`creative-panel-${stage}`} aria-labelledby={`creative-tab-${stage}`}>
-          <CreativePipelinePanel project={project} state={pipeline.data} loading={pipeline.isPending} error={pipeline.error} disabled={dirty || operation.isPending || uploading !== null || sourceBusy || chatBusy} onReload={() => void pipeline.refetch()} onOpenEditor={setStage} onDirtyChange={setPipelineDirty} />
+          <CreativePipelinePanel project={project} state={pipeline.data} loading={pipeline.isPending} error={pipeline.error} disabled={dirty || operation.isPending || uploading !== null || sourceBusy || chatBusy} onReload={() => void pipeline.refetch()} onOpenEditor={setStage} onDirtyChange={setPipelineDirty} focusStage={pipelineFocusStage} />
         </div>
       </section>
       <details open className="min-w-0 overflow-hidden rounded-panel border border-outline bg-surface">

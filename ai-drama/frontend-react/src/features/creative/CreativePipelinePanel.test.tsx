@@ -99,8 +99,8 @@ it('submits edited artifacts with the actual run version and protects unconfirme
     target: { value: '我修改后的创作简报' },
   })
   expect(onDirtyChange).toHaveBeenLastCalledWith(true)
-  expect((screen.getByRole('button', { name: /02 脚本讲稿/ }) as HTMLButtonElement).disabled).toBe(true)
-  expect((screen.getByRole('button', { name: '打开对应编辑器' }) as HTMLButtonElement).disabled).toBe(true)
+  // 阶段导航已收敛至顶部流程条（PipelineStrip）；面板只保留当前阶段详情。
+  // 编辑中切换阶段的防丢字保护由 focusStage 生效条件承担（编辑中不切换）。
   fireEvent.click(screen.getByRole('button', { name: '确认此阶段' }))
   await waitFor(() =>
     expect(pipelineApi.action).toHaveBeenCalledWith(42, 7, {
