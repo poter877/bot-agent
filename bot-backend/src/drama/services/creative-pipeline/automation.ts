@@ -28,7 +28,7 @@ export function withPipelineAutomation(
         ...artifact,
         data: { ...saved?.data, ...artifact.data, ...(runtime ? { toolRuntime: runtime } : {}) },
       }
-      initial.checkpoint(saved, revision)
+      await initial.checkpoint(saved, revision)
       if (revision !== undefined) project = await getCreativeProject(project.id)
     }
     const context = (): StageContext => ({ ...initial, project, previous: saved, checkpoint: save })

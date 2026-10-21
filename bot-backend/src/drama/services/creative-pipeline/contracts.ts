@@ -23,7 +23,8 @@ export interface StageContext {
   artifacts: Record<string, PipelineArtifact>
   previous: PipelineArtifact | null
   retry: boolean
-  checkpoint: (artifact: PipelineArtifact, revision?: number) => void
+  /** 阶段内检查点：调用方必须 await——写回在途时继续 patch 会撞版本 CAS（409 打死阶段）。 */
+  checkpoint: (artifact: PipelineArtifact, revision?: number) => void | Promise<void>
 }
 export interface StageResult {
   artifact: PipelineArtifact

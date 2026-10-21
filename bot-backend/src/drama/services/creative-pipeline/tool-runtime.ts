@@ -695,9 +695,9 @@ export async function runPipelineTools(
     content: '工具由当前制作流程自动串联，产物与任务编号已保留。',
     checks: [],
   }
-  const persist = () =>
-    context.checkpoint({ ...base, data: { ...base.data, toolRuntime: structuredClone(runtime) } }, revision)
-  persist()
+  const persist = async () =>
+    await context.checkpoint({ ...base, data: { ...base.data, toolRuntime: structuredClone(runtime) } }, revision)
+  await persist()
   const candidates = new Map(
     runtime.steps
       .filter((step) => step.stage === context.stage.id && step.phase === phase)
@@ -726,7 +726,7 @@ export async function runPipelineTools(
       if (dependencies.some((item) => item && ['failed', 'uncertain'].includes(item.status))) {
         step.status = 'failed'
         step.error = '前序工具尚未恢复成功'
-        persist()
+        await persist()
         throw new PipelineInputRequired('前序工具需要处理，任务与产物已保留')
       }
       return { runtime, waiting: true, revision }
@@ -738,7 +738,7 @@ export async function runPipelineTools(
       } else {
         const prepared = !!step.resolvedArgs
         step.resolvedArgs ??= resolveToolBindings(step.args, completed())
-        persist()
+        await persist()
         const recovered = prepared
           ? await deps.recoverSubmitted(context.project.id, step.toolId, step.resolvedArgs, revision, step.configId)
           : null
@@ -756,7 +756,7 @@ export async function runPipelineTools(
         step.status = 'uncertain'
         step.error = job.error
         step.remoteId = job.remoteId
-        persist()
+        await persist()
         throw new PipelineInputRequired(
           `工具 #${job.id} 提交结果未知，请核对服务商任务编号后在任务记录中恢复。流程不会自动重复提交。`,
         )
@@ -765,7 +765,7 @@ export async function runPipelineTools(
         step.status = 'failed'
         step.error = job.error
         step.remoteId = job.remoteId
-        persist()
+        await persist()
         if (!context.retry)
           throw new PipelineInputRequired(
             `${job.error ?? '制作工具执行失败'}；任务 #${job.id} 已保留，请检查后重试`,
@@ -777,12 +777,12 @@ export async function runPipelineTools(
       step.error = job.error
       if (isActive(job.status)) {
         step.status = 'running'
-        persist()
+        await persist()
         return { runtime, waiting: true, revision }
       }
       if (job.status !== 'completed') {
         step.status = job.status === 'uncertain' ? 'uncertain' : 'failed'
-        persist()
+        await persist()
         throw new PipelineInputRequired(`${job.error ?? '制作工具需要恢复'}；请检查任务 #${job.id}`)
       }
       step.files = structuredClone(job.result.files ?? [])
@@ -805,7 +805,7 @@ export async function runPipelineTools(
         throw error
       }
       // Save the result before touching the project. Re-entry checks actual URLs before any second write.
-      persist()
+      await persist()
       if (step.apply && !['artifact', 'delivery', 'model', 'render'].includes(step.apply.target)) {
         const current = (await deps.project(context.project.id))
         const applying = {
@@ -830,15 +830,15 @@ export async function runPipelineTools(
             ...(expectedDuration !== undefined ? { expectedDuration } : {}),
           })),
         }
-        persist()
+        await persist()
       }
       revision = await applyOutput(context, step, revision, deps)
       delete (step as RecoverableExecution).applying
-      persist()
+      await persist()
     } catch (error) {
       if (step.status !== 'uncertain' && !(step.status === 'completed' && step.files)) step.status = 'failed'
       step.error = error instanceof Error ? error.message.slice(0, 1000) : '制作工具执行失败'
-      persist()
+      await persist()
       if (error instanceof PipelineInputRequired) throw error
       if (error instanceof CreativeError) throw new PipelineInputRequired(error.message)
       throw new PipelineInputRequired(
