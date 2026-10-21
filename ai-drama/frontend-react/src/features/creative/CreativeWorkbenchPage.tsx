@@ -3,7 +3,6 @@ import { pipelineApi, pipelineQueries } from '@/entities/creative/pipeline'
 import { useProductionText } from '@/entities/creative/catalog'
 import { AgentStageWatcher } from './AgentStageWatcher'
 import { CreativeBoard } from './CreativeBoard'
-import { PipelineStrip } from './PipelineStrip'
 import { useCreativeCatalog, useCatalogText } from '@/entities/creative/catalog'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useBeforeUnload, useBlocker, useNavigate } from 'react-router'
@@ -167,7 +166,6 @@ export function CreativeWorkbenchPage({ projectId }: { projectId: number }) {
     </header>
 
     <AgentStageWatcher projectId={project.id} runId={pipeline.data?.run?.id ?? null} version={pipeline.data?.run?.version ?? null} />
-    <PipelineStrip project={project} state={pipeline.data} loading={pipeline.isPending} disabled={dirty || operation.isPending || uploading !== null || sourceBusy || chatBusy || conflict}  />
     {(error || conflict || (query.isError && query.data)) && <div role="alert" className="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-control border border-danger/30 bg-danger-soft p-3 text-xs leading-relaxed text-danger"><p className="min-w-0 flex-1 whitespace-pre-wrap break-words">{conflict ? copy.conflict : error || query.error?.message}</p>{conflict && <Button size="sm" onClick={reload}>{copy.reload}</Button>}{query.isError && !error && !conflict && <Button size="sm" onClick={() => void query.refetch()}>{copy.retry}</Button>}</div>}
     <section aria-label={copy.title} className="min-w-0">
         {stage === 'shots' && <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-control bg-brand-soft px-4 py-3">

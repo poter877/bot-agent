@@ -89,9 +89,7 @@ export function CreativeBoard({ project, state, loading, disabled, onStart, onAc
       <div className="flex flex-wrap items-end gap-x-4 gap-y-3">
         <div className="min-w-0">
           <p className="m-0 text-[10px] uppercase tracking-[0.35em] text-content-subtle">Production Board</p>
-          <h2 className="m-0 truncate font-serif text-[26px] font-bold tracking-wide text-content">{project.title}</h2>
         </div>
-        <span className="mb-0.5 rounded-pill border border-outline px-2.5 py-1 text-[11px] text-content-secondary">{project.category} pipeline</span>
         <span className="mb-0.5 rounded-pill border border-outline px-2.5 py-1 text-[11px] text-content-secondary">{shots.length} 镜头 · {fmtDur(totalDuration)}</span>
         <span className="ml-auto mb-0.5 flex items-center gap-3">
           {active && (
