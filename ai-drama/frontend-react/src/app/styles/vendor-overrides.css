@@ -1,5 +1,5 @@
 /* === 应用内引导（driver.js）主题覆写 — 跟随设计 token === */
-.huobao-tour-popover {
+.vf-tour-popover {
   background: var(--hb-surface-raised) !important;
   color: var(--hb-text-secondary) !important;
   border: 1px solid var(--hb-border) !important;
@@ -7,26 +7,26 @@
   box-shadow: var(--hb-shadow-elevated) !important;
   max-width: 340px;
 }
-.huobao-tour-popover .driver-popover-title {
+.vf-tour-popover .driver-popover-title {
   color: var(--hb-text-primary) !important;
   font: 700 14px/1.3 var(--hb-font-body) !important;
   letter-spacing: -0.01em;
 }
-.huobao-tour-popover .driver-popover-description {
+.vf-tour-popover .driver-popover-description {
   color: var(--hb-text-muted) !important;
   font: 400 12.5px/1.65 var(--hb-font-body) !important;
 }
-.huobao-tour-popover .driver-popover-progress-text {
+.vf-tour-popover .driver-popover-progress-text {
   color: var(--hb-text-subtle) !important;
   font-size: 10.5px !important;
 }
-.huobao-tour-popover .driver-popover-close-btn {
+.vf-tour-popover .driver-popover-close-btn {
   color: var(--hb-text-subtle) !important;
 }
-.huobao-tour-popover .driver-popover-navigation-btns {
+.vf-tour-popover .driver-popover-navigation-btns {
   gap: 6px;
 }
-.huobao-tour-popover .driver-popover-navigation-btns button {
+.vf-tour-popover .driver-popover-navigation-btns button {
   background: var(--hb-button-bg) !important;
   color: var(--hb-button-text) !important;
   border: none !important;
@@ -36,8 +36,8 @@
   text-shadow: none !important;
   cursor: pointer;
 }
-.huobao-tour-popover .driver-popover-navigation-btns button.driver-popover-next-btn,
-.huobao-tour-popover .driver-popover-navigation-btns button.driver-popover-done-btn {
+.vf-tour-popover .driver-popover-navigation-btns button.driver-popover-next-btn,
+.vf-tour-popover .driver-popover-navigation-btns button.driver-popover-done-btn {
   background: var(--hb-brand-gradient) !important;
   color: var(--hb-on-accent) !important;
 }

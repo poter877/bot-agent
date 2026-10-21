@@ -11,7 +11,7 @@ import 'driver.js/dist/driver.css'
 import { t } from '@/shared/config/i18n'
 import { api } from '@/shared/api/client'
 
-const SEEN_KEY = 'huobao:tours'
+const SEEN_KEY = 'vf:tours'
 
 let seenSet = new Set<string>()
 let hydrated = false
@@ -90,7 +90,7 @@ export function startTour(id: string, steps: TourStep[]): boolean {
     showProgress: true,
     allowClose: true,
     overlayClickBehavior: 'nextStep',
-    popoverClass: 'huobao-tour-popover',
+    popoverClass: 'vf-tour-popover',
     progressText: '{{current}} / {{total}}',
     nextBtnText: t('tour.next'),
     prevBtnText: t('tour.prev'),

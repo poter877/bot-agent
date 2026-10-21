@@ -6,7 +6,7 @@
  * client.ts 统一带 `Authorization: Bearer` 头（唯一拦截点）。
  */
 
-const TOKEN_KEY = 'huobao:api-token'
+const TOKEN_KEY = 'vf:api-token'
 
 export function getApiToken(): string {
   try {
@@ -32,5 +32,5 @@ export function authHeaders(): Record<string, string> {
 
 /** 401 广播：ApiTokenGate 监听该事件弹令牌输入框 */
 export function notifyUnauthorized(): void {
-  window.dispatchEvent(new CustomEvent('huobao:api-unauthorized'))
+  window.dispatchEvent(new CustomEvent('vf:api-unauthorized'))
 }

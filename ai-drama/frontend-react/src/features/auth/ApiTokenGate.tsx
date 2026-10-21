@@ -1,6 +1,6 @@
 /**
  * API 令牌门 — 服务端配置了 AI_DRAMA_API_TOKEN（或部署面仅允许回环而来源非回环）时，
- * 任意 /api/v1 请求 401 → client.ts 广播 huobao:api-unauthorized → 本组件弹窗：
+ * 任意 /api/v1 请求 401 → client.ts 广播 vf:api-unauthorized → 本组件弹窗：
  * 输入一次令牌存 localStorage（shared/api/token.ts），此后请求统一带 Bearer 头。
  * 保存后整页刷新：react-query 缓存与失败请求全部按新令牌重发，无需逐个重试。
  */
@@ -23,8 +23,8 @@ export function ApiTokenGate() {
       setToken(getApiToken())
       setOpen(true)
     }
-    window.addEventListener('huobao:api-unauthorized', onUnauthorized)
-    return () => window.removeEventListener('huobao:api-unauthorized', onUnauthorized)
+    window.addEventListener('vf:api-unauthorized', onUnauthorized)
+    return () => window.removeEventListener('vf:api-unauthorized', onUnauthorized)
   }, [])
 
   const save = () => {

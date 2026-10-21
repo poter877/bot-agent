@@ -5,9 +5,11 @@ import { initI18n } from '@/shared/config/i18n'
 import { AppProviders } from './app/providers'
 import { router } from './app/router'
 import { bootstrap } from './app/bootstrap'
+import { migrateLegacyStorage } from '@/shared/lib/storage-migration'
 
 import './app/styles/index.css'
 
+migrateLegacyStorage()
 initI18n()
 bootstrap()
 

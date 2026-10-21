@@ -13,7 +13,7 @@ import ja from '@/shared/locales/ja.json'
 import ko from '@/shared/locales/ko.json'
 import { usePreferences, type UiLocale } from './preferences'
 
-export const LOCALE_STORAGE_KEY = 'huobao:locale'
+export const LOCALE_STORAGE_KEY = 'vf:locale'
 
 export type { UiLocale }
 

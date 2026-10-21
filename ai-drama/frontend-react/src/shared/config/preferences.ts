@@ -42,7 +42,7 @@ interface PreferencesState {
   setPanelMemory: (key: string, memory: PanelMemory) => void
 }
 
-export const PREFS_STORAGE_KEY = 'huobao:prefs:v1'
+export const PREFS_STORAGE_KEY = 'vf:prefs:v1'
 
 /** 实际持久化的字段子集（不含 action） */
 interface PersistedPrefs {

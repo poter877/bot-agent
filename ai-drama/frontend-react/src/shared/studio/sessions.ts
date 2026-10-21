@@ -11,7 +11,7 @@
 // 版本前缀：映射结构演进时旧数据自然失效（当作无关联 → 新建会话即可，
 // 会话真相在宿主侧，丢失无损）；写入容错：隐私模式/配额超限时静默降级。
 const STORAGE_VERSION = 'v1'
-const STORAGE_KEY = `huobao:studio-agent-sessions:${STORAGE_VERSION}`
+const STORAGE_KEY = `vf:studio-agent-sessions:${STORAGE_VERSION}`
 
 type ProjectKey = string // `drama:<id>` | `creative:<id>`
 

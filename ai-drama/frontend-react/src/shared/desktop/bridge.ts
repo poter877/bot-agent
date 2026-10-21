@@ -1,5 +1,8 @@
 /**
- * 桌面版桥（preload 注入的 window.huobaoDesktop）类型声明与安全取值。
+ * 桌面版桥类型声明与安全取值。
+ *
+ * 注：曾用名 window.huobaoDesktop 在现桌面 preload 中从未注入——
+ * 本桥长期返回 null，更新/存储面板的桌面增强走降级路径。
  * 非桌面环境（浏览器/服务器部署）返回 null，UI 据此隐藏桌面专属功能。
  */
 
@@ -20,7 +23,7 @@ export interface MigrateProgress {
   totalBytes?: number
 }
 
-export interface HuobaoDesktopBridge {
+export interface DesktopBridge {
   pickDirectory: () => Promise<{ ok: boolean; path?: string; freeBytes?: number | null; error?: string; canceled?: boolean }>
   startMigration: (opts: { targetDir: string; migrateFiles: boolean }) => Promise<{ ok: boolean }>
   onMigrateProgress: (cb: (progress: MigrateProgress) => void) => () => void
@@ -31,12 +34,12 @@ export interface HuobaoDesktopBridge {
   onUpdateProgress: (cb: (percent: number) => void) => () => void
 }
 
-export function getDesktopBridge(): HuobaoDesktopBridge | null {
+export function getDesktopBridge(): DesktopBridge | null {
   if (typeof window === 'undefined') return null
-  return (window as unknown as { huobaoDesktop?: HuobaoDesktopBridge }).huobaoDesktop ?? null
+  return (window as unknown as { desktopBridge?: DesktopBridge }).desktopBridge ?? null
 }
 
 /** 组件内取桥（保持旧 useDesktopBridge 调用形态） */
-export function useDesktopBridge(): HuobaoDesktopBridge | null {
+export function useDesktopBridge(): DesktopBridge | null {
   return getDesktopBridge()
 }
