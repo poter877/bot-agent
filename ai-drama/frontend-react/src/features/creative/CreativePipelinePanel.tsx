@@ -19,6 +19,7 @@ import { creativeQueries } from '@/entities/creative/queries'
 import { Button } from '@/shared/ui/button'
 import { Textarea } from '@/shared/ui/input'
 import { Modal } from '@/shared/ui/Modal'
+import { cn } from '@/shared/lib/cn'
 import { CreativeSection, hintClass } from './CreativeFields'
 
 const statuses: Record<string, [string, string]> = {
@@ -196,13 +197,8 @@ export function CreativePipelinePanel({
   return (
     <div className="space-y-4">
       <AgentStageWatcher projectId={project.id} runId={runId} version={runVersion} />
-      <CreativeSection
-        title={text('制作流程', 'Workflow')}
-        hint={text(
-          text('审阅确认每个阶段；修改项目后先同步。', 'Review each stage; sync after editing.'),
-          'Stages retain their outputs. Review before continuing; sync project edits to invalidate dependent stages.',
-        )}
-      >
+      <section className={cn('rounded-panel border border-outline bg-surface p-4')}>
+        <p className={`mb-4 text-xs text-content-muted`}>{text('审阅确认每个阶段；修改项目后先同步。', 'Review each stage; sync after editing.')}</p>
         <div className="flex flex-wrap items-center gap-2">
 
           {/* 建立/继续/重试的快捷入口已上移至顶部流程条（PipelineStrip） */}
@@ -265,7 +261,7 @@ export function CreativePipelinePanel({
             {mutation.error?.message || run?.error}
           </p>
         )}
-      </CreativeSection>
+      </section>
       {stage && (
         <CreativeSection
           title={stage.title}

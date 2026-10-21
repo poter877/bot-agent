@@ -161,13 +161,13 @@ await test('only one unfinished run per project; APIs enforce project ownership 
   const p=create(),other=create(),r=runner(async()=>({artifact:narrative}))
   const app=new Hono().onError((error,c)=>c.json({message:error.message},error instanceof CreativeError?error.status:400)).route('/creative',createPipelineRoutes(r))
   await r.start((await p).id,1);const s=await runFor((await p).id)
-  await assert.rejects(r.start((await p).id,1),/已有/)
+  await assert.rejects(r.start((await p).id,1),/不能重复建立/)
   const request=async(id:number,version:number)=>app.request(`/creative/${id}/pipeline/${s.id}/actions`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'continue',version})})
   assert.equal((await request((await other).id,s.version)).status,404)
   assert.equal((await request((await p).id,999)).status,409)
   await r.cancel((await p).id,s.id,s.version)
-  const restarted=await r.start((await p).id,1)
-  assert.equal(restarted.run!.status,'ready')
+  // 一项目一流程：取消后同样不可重建（《重构》收敛）
+  await assert.rejects(r.start((await p).id,1),/不能重复建立/)
 })
 
 await test('pipeline state route returns the run, not a serialized Promise',async()=>{

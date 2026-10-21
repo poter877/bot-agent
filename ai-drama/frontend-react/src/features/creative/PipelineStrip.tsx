@@ -58,10 +58,12 @@ export function PipelineStrip({ project, state, loading, disabled, activeStage, 
   })
 
   const failed = run?.status === 'failed' || cursor?.status === 'failed'
+  // 一个项目只有一条流程：已结束/已完成后不提供「建立新一轮」
   const nextAction: 'start' | 'continue' | 'retry' | null =
-    !run || ended ? 'start'
-      : !running && run.status !== 'review' && !run.stale ? (failed ? 'retry' : 'continue')
-        : null
+    !run ? 'start'
+      : ended ? null
+        : !running && run.status !== 'review' && !run.stale ? (failed ? 'retry' : 'continue')
+          : null
 
   return (
     <section aria-label="制作流程" className="mb-4 rounded-panel border border-outline bg-surface px-4 py-3">
@@ -72,7 +74,7 @@ export function PipelineStrip({ project, state, loading, disabled, activeStage, 
               : running ? <Loader2 size={13} className="animate-spin" aria-hidden />
                 : run?.status === 'completed' ? <CheckCircle2 size={13} className="text-success" aria-hidden />
                   : <Play size={12} aria-hidden />}
-          {loading ? '流程状态加载中…' : run ? `制作流程 · ${runStatusText[run.status] ?? run.status}` : '制作流程 · 未建立'}
+          {loading ? '流程加载中…' : run ? runStatusText[run.status] ?? run.status : '未建立流程'}
         </span>
         {cursor && run && ['running', 'waiting', 'pausing', 'review'].includes(run.status) && <span className="text-xs text-content-muted">当前：{stageTitles[cursor.id] ?? cursor.id}{cursor.status === 'waiting' ? '（等待 AI 执行）' : ''}</span>}
         <span className="ml-auto flex items-center gap-2">

@@ -456,14 +456,13 @@ export function createPipelineRunner(execute: StageExecutor = createStageExecuto
       if (project.revision !== revision) throw new CreativeError('项目内容已修改，请刷新后重试', 409)
       const definition = (await getPipelineDefinition(project.category))
       if (!definition) throw new CreativeError('此旧类型没有独立制作流程，请使用现有编辑器')
+      // 一个项目只有一条流程：结束/完成后不可再建立新一轮（历史留档可查）。
       const existing = (await db
-        .select()
+        .select({ id: schema.creativePipelineRuns.id })
         .from(schema.creativePipelineRuns)
-        .where(and(
-          eq(schema.creativePipelineRuns.projectId, projectId),
-          notInArray(schema.creativePipelineRuns.status, ['completed', 'cancelled']),
-        )))[0]
-      if (existing) throw new CreativeError('该项目已有未结束流程，请继续或结束现有流程', 409)
+        .where(eq(schema.creativePipelineRuns.projectId, projectId))
+        .limit(1))[0]
+      if (existing) throw new CreativeError('该项目已建立过制作流程，不能重复建立', 409)
       const ts = now()
       const [created] = await db
         .insert(schema.creativePipelineRuns)
