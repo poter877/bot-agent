@@ -19,9 +19,9 @@ const labels = {
 }
 interface Props {
   project: CreativeProject
-  disabled: boolean
-  onProjectUpdated: (project: CreativeProject) => void
-  onGoToStage: (stage: 'brief' | 'shots' | 'audio' | 'export') => void
+  disabled?: boolean
+  onProjectUpdated?: (project: CreativeProject) => void
+  onGoToStage?: (stage: 'brief' | 'shots' | 'audio' | 'export') => void
   onBusyChange?: (busy: boolean) => void
 }
 /** 嵌入模式的宿主车道面板：流式渲染 + 工具活动 + 停止。 */
@@ -83,7 +83,7 @@ function StudioChatPanel({ project, disabled, onBusyChange }: { project: Creativ
  *  完整且无条件的 Hook 链（Rules of Hooks：不得在分支间切换 Hook 结构）。 */
 export function CreativeChatPanel({ project, disabled, onBusyChange }: Props) {
   if (studioHost()?.agent) {
-    return <StudioChatPanel disabled={disabled} onBusyChange={onBusyChange} project={project} />
+    return <StudioChatPanel disabled={!!disabled} onBusyChange={onBusyChange} project={project} />
   }
   return <HttpChatPanel project={project} />
 }

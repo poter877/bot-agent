@@ -1,7 +1,7 @@
 import { useUiLocale } from '@/shared/config/use-locale'
 
 const copy = {
-  title: ['创意视频工作台', 'Creative video studio', 'クリエイティブ動画', '크리에이티브 영상'],
+  title: ['视频制片工作台', 'Video production studio', '動画制片ワークベンチ', '영상 제작 작업실'],
   chatTitle: ['制作对话', 'Production chat', '制作チャット', '제작 대화'],
   back: ['项目启动台', 'Projects', 'プロジェクト', '프로젝트'],
   settings: ['模型设置', 'Model settings', 'モデル設定', '모델 설정'],

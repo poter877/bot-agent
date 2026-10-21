@@ -86,7 +86,7 @@ describe('Creative project entry points', () => {
     renderProjects('creative')
     await user.click(screen.getByRole('button', { name: '短剧项目' }))
     expect(screen.queryByRole('button', { name: '打开项目 审查测试项目' })).toBeNull()
-    await user.click(screen.getByRole('button', { name: '创意视频' }))
+    await user.click(screen.getByRole('button', { name: '视频制片' }))
     expect(screen.getByRole('button', { name: '打开项目 审查测试项目' })).toBeTruthy()
     expect(mapDrama({ id: 1 }).projectType).toBe('drama')
   })

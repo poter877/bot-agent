@@ -262,7 +262,7 @@ export function AiConfigsPanel() {
     if (serviceTypes.some(item => item.type === type)) continue
     const label = capabilityLabels[type] ?? type
     serviceTypes.push({ type, label })
-    serviceMeta[type] = { label, desc: '短剧、创意视频与制作工具箱共用此能力的服务配置' }
+    serviceMeta[type] = { label, desc: '短剧、视频制片与制作工具箱共用此能力的服务配置' }
   }
 
   // ===== 配置 CRUD =====
@@ -498,7 +498,7 @@ export function AiConfigsPanel() {
     <div className={PANEL_SCROLL}>
       <div className={SETTINGS_HEAD}>
         <h2 className={SETTINGS_TITLE}>{t('settings.ai.title')}</h2>
-        <p className={SETTINGS_DESC}>短剧与创意视频共用这些模型和服务。每类服务按优先级选用默认配置，也可在制作时指定模型。</p>
+        <p className={SETTINGS_DESC}>短剧与视频制片共用这些模型和服务。每类服务按优先级选用默认配置，也可在制作时指定模型。</p>
       </div>
 
       <div className={SECTIONS}>
