@@ -114,6 +114,11 @@ test('orchestration fully retired: zero hermes-gateway calls remain', () => {
   assert.match(pipelineText, /kind: 'narrative'/)
   assert.match(pipelineText, /kind: 'plan'/)
   assert.match(pipelineText, /kind: 'translate'/)
+  // 方案落库前的数据不变量：越权 toolPlan 一律剥除（规划器对越权工具直接
+  // 抛错——曾作为崩溃触发器打进 tool-plan/assets 路径）
+  const planner = read('src/drama/services/creative-planner.ts')
+  assert.match(planner, /pipelineToolPoliciesFor\(input\.category\)/)
+  assert.match(planner, /delete shot\.toolPlan/)
   // 单发模型调用的消费方
   assert.match(read('src/drama/services/extraction.ts'), /runTextModel/)
   assert.match(read('src/drama/services/final-prompt.ts'), /runTextModel/)

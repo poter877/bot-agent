@@ -3,6 +3,7 @@ import { type CreativeCategory, type CreativeDocument, parseGeneratedPlan } from
 
 // Written for Video Factory's own document contract. No imported reference-project prompts or runtime.
 import { getCreativeRecipe } from './creative-catalog.js'
+import { pipelineToolPoliciesFor } from './creative-pipeline/tool-policy.js'
 
 /** 方案生成的提示词构造（《重构》§6：执行在客户端 Agent，服务端只备料）。
  *  供管线 scene_plan 阶段与桌面 Agent 认领共用同一份指令。 */
@@ -69,6 +70,13 @@ export function applyGeneratedPlan(raw: string, input: {
     resultDocument.shots.some((shot) => !shot.videoUrl && !shot.audioUrl)
   )
     throw new Error('模型返回的方案没有关联原始素材，请补充原稿或手动选段')
+  // 数据不变量：不落库该品类不允许的 toolPlan——它是后续 tool-plan/assets
+  // 规划的崩溃触发器（规划器对越权工具直接抛错）。
+  for (const shot of resultDocument.shots as (CreativeDocument['shots'][number] & { toolPlan?: { toolId?: string } })[]) {
+    if (shot.toolPlan && !pipelineToolPoliciesFor(input.category).some((p) => p.toolId === shot.toolPlan!.toolId)) {
+      delete shot.toolPlan
+    }
+  }
   return resultDocument
 }
 

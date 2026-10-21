@@ -23,7 +23,13 @@ function budgetTimeout(durationMs: number): MiddlewareHandler<AppEnv> {
       timer.unref?.()
     })
     const work = next()
-    const outcome = await Promise.race([work.then(() => 'done' as const), expired])
+    // 参赛的派生 Promise 必须自带拒绝处理：race 会把下游错误原样传给本层
+    // await（Hono 照常产出 4xx/5xx），但 work.then(onFulfilled) 的派生件
+    // 若无人接住，会成为 unhandledRejection 打死进程（曾因 tool-plan 的
+    // PipelineInputRequired 复现）。
+    const settled = work.then(() => 'done' as const)
+    settled.catch(() => {})
+    const outcome = await Promise.race([settled, expired])
     clearTimeout(timer)
     if (outcome === 'done') return
     work.catch((error) => {
