@@ -322,6 +322,13 @@ export default defineConfig(({ command }) => ({
     },
     fs: {
       allow: fsAllow
+    },
+    // The embedded drama sources live OUTSIDE this vite root (../../ai-drama):
+    // without watching them, transforms of those files go stale after edits —
+    // reloads kept serving yesterday's module while the file had changed.
+    watch: {
+      ignored: ['**/dist/**', '**/node_modules/**'],
+      include: ['../../ai-drama/frontend-react/src/**']
     }
   },
   preview: {

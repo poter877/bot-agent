@@ -151,12 +151,17 @@ export function CreativePipelineAutomation({
                       {name(automation[key]!)} · {text('已保存的选择', 'Saved selection')}
                     </option>
                   )}
-                {options.map((policy) => (
-                  <option key={policy.toolId} value={policy.toolId}>
-                    {name(policy.toolId)}
-                    {tool(policy.toolId)?.available === false ? ` · ${text('需配置', 'Setup required')}` : ''}
-                  </option>
-                ))}
+                {options.map((policy) => {
+                  const info = tool(policy.toolId)
+                  const suffix = info?.available === false
+                    ? ` · ${info.provider === 'local' ? text('需安装本地依赖', 'local install required') : text('需配置', 'Setup required')}`
+                    : ''
+                  return (
+                    <option key={policy.toolId} value={policy.toolId}>
+                      {name(policy.toolId)}{suffix}
+                    </option>
+                  )
+                })}
               </select>
             </CreativeField>
           )

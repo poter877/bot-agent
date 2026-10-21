@@ -230,7 +230,7 @@ export function CreativeToolboxPanel({ project, disabled, canRun, onProjectUpdat
         {matching.slice(0, visibleCount).map(tool => <button key={tool.id} type="button" aria-pressed={selectedId === tool.id} onClick={() => { setSelectedId(tool.id); setError(null) }} className={cn('min-w-0 space-y-2 rounded-control border p-3 text-left focus-visible:outline-none focus-visible:shadow-focus', selectedId === tool.id ? 'border-brand bg-brand-soft' : 'border-outline bg-transparent hover:bg-hover-overlay')}>
           <span className="flex items-start justify-between gap-2"><span className="break-words text-sm font-semibold">{tool.name}</span><Wrench size={14} className="mt-0.5 shrink-0 text-content-muted" aria-hidden /></span>
           <span className="block line-clamp-2 text-xs leading-relaxed text-content-muted">{tool.description}</span>
-          <span className="flex flex-wrap gap-2 text-[10px] text-content-muted"><span>{categoryLabel(tool.category)}</span><span>{tool.provider}</span>{tool.available ? <span className="text-success">可执行</span> : tool.implemented === false ? <span className="text-content-subtle">尚未接入</span> : <span className="text-warning">需配置或依赖</span>}</span>
+          <span className="flex flex-wrap gap-2 text-[10px] text-content-muted"><span>{categoryLabel(tool.category)}</span><span>{tool.provider}</span>{tool.available ? <span className="text-success">可执行</span> : tool.implemented === false ? <span className="text-content-subtle">尚未接入</span> : tool.provider === 'local' ? <span className="text-warning">需安装本地依赖</span> : <span className="text-warning">需配置或依赖</span>}</span>
         </button>)}
       </div>
       {!catalog.isPending && !catalog.isError && !matching.length && <p className="mt-4 text-sm text-content-muted">没有符合条件的工具，请调整搜索或筛选条件。</p>}
@@ -239,7 +239,7 @@ export function CreativeToolboxPanel({ project, disabled, canRun, onProjectUpdat
 
     {selected && draft && <div ref={editorRef} className="scroll-mt-4"><CreativeSection title={selected.name} hint={selected.description}>
       <p className="mb-4 break-all text-xs text-content-subtle">{selected.id} · {selected.provider}</p>
-      {!selected.available && <p role="status" className="mb-4 rounded-control bg-brand-soft p-3 text-sm text-brand-content">{selected.reason || '当前运行环境尚未满足此工具的执行条件。'} {selected.serviceType && <Link to="/settings" className="underline">前往配置模型与服务</Link>}</p>}
+      {!selected.available && <p role="status" className="mb-4 rounded-control bg-brand-soft p-3 text-sm text-brand-content">{selected.provider === 'local' ? `本地依赖未就绪：${selected.reason || '请安装所需组件'}` : selected.reason || '当前运行环境尚未满足此工具的执行条件。'} {selected.serviceType && <Link to="/settings" className="underline">前往配置模型与服务</Link>}</p>}
       {requiresConfig && <div className="mb-4 space-y-2"><p className="text-xs font-semibold text-content-secondary">调用配置</p><BaseSelect value={draft.configId} onChange={value => updateDraft(selected, { configId: value })} options={[{ value: '', label: selectedConfig ? `默认 · ${options[0]?.name} · ${options[0]?.models[0] ?? ''}` : '未找到已启用配置' }, ...options.map(config => ({ value: String(config.id), label: `${config.name} · ${config.models[0] ?? config.provider}` }))]} disabled={busy || disabled} />
         {missingConfig && <p role="status" className="text-xs text-brand-content">需要启用 {selected.provider === 'shared' ? '共用模型' : selected.provider} 的 {selected.serviceType} 配置。<Link to="/settings" className="ml-1 underline">前往设置</Link></p>}
       </div>}
