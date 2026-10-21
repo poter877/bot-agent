@@ -1,5 +1,5 @@
 import { CreativeToolboxPanel } from './CreativeToolboxPanel'
-import { pipelineQueries } from '@/entities/creative/pipeline'
+import { pipelineApi, pipelineQueries } from '@/entities/creative/pipeline'
 import { useProductionText } from '@/entities/creative/catalog'
 import { AgentStageWatcher } from './AgentStageWatcher'
 import { CreativeBoard } from './CreativeBoard'
@@ -182,7 +182,26 @@ export function CreativeWorkbenchPage({ projectId }: { projectId: number }) {
           }}><Icon size={14} aria-hidden />{label}</button>)}
         </div>
         <div role="tabpanel" id={`creative-panel-${stage}`} aria-labelledby={`creative-tab-${stage}`}>
-          {stage === 'board' && <CreativeBoard project={project} state={pipeline.data} loading={pipeline.isPending} />}
+          {stage === 'board' && (
+            <CreativeBoard
+              project={project}
+              state={pipeline.data}
+              loading={pipeline.isPending}
+              disabled={dirty || operation.isPending || uploading !== null || sourceBusy || chatBusy || conflict}
+              onStart={() => {
+                void pipelineApi.start(project.id, project.revision)
+                  .then(result => { queryClient.setQueryData(pipelineQueries.detail(project.id).queryKey, result as never) })
+                  .catch(() => { void queryClient.invalidateQueries({ queryKey: pipelineQueries.detail(project.id).queryKey }) })
+              }}
+              onAction={(action) => {
+                const run = pipeline.data?.run
+                if (!run) { return }
+                void pipelineApi.action(project.id, run.id, { action, version: run.version })
+                  .then(result => { queryClient.setQueryData(pipelineQueries.detail(project.id).queryKey, result as never) })
+                  .catch(() => { void queryClient.invalidateQueries({ queryKey: pipelineQueries.detail(project.id).queryKey }) })
+              }}
+            />
+          )}
           {stage === 'toolbox' && <CreativeToolboxPanel project={project} disabled={editDisabled} canRun={canRun} onProjectUpdated={acceptProject} onBusyChange={setSourceBusy} />}
           {stage === 'shots' && <CreativeShotsPanel project={project} draft={current} copy={copy} selectedId={selectedId} disabled={editDisabled} canGenerate={canRun && approved} uploading={uploading} generating={mutationShotId} onSelect={store.getState().selectShot} onAdd={() => {
             const shot = { ...newCreativeShot(`${copy.shot} ${current.shots.length + 1}`), mediaType: recipe?.mediaType || 'image' as const }
