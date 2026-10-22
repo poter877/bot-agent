@@ -86,11 +86,9 @@ app.post('/', async (c) => {
     }).returning())
     const id = getInsertId(res)
     if (parsed.data.project_type === 'creative') {
-      // OpenMontage 对齐：管线的用户输入就是主题（topic → brief.idea），
-      // 其余（角度/工具选择/风格）由各阶段导演决定，不设创建期表单。
+      // OpenMontage 对齐：主题不设创建期表单——制作对话经 pipeline_start 的
+      // idea 参数写入 brief，这里只落空文档。
       const document = createCreativeDocument(parsed.data.creative_category!)
-      const idea = typeof body.idea === 'string' ? body.idea.trim().slice(0, 20000) : ''
-      if (idea) document.brief.idea = idea
       await tx.insert(schema.creativeProjects).values({
         projectId: id, document: JSON.stringify(document), revision: 1, updatedAt: ts,
       })

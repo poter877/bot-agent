@@ -174,9 +174,6 @@
           "description": "Combine existing footage with audio and captions"
         }
       },
-      "idea": "Topic & requirements",
-      "ideaPlaceholder": "e.g. Explain black holes in 60 seconds, starting from one question…",
-      "ideaHint": "Optional — leave empty and describe the topic in the production chat; the AI starts researching and creating from there",
       "sourceVideo": "Source footage",
       "sourceHint": "This mode builds on your footage: upload video or audio (≤512MB); the pipeline arranges the edit around it"
     },

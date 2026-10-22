@@ -82,7 +82,6 @@ export function CreateProjectDialog({ open, onClose, stylePresets, aspectRatioOp
   const words = useProductionText()
   const [projectType, setProjectType] = useState<ProjectType>('drama')
   const [creativeCategory, setCreativeCategory] = useState<CreativeCategory>('explainer')
-  const [idea, setIdea] = useState('')
   const [sourceFile, setSourceFile] = useState<File | null>(null)
   const [title, setTitle] = useState('')
   const [style, setStyle] = useState('')
@@ -99,7 +98,6 @@ export function CreateProjectDialog({ open, onClose, stylePresets, aspectRatioOp
     if (!open) return
     setProjectType('drama')
     setCreativeCategory('explainer')
-    setIdea('')
     setSourceFile(null)
     setTitle('')
     setStyle('')
@@ -118,7 +116,7 @@ export function CreateProjectDialog({ open, onClose, stylePresets, aspectRatioOp
         style: style || undefined,
         aspect_ratio: aspectRatio,
         ...(projectType === 'creative'
-          ? { project_type: 'creative' as const, creative_category: creativeCategory, idea }
+          ? { project_type: 'creative' as const, creative_category: creativeCategory }
           : {}),
       })
       // OpenMontage Paste-A-Video 对齐：需原片的模式在创建时一并上传，
@@ -266,20 +264,6 @@ export function CreateProjectDialog({ open, onClose, stylePresets, aspectRatioOp
           </label>
           ) : null
         })()}
-        {projectType === 'creative' && (
-          <label className={fieldClass}>
-            <span className={fieldLabelClass}>{t('index.createDialog.idea')}</span>
-            <textarea
-              value={idea}
-              onChange={(e) => setIdea(e.target.value)}
-              placeholder={t('index.createDialog.ideaPlaceholder')}
-              disabled={createMutation.isPending}
-              rows={3}
-              className="min-h-0 w-full rounded-control border border-outline bg-surface px-3 py-2 text-sm text-content placeholder:text-content-subtle focus-visible:outline-none focus-visible:shadow-focus"
-            />
-            <span className="text-micro leading-[1.5] text-content-subtle">{t('index.createDialog.ideaHint')}</span>
-          </label>
-        )}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {projectType === 'drama' && (
           <label className={fieldClass}>
