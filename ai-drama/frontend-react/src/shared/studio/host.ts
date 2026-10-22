@@ -63,6 +63,14 @@ export interface StudioHost {
      *  调用方的责任（多项目并行时）。 */
     onEvent(handler: (event: StudioAgentEvent) => void): () => void
   }
+  /** 桌面壳能力（仅桌面嵌入时提供；独立浏览器版为 undefined）：
+   *  项目会话在主窗格用宿主原生聊天 UI 打开，视频工厂作为瓦片并排。 */
+  desktop?: {
+    /** 把主窗格导航到指定路径（会话路由为 /<sessionId>）。 */
+    navigate(path: string): void
+    /** 以右侧瓦片打开路由页（幂等；已开保持原边）。 */
+    openRouteTile(path: string, dir?: 'left' | 'right'): void
+  }
 }
 
 let host: StudioHost | null = null

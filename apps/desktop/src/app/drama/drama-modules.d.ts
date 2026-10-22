@@ -44,6 +44,12 @@ declare module '@drama/shared/studio/host' {
       resume(storedSessionId: string): Promise<StudioAgentSession>
       onEvent(handler: (event: StudioAgentEvent) => void): () => void
     }
+    /** 桌面壳能力（仅桌面嵌入时提供）：会话在主窗格用原生聊天 UI 打开，
+     *  视频工厂作为瓦片并排（见 ai-drama shared/studio/host.ts 同名字段）。 */
+    desktop?: {
+      navigate(path: string): void
+      openRouteTile(path: string, dir?: 'left' | 'right'): void
+    }
   }
 
   export function setStudioHost(host: StudioHost | null): void

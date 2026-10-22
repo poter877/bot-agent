@@ -20,15 +20,20 @@ import { DramaApp } from '@drama/embed'
  */
 import { type CSSProperties, useEffect, useRef } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
+import { useNavigate } from 'react-router'
 
 import { createDesktopStudioHost } from './host'
 
 export function DramaPage() {
+  // 桌面路由内的导航能力，透传给 studio host（会话并排打开用）
+  const navigate = useNavigate()
   // A stable host: the ref holds the div, the effect owns the root lifecycle.
   // StrictMode's mount→unmount→mount just walks the same steps twice.
   const hostRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    // mount-once：宿主通道挂载一次；navigate 取首帧引用（路由切换不重建通道）
+     
     let cancelled = false
     let root: Root | null = null
 
@@ -46,7 +51,7 @@ export function DramaPage() {
         return
       }
 
-      const studio = createDesktopStudioHost({ baseUrl: conn.baseUrl, token: conn.token ?? '' })
+      const studio = createDesktopStudioHost({ baseUrl: conn.baseUrl, token: conn.token ?? '', navigate })
       handle = studio
       root = createRoot(host)
       root.render(<DramaApp host={studio.host} initialPath="/" />)

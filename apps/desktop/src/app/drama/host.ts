@@ -1,4 +1,6 @@
 import type { StudioAgentEvent, StudioHost } from '@drama/shared/studio/host'
+import { JsonRpcGatewayClient } from '@hermes/shared'
+
 /**
  * StudioHost 的桌面实现 —— 视频工厂内嵌页的宿主通道（《重构》方案 §4/§7）。
  *
@@ -13,7 +15,7 @@ import type { StudioAgentEvent, StudioHost } from '@drama/shared/studio/host'
  * 全程 HTTP 流式，正是方案 §7 要求的通道。连接信息在挂载时预取一次（宿主
  * 工厂是同步纯函数，见 page.tsx 的装配顺序）。
  */
-import { JsonRpcGatewayClient } from '@hermes/shared'
+import { openRouteTile } from '@/store/route-tiles'
 
 export interface DesktopStudioConnection {
   baseUrl: string
@@ -129,7 +131,9 @@ export interface DesktopStudioHandle {
   dispose: () => void
 }
 
-export function createDesktopStudioHost(conn: DesktopStudioConnection): DesktopStudioHandle {
+export function createDesktopStudioHost(
+  conn: DesktopStudioConnection & { navigate: (path: string) => void }
+): DesktopStudioHandle {
   const agentLane = new StudioAgentLane(`${conn.baseUrl.replace(/^http/, 'ws')}/api/ws?token=${encodeURIComponent(conn.token)}`)
 
   const host: StudioHost = {
@@ -223,5 +227,14 @@ export function createDesktopStudioHost(conn: DesktopStudioConnection): DesktopS
     }
   }
 
-  return { host, dispose: () => agentLane.dispose() }
+  return {
+    host: {
+      ...host,
+      desktop: {
+        navigate: (path: string) => conn.navigate(path),
+        openRouteTile: (path: string, dir: 'left' | 'right' = 'right') => openRouteTile(path, dir)
+      }
+    },
+    dispose: () => agentLane.dispose()
+  }
 }
