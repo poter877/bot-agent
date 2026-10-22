@@ -5,7 +5,7 @@ import { CreativeBoard } from './CreativeBoard'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, ChevronDown, MessageSquare, Settings2, Wrench } from 'lucide-react'
+import { ArrowLeft, Settings2, Wrench } from 'lucide-react'
 import { creativeQueries } from '@/entities/creative/queries'
 import { Button, IconButton } from '@/shared/ui/button'
 import { CreativeChatPanel } from './CreativeChatPanel'
@@ -64,12 +64,7 @@ export function CreativeWorkbenchPage({ projectId }: { projectId: number }) {
       />
     )}
 
-    {query.data && (
-      <details open className="mt-4 min-w-0 overflow-hidden rounded-panel border border-outline bg-surface">
-        <summary className="flex cursor-pointer list-none items-center gap-2 border-b border-outline px-4 py-3 text-sm font-semibold focus-visible:outline-none focus-visible:shadow-focus"><MessageSquare size={15} className="text-brand" aria-hidden />{copy.chatTitle}<ChevronDown size={14} className="ml-auto text-content-muted" aria-hidden /></summary>
-        <CreativeChatPanel project={query.data} />
-      </details>
-    )}
+    {query.data && <CreativeChatPanel project={query.data} />}
 
     <Modal open={toolboxOpen} onOpenChange={setToolboxOpen} title="工具目录" width={1100}>
       {query.data && <CreativeToolboxPanel project={query.data} disabled={disabled} canRun={!disabled} onProjectUpdated={p => queryClient.setQueryData(options.queryKey, p)} onBusyChange={() => undefined} />}

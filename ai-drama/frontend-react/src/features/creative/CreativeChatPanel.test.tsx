@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { creativeChatApi } from '@/entities/creative/chat-api'
 import type { CreativeProject } from '@/entities/creative/model'
@@ -20,13 +21,15 @@ function mount() {
 }
 
 // 独立浏览器版：制作对话编排在桌面 Agent 车道（服务端代调已退役）——
-// 这里只读历史并给出指引，不再有输入框与发送。
+// 抽屉默认折叠，展开后只读历史并给出指引，不再有输入框与发送。
 it('renders read-only history with the desktop-only hint (no composer)', async () => {
+  const user = userEvent.setup()
   vi.mocked(creativeChatApi.messages).mockResolvedValue([
     { id: 1, role: 'user', content: '开场更温暖一点', actions: [], status: 'completed', createdAt: '' },
     { id: 2, role: 'assistant', content: '已修改开场', actions: [], status: 'completed', createdAt: '' },
   ])
   mount()
+  await user.click(screen.getByRole('button', { name: /制作对话/ }))
   expect(await screen.findByText('开场更温暖一点')).toBeTruthy()
   expect(screen.getByText('已修改开场')).toBeTruthy()
   expect(screen.getByText(/制作对话需要桌面 app 中的 AI 会话/)).toBeTruthy()
@@ -35,8 +38,10 @@ it('renders read-only history with the desktop-only hint (no composer)', async (
 })
 
 it('surfaces history load failure with a retry', async () => {
+  const user = userEvent.setup()
   vi.mocked(creativeChatApi.messages).mockRejectedValue(new Error('网络不可用'))
   mount()
+  await user.click(screen.getByRole('button', { name: /制作对话/ }))
   await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('对话暂时无法加载'))
   expect(screen.getByRole('button', { name: '重新加载' })).toBeTruthy()
 })
