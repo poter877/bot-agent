@@ -112,10 +112,22 @@ async function diagram(ctx: LocalContext) {
       y: 120 + cellHeight * Math.floor(i / columns) + cellHeight / 2,
     }))
   let body = `<defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="${dark ? '#a4b4d0' : '#52627e'}"/></marker></defs>${label(title, width / 2, 60, 32, dark ? '#f5f7ff' : '#182033')}`
+  // 连接端点允许节点序号，也允许节点文字（模型常写人类可读标签）
+  const endpoint = (value: unknown, fallback: number) => {
+    if (typeof value === 'number' && Number.isFinite(value)) return Math.round(value)
+    const label = String(value ?? '').trim().toLowerCase()
+    if (label) {
+      const hit = nodes.findIndex((node) =>
+        (typeof node === 'string' ? node : str(node, 'label', '', 100)).trim().toLowerCase() === label)
+      if (hit >= 0) return hit
+    }
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? Math.round(parsed) : fallback
+  }
   for (const value of edges) {
     const edge = object(value),
-      from = Math.round(num(edge, 'from', 0, 0, nodes.length - 1)),
-      to = Math.round(num(edge, 'to', 0, 0, nodes.length - 1)),
+      from = Math.min(nodes.length - 1, Math.max(0, endpoint(edge.from, 0))),
+      to = Math.min(nodes.length - 1, Math.max(0, endpoint(edge.to, 0))),
       a = centers[from],
       b = centers[to]
     body += `<path d="M${a.x} ${a.y} L${b.x} ${b.y}" stroke="${dark ? '#a4b4d0' : '#52627e'}" stroke-width="3" fill="none" marker-end="url(#arrow)"/>`

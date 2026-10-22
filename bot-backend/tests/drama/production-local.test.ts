@@ -433,6 +433,19 @@ test('diagram and code card render escaped vector text to PNG', async () => {
   })
   assert.equal(mermaid.data?.nodes, 2)
   assert.equal(mermaid.data?.connections, 1)
+  const labeled = await invoke('diagram_gen', {
+    title: 'LIGO 装置示意',
+    width: 640,
+    height: 360,
+    boxes: [{ label: '激光源' }, { label: '分束' }, { label: '臂 A' }, { label: '探测' }],
+    connections: [
+      { from: '激光源', to: '分束' },
+      { from: '分束', to: '臂 A' },
+      { from: '臂 A', to: '探测' },
+    ],
+  })
+  assert.equal(labeled.data?.nodes, 4)
+  assert.equal(labeled.data?.connections, 3)
 })
 test('mathematical expression parser rejects arbitrary code and renders animation', async () => {
   assert.equal(compileExpression('x^2+sin(pi/2)')(3, 0), 10)

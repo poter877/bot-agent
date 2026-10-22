@@ -1,3 +1,4 @@
+import { getActiveConfig } from '../ai.js'
 import { getCreativeRecipe } from '../creative-catalog.js'
 import { buildPlanPrompt } from '../creative-planner.js'
 import { AgentStagePending, type StageContext } from './contracts.js'
@@ -39,6 +40,8 @@ export async function planPipelineScenes(context: StageContext) {
     summary: artifact.summary,
     content: artifact.content,
   }))
+  // 媒体生成可用性决定分镜的工具规划口径：没配生成服务时明令走本地图形路径
+  const [image, video] = await Promise.all([getActiveConfig('image'), getActiveConfig('video')])
   const { instructions, payload } = buildPlanPrompt({
     ...context.project,
     document: context.project,
@@ -46,6 +49,7 @@ export async function planPipelineScenes(context: StageContext) {
     toolEvidence: Object.fromEntries(
       Object.entries(context.artifacts).map(([key, value]) => [key, toolEvidence(value.data)]),
     ),
+    mediaGeneration: { image: !!image?.model, video: !!video?.model },
   })
   throw new AgentStagePending({ instructions, payload, kind: 'plan' })
 }

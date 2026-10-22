@@ -15,6 +15,7 @@ export function buildPlanPrompt(input: {
   document: CreativeDocument
   acceptedStages?: { stage: string; summary: string; content: string }[]
   toolEvidence?: unknown
+  mediaGeneration?: { image: boolean; video: boolean }
 }): { instructions: string; payload: string } {
   const instructions = `你是视频工厂的创意视频策划。根据输入数据编写可编辑、可执行的制作方案。
 ${getCreativeRecipe(input.category).guidance}
@@ -32,7 +33,7 @@ mediaType 只能是 image 或 video。静态信息图或需要导入图片的段
 动态图形或角色故事可用character_rig_renderer，args.characters为[{id,name,color,bodyHeight}]、actions为[{characterId,start,end,pose:"idle"|"wave"|"walk",x,toX}]；流程会实际建立角色、关节、姿势、时间轴、渲染。动作不超本镜头时长，保持角色ID与外观连续。
 空间几何演示可用threejs_world或blender_world，args.world_spec含objects:[{type:"box"|"sphere"|"cone"|"tree",x,y,z,size,color}]与camera_path:[{x,y,z,targetX,targetY,targetZ}]。仅在这些几何形状足以真实表达题材时使用，复杂写实场景应使用生成模型。
 需要生成图片或动态视频时可用image_gen/video_selector，args.prompt使用visualPrompt。原片镜头必须沿用sourceId；不得用示意图或生成模型冒充实拍证据、采访和软件录屏。不要为满足工具调用而添加无关镜头。
-原片使用 sources 中准确的 id，不生成媒体地址、任务 ID 或项目 ID。选段依据用户逐字稿和素材说明；不得声称已经观看视频或听过音频。不要声称音频、素材或成片已经制作完成。`
+${input.mediaGeneration && !input.mediaGeneration.image ? '当前制作环境未配置图片生成服务：所有镜头一律不得使用 image_selector；静态画面改用 diagram_gen（图解）或 code_snippet（代码卡片）表达。\n' : ''}${input.mediaGeneration && !input.mediaGeneration.video ? '当前制作环境未配置视频生成服务：所有镜头一律不得使用 video_selector；动态画面改用 math_animate（数学动画，args.expression 为真实数学公式）。\n' : ''}diagram_gen 的 connections 端点写节点文字（boxes 中的 label）或序号均可。原片使用 sources 中准确的 id，不生成媒体地址、任务 ID 或项目 ID。选段依据用户逐字稿和素材说明；不得声称已经观看视频或听过音频。不要声称音频、素材或成片已经制作完成。`
   const payload = JSON.stringify({
     acceptedStages: input.acceptedStages,
     toolEvidence: input.toolEvidence,

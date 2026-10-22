@@ -413,8 +413,8 @@ export const localToolFields: Record<string, Schema> = {
     definition: text('Mermaid 流程定义（可替代节点列表）', 10000),
     boxes: array('流程节点', { label: text('节点文字', 100), color: text('节点颜色', 7) }, 36),
     connections: array('连接线', {
-      from: number('起点序号（从 0 开始）', 0, 35, 0),
-      to: number('终点序号（从 0 开始）', 0, 35, 1),
+      from: text('起点（序号或节点文字）', 100),
+      to: text('终点（序号或节点文字）', 100),
       label: text('连接文字', 80),
     }),
     theme: options('主题', ['dark', 'light', 'neutral']),
